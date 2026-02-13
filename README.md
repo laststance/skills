@@ -4,8 +4,21 @@ Agent skills for AI coding assistants. Install via [skills.sh](https://skills.sh
 
 ## Installation
 
+Install all skills:
+
 ```bash
 npx skills add laststance/skills
+```
+
+Install a specific skill:
+
+```bash
+npx skills add laststance/skills --skill code-trace
+npx skills add laststance/skills --skill coderabbit-resolver
+npx skills add laststance/skills --skill electron-release
+npx skills add laststance/skills --skill gif-analyzer
+npx skills add laststance/skills --skill mentor
+npx skills add laststance/skills --skill product-inspiration
 ```
 
 ## Available Skills
