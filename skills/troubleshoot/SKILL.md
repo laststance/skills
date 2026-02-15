@@ -14,7 +14,7 @@ description: |
   - User says "fix", "debug", "broken", "failing", "not working", "error"
 
   Keywords: troubleshoot, debug, fix, error, bug, failing, broken, crash, exception, not working
-argument-hint: "[issue/error description]"
+argument-hint: "[issue/error description] [--frontend-verify]"
 ---
 
 # Troubleshoot — Hypothesis-Driven Debugging & Fix
@@ -22,6 +22,16 @@ argument-hint: "[issue/error description]"
 Systematic issue diagnosis with root cause tracing, validated fixes, and prevention guidance.
 
 <essential_principles>
+
+## Serena Think Checkpoints (Mandatory)
+
+These three tools MUST be called at the specified points. Never skip them.
+
+| Checkpoint | Tool | When | Purpose |
+|------------|------|------|---------|
+| Information Gate | `mcp__serena__think_about_collected_information` | After Phase 1 (Reproduce) and Phase 2 (Hypothesize) | Verify sufficient evidence before proceeding |
+| Adherence Gate | `mcp__serena__think_about_task_adherence` | Before each code edit in Phase 4 (Fix) | Confirm fix aligns with identified root cause |
+| Completion Gate | `mcp__serena__think_about_whether_you_are_done` | Before exiting Phase 5 (Verify) | Confirm fix is verified with evidence |
 
 ## Always Active
 
@@ -55,6 +65,8 @@ Understand and reproduce the issue before diagnosing.
 
 **Tools**: Bash, Read, Grep, Glob
 
+**🔶 `think_about_collected_information`** — Is the reproduction evidence sufficient?
+
 ## Phase 2: Hypothesize
 
 Form hypotheses about the root cause — do not jump to fixing.
@@ -67,6 +79,8 @@ Form hypotheses about the root cause — do not jump to fixing.
    ```
 2. 🎯 Rank by likelihood based on evidence strength
 3. Start investigating the most likely hypothesis first
+
+**🔶 `think_about_collected_information`** — Are hypotheses grounded in evidence?
 
 ## Phase 3: Investigate
 
@@ -84,29 +98,71 @@ Systematically verify or eliminate each hypothesis.
 
 ## Phase 4: Fix
 
-Apply the fix and validate it works.
+Apply the fix with adherence checks before each edit.
 
-1. 📊 Describe the fix approach before editing:
+For each code change:
+
+1. **🔶 `think_about_task_adherence`** — Is this edit aligned with the identified root cause?
+2. 📊 Describe the fix approach before editing:
    ```
    📊 Fix: Change X to Y in file:line because [reason]
    ```
-2. Apply the minimal fix (don't refactor unrelated code)
-3. Validate — run in parallel where possible:
-   ```bash
-   pnpm lint & pnpm typecheck & pnpm test & wait
-   ```
-4. If validation fails → return to Phase 2 with new evidence
-5. If fix requires destructive changes → confirm with user first
+3. Apply the minimal fix (don't refactor unrelated code)
+4. If fix requires destructive changes → confirm with user first
 
 **Tools**: Edit, Write, Bash
 
-## Phase 5: Report
+## Phase 5: Verify
+
+Prove the fix works with concrete evidence. No fix is complete without verification.
+
+### Standard Verification (always)
+
+1. **Re-run the reproduction**: Execute the same command/action from Phase 1
+   - Confirm the error no longer occurs
+   - Record the output as evidence
+2. **Quality checks** — run in parallel where possible:
+   ```bash
+   pnpm lint & pnpm typecheck & pnpm test & wait
+   ```
+3. **Evidence collection** — at least one of:
+   - Console/log output showing the fix works
+   - Test results (new or existing tests passing)
+   - Screenshot of corrected behavior
+   - User confirmation request ("Can you verify X now works?")
+
+If any check fails → return to Phase 3 with new evidence.
+
+### `--frontend-verify` (when flag is provided)
+
+Visual verification across platforms. Auto-detect platform from `package.json`:
+
+| Dependency | Platform | Preflight | Verification Tool |
+|------------|----------|-----------|-------------------|
+| _(default)_ | Web | `kill-port <port> && pnpm dev` | Claude Chrome MCP (`tabs_context_mcp`, `read_page`, `take_screenshot`) |
+| `electron` | Electron | `pnpm electron:dev` | Electron MCP (`mcp__electron__take_screenshot`) |
+| `expo` / `react-native` | Mobile | `mcp__ios-simulator__open_simulator` | iOS Simulator MCP (`screenshot`, `ui_tap`, `ui_swipe`) |
+| `commander` / `inquirer` / `oclif` | CLI | shell session | Shellwright MCP (TUI/CLI operation and output verification) |
+
+**Frontend Verify Workflow:**
+
+1. **Preflight**: Start dev server / app, confirm MCP connection
+2. **Before screenshot**: Take screenshot of the broken state (if reproducible in UI)
+3. **After fix screenshot**: Take screenshot of the corrected state
+4. **Compare**: Present before/after to user for confirmation
+5. **Judge**: All pass → continue. Any fail → return to Phase 4
+
+### Completion Gate
+
+**🔶 `think_about_whether_you_are_done`** — Is the fix verified with evidence?
+
+## Phase 6: Report
 
 Summarize findings for the user.
 
 1. **Root Cause**: What was wrong and why
 2. **Fix Applied**: What was changed (files, lines)
-3. **Verification**: Test/lint/typecheck results
+3. **Evidence**: Verification results (logs, screenshots, test output)
 4. **Prevention**: 💡 How to avoid this in the future (optional, only if insightful)
 
 ## Examples
@@ -114,8 +170,24 @@ Summarize findings for the user.
 ```
 /troubleshoot "TypeError: Cannot read properties of undefined"
 /troubleshoot build is failing after upgrading React
-/troubleshoot tests pass locally but fail in CI
+/troubleshoot tests pass locally but fail in CI --frontend-verify
 /troubleshoot API response time doubled since last deploy
+```
+
+## Phase Flow Diagram
+
+```
+[Reproduce] → 🔶 info gate
+     ↓
+[Hypothesize] → 🔶 info gate
+     ↓
+[Investigate]
+     ↓
+   [Fix] → 🔶 adherence gate (per edit)
+     ↓
+ [Verify] → 🔶 completion gate
+     ↓
+ [Report]
 ```
 
 ## Boundaries
@@ -123,9 +195,11 @@ Summarize findings for the user.
 **Will:**
 - Systematically trace root causes with evidence-based reasoning
 - Apply minimal, validated fixes with hypothesis-driven debugging
+- Verify fixes with concrete evidence (logs, screenshots, test results)
 - Explain the debugging process transparently with introspection markers
 
 **Will Not:**
 - Apply fixes without understanding the root cause
 - Make speculative changes hoping something works
+- Mark a fix as complete without verification evidence
 - Modify production systems without explicit user confirmation
