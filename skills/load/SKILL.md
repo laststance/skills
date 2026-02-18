@@ -2,8 +2,7 @@
 name: load
 description: |
   Load project context from Serena MCP memory for session initialization.
-  Discovers memories, reads project overview and critical rules, explores
-  project structure via list_dir, and validates context sufficiency.
+  Discovers memories, reads project overview and critical rules, and validates context sufficiency.
   Portable across all Serena-enabled agents (Claude Code, Cursor, Windsurf, etc.).
 
   Use when: starting a session, resuming work, or needing project context.
@@ -45,21 +44,15 @@ Load project context from Serena MCP memory for cross-session continuity.
 
 **If no memories exist (first session):**
 
-4. Call `list_dir` at project root (depth 2) to understand structure
-5. Look for README, project config files (package.json, Cargo.toml, pyproject.toml, etc.)
-6. Suggest creating a `project_overview` memory for future sessions
+4. Suggest running `onboarding` and creating a `project_overview` memory for future sessions
+5. Present minimal context and note that `/save` should be run at end of session
 
-## Phase 3: Structure Discovery
+## Phase 3: Validation
 
-8. Call `list_dir` at project root (depth 1) to confirm folder layout
-9. Note key directories (src/, lib/, tests/, docs/, scripts/, etc.)
+6. Call `think_about_collected_information` to verify context sufficiency
+7. If insufficient: read additional memories
 
-## Phase 4: Validation
-
-10. Call `think_about_collected_information` to verify context sufficiency
-11. If insufficient: read additional memories or explore more directories
-
-## Phase 5: Session Report
+## Phase 4: Session Report
 
 Report to the user:
 
@@ -70,7 +63,6 @@ Report to the user:
 - **Memories Loaded**: [count] ([list of keys])
 - **Key Context**: [1-2 sentence summary of project state]
 - **Previous Session**: [summary from session_* memory, or "None"]
-- **Project Structure**: [key directories]
 - **Status**: Ready
 ```
 
@@ -93,6 +85,5 @@ Report to the user:
 - [ ] `project_overview` read (or noted as missing)
 - [ ] All `CRITICAL_*` memories read
 - [ ] Cross-reference directives followed
-- [ ] Project structure discovered via `list_dir`
 - [ ] `think_about_collected_information` called
 - [ ] Session report presented to user
