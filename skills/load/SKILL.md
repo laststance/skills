@@ -2,7 +2,7 @@
 name: load
 description: |
   Load project context from Serena MCP memory for session initialization.
-  Discovers memories, reads project overview and critical rules, and validates context sufficiency.
+  Discovers memories, reads critical rules, and validates context sufficiency.
   Portable across all Serena-enabled agents (Claude Code, Cursor, Windsurf, etc.).
 
   Use when: starting a session, resuming work, or needing project context.
@@ -18,7 +18,6 @@ Load project context from Serena MCP memory for cross-session continuity.
 ## Core Requirements
 
 - All context loading uses Serena MCP tools exclusively (no agent-specific tools)
-- Always read `project_overview` first if it exists (anchor memory)
 - Follow cross-references: if any memory contains "MUST read", "CRITICAL", or "also read" directives, obey them
 - Never skip `think_about_collected_information` validation at the end
 - Report loaded context as a structured summary to the user
@@ -35,16 +34,15 @@ Load project context from Serena MCP memory for cross-session continuity.
 
 **If memories exist (returning session):**
 
-4. Call `read_memory("project_overview")` — the anchor memory
+4. Read any `CRITICAL_*` prefixed memories from the list
 5. Scan loaded content for cross-reference directives:
    - Look for: "CRITICAL", "MUST read", "also read", "see also"
    - Read each referenced memory key
-6. Read any `CRITICAL_*` prefixed memories from the list
-7. Read the most recent `session_*` memory (sort by date in key name)
+6. Read the most recent `session_*` memory (sort by date in key name)
 
 **If no memories exist (first session):**
 
-4. Suggest running `onboarding` and creating a `project_overview` memory for future sessions
+4. Suggest running `onboarding` and creating memories for future sessions
 5. Present minimal context and note that `/save` should be run at end of session
 
 ## Phase 3: Validation
@@ -70,11 +68,10 @@ Report to the user:
 
 | Prefix | Purpose | Load Priority |
 |--------|---------|---------------|
-| `project_overview` | Project summary | 1st (always) |
-| `CRITICAL_*` | Must-read rules | 2nd (never skip) |
-| Cross-referenced | Memories referenced by loaded content | 3rd |
-| `session_*` | Session checkpoints | 4th (latest only) |
-| `plan_*` | Active plans | 5th (if relevant) |
+| `CRITICAL_*` | Must-read rules | 1st (never skip) |
+| Cross-referenced | Memories referenced by loaded content | 2nd |
+| `session_*` | Session checkpoints | 3rd (latest only) |
+| `plan_*` | Active plans | 4th (if relevant) |
 | `pattern_*` | Learned patterns | On demand |
 | `discovery_*` | Brainstorming results | On demand |
 | `todo_*` | Persistent TODOs | On demand |
@@ -82,7 +79,6 @@ Report to the user:
 ## Success Criteria
 
 - [ ] Serena project is activated/onboarded
-- [ ] `project_overview` read (or noted as missing)
 - [ ] All `CRITICAL_*` memories read
 - [ ] Cross-reference directives followed
 - [ ] `think_about_collected_information` called
