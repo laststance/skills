@@ -129,6 +129,30 @@ Visual verification across platforms. Auto-detect platform from `package.json`:
 3. **Execute**: Run each scenario, take screenshot after each step
 4. **Judge**: All pass → continue. Any fail → return to Phase 3
 
+### Authentication for Frontend Verify
+
+When verifying authenticated apps (SaaS dashboards, admin panels, OAuth-protected pages), use agent-browser's auth persistence:
+
+| Strategy | Command | Use Case |
+|----------|---------|----------|
+| `state save/load` | `agent-browser state save auth.json` | Session cookies + localStorage. Best for most web apps |
+| `--profile <dir>` | `agent-browser open <url> --profile ./browser-data` | Full Chromium user data dir. Best for complex OAuth (Google, GitHub SSO) |
+| `auth save` | `agent-browser auth save <name> --url <login-url>` | Encrypted credential store. Best for CI/shared environments |
+
+**OAuth Flow:**
+
+1. `agent-browser open <login-url> --headed` (must be headed for OAuth redirects)
+2. Complete OAuth manually or via `snapshot -i` + `fill` + `click`
+3. `agent-browser state save auth.json` to persist session
+4. Future runs: `agent-browser state load auth.json` before navigating to app
+
+**Security:**
+
+- Add `auth.json`, `browser-data/` to `.gitignore`
+- `auth save` uses AES-256-GCM encryption via `AGENT_BROWSER_ENCRYPTION_KEY` env var
+- State files auto-expire after 30 days
+- Use `--headed` for initial OAuth setup (redirects require visible browser)
+
 ### Completion Gate
 
 **🔶 `think_about_whether_you_are_done`** — Is everything truly complete?
