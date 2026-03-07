@@ -117,7 +117,7 @@ Visual verification across platforms. Auto-detect platform from `package.json`:
 
 | Dependency | Platform | Preflight | Verification Tool |
 |------------|----------|-----------|-------------------|
-| _(default)_ | Web | `kill-port <port> && pnpm dev` | Claude Chrome MCP (`tabs_context_mcp`, `read_page`, `take_screenshot`) |
+| _(default)_ | Web | `kill-port <port> && pnpm dev` | agent-browser (`open --headed`, `snapshot -i`, `screenshot`) |
 | `electron` | Electron | `pnpm electron:dev` | Electron MCP (`mcp__electron__take_screenshot`) |
 | `expo` / `react-native` | Mobile | `mcp__ios-simulator__open_simulator` | iOS Simulator MCP (`screenshot`, `ui_tap`, `ui_swipe`) |
 | `commander` / `inquirer` / `oclif` | CLI | shell session | Shellwright MCP (TUI/CLI operation and output verification) |
