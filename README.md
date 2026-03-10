@@ -25,6 +25,7 @@ npx skills add laststance/skills --skill git
 npx skills add laststance/skills --skill load
 npx skills add laststance/skills --skill mentor
 npx skills add laststance/skills --skill product-inspiration
+npx skills add laststance/skills --skill prop-drill
 npx skills add laststance/skills --skill qa-team
 npx skills add laststance/skills --skill save
 npx skills add laststance/skills --skill task
@@ -47,6 +48,7 @@ npx skills add laststance/skills --skill troubleshoot
 | [load](skills/load/) | Load project context from Serena MCP memory for session initialization. Discovers memories, reads project overview, and validates context sufficiency. | [Serena MCP](https://github.com/oraios/serena) **(required)** |
 | [mentor](skills/mentor/) | Interactive code mentoring with pseudo-Plan mode. AI analyzes, designs, and presents a visual blueprint — human approves then writes code with AI guidance. | — |
 | [product-inspiration](skills/product-inspiration/) | Provides UI/feature implementation inspiration by researching top-tier apps. Implements all proposed patterns in _trials/ folder for hands-on evaluation. | [Tavily MCP](https://github.com/tavily-ai/tavily-mcp-server) (recommended) |
+| [prop-drill](skills/prop-drill/) | Trace React prop-drilling paths from origin definition to leaf consumers. Shows the original prop definition as a clickable code block, the full drilling route as a table, and a Mermaid flowchart. | [Serena MCP](https://github.com/oraios/serena) (recommended), [Context7](https://github.com/upstash/context7) (recommended) |
 | [qa-team](skills/qa-team/) | Launch comprehensive QA Agent Team for post-implementation verification. Tests 5 perspectives in parallel: Visual Integrity, Functional Correctness, Apple HIG, Edge Cases, and UX Sensibility. | [Serena MCP](https://github.com/oraios/serena) (recommended), platform-dependent MCP (see below) |
 | [save](skills/save/) | Save session context to Serena MCP memory for cross-session persistence. Analyzes accomplishments, persists learnings, and creates session checkpoints. | [Serena MCP](https://github.com/oraios/serena) **(required)** |
 | [task](skills/task/) | Standard implementation workflow with systematic 5-phase cycle: Investigate → Plan → Implement → Verify → Complete. Integrates quality gates and introspection markers. | [Serena MCP](https://github.com/oraios/serena) **(required)**, [Context7](https://github.com/upstash/context7) (recommended) |
@@ -80,6 +82,7 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /load                               # Load session context from Serena MCP
 /mentor                             # Interactive code mentoring
 /product-inspiration                # Get UI/feature inspiration
+/prop-drill orderData OrderTable    # Trace prop-drilling path
 /qa-team                            # Launch QA verification team
 /save                               # Save session context to Serena MCP
 /task fix the login button          # Systematic implementation workflow
