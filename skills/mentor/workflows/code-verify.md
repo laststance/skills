@@ -25,6 +25,7 @@ The mentor checks that the code **does the right thing**, not that it
 | **Algorithm** | `reduce` vs `filter+map` vs `for` loop | ✅ Valid (if same output) |
 | **Code structure** | Inline vs extracted helper | ✅ Valid |
 | **Comment style** | JSDoc vs inline vs none | ✅ Valid |
+| **Assist comments kept** | Helpful `// ASSIST:` comments remain in file | ✅ Valid |
 | **Import style** | Named vs default vs barrel | ✅ Valid |
 | **String format** | Template literal vs concatenation | ✅ Valid |
 | **Conditional style** | Ternary vs if-else vs switch | ✅ Valid |
@@ -43,6 +44,8 @@ The mentor checks that the code **does the right thing**, not that it
 | **Missing error handling** | Unhandled promise rejection | 🟡 Important |
 | **Logic error** | Off-by-one, wrong comparison | 🔴 Critical |
 | **Missing side effect** | Forgot to emit event, update cache | 🟡 Important |
+| **Stale assist comment** | Comment contradicts current code | 🟡 Important |
+| **Planning chatter left behind** | Temporary note leaked into final code | 🟡 Important |
 
 ---
 
@@ -89,6 +92,16 @@ For each modified function/component, verify:
 | [Caller 1] | [Expected signature] | ✅/❌ |
 | [Caller 2] | [Expected signature] | ✅/❌ |
 
+### 2.4 Assist Comment Accuracy
+
+If assist comments are present, verify:
+
+| Check | Method |
+|-------|--------|
+| Still accurate? | Compare comment against actual behavior |
+| Still useful? | Check whether it explains a non-obvious constraint |
+| Still scoped? | Ensure it is not leftover planning chatter |
+
 ---
 
 ## Step 3: Present Verification Report
@@ -111,6 +124,7 @@ Your implementation is behaviorally correct!
 | Integration compatibility | ✅ Compatible |
 | Type safety | ✅ Sound |
 | Security | ✅ No issues |
+| Assist comments | ✅ Helpful and accurate |
 
 ### Notable Variations
 
@@ -119,6 +133,7 @@ Your code differs from the example in some ways — all are valid:
 - 📝 **Naming**: You used `userPermission` instead of `requiredRole` — clear and descriptive.
 - 🔄 **Approach**: You used early return pattern instead of nested if — arguably more readable.
 - 🎨 **Structure**: You extracted a helper function — good for reusability.
+- 💬 **Assist comments**: You kept the useful constraint comment and removed the temporary planning note.
 
 ---
 
@@ -247,6 +262,7 @@ That's the whole point. 🎯
 | "My example used `result`, not `output`" | Naming is personal choice |
 | "This would be better as a ternary" | Structural preference |
 | "You forgot the JSDoc comment" | Documentation is optional variation |
+| "You should delete every `// ASSIST:` comment" | Useful comments may remain intentionally |
 | "Wrong import order" | Linter's job, not verification |
 
 ### ✅ ALWAYS DO
@@ -258,6 +274,7 @@ That's the whole point. 🎯
 | "This doesn't handle the case when..." | Missing functionality |
 | "Great use of early returns!" | Positive reinforcement |
 | "Your approach is actually more efficient" | Acknowledge creativity |
+| "This assist comment still mentions a removed constraint" | Accurate comment review |
 
 ---
 

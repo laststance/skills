@@ -9,8 +9,9 @@
 
 🔴 **Rule 1**: Show COMPLETE code (no abbreviation like "// ... rest")
 🔴 **Rule 2**: WAIT for human to report "done" before proceeding
-🔴 **Rule 3**: NEVER write code directly into files
-🔴 **Rule 4**: Human's creative variations are VALID (don't force conformity)
+🔴 **Rule 3**: NEVER write full code directly into files
+🔴 **Rule 4**: Only inject assist comments when the approved plan explicitly calls for them
+🔴 **Rule 5**: Human's creative variations are VALID (don't force conformity)
 
 ---
 
@@ -51,7 +52,46 @@ For each TODO, start with context:
 
 ---
 
-## Step 3: Show Code Example
+## Step 3: Inject Assist Comments (Optional)
+
+Reference `references/assist-comments.md`.
+
+If the approved plan includes assist comments for the current TODO:
+
+1. Inject the smallest useful comment set into the target file
+2. Show the human exactly what was inserted
+3. Explain why the comments were added
+4. Continue with the normal code example
+
+Use this presentation format:
+
+```markdown
+## Assist Comment Injection
+
+📄 **ASSIST COMMENTS**: `src/services/auth.ts:validateUser`
+
+```typescript
+// ASSIST: Keep this backward-compatible so existing callers still work unchanged.
+// ASSIST: Add role validation before returning the decoded user.
+```
+
+**Why These Were Added**:
+- Mark the insertion point for the new behavior
+- Preserve the existing caller contract while the human implements the change
+
+**How To Use Them**:
+- Implement around these comments
+- Keep them if they remain useful after implementation
+- Remove or rewrite them if they become stale
+
+---
+```
+
+If no assist comments are planned, skip this step.
+
+---
+
+## Step 4: Show Code Example
 
 ### For Mode A (Existing Codebase)
 
@@ -237,7 +277,7 @@ export function generateToken(user: User): string {
 
 ---
 
-## Step 4: Wait for Completion
+## Step 5: Wait for Completion
 
 **CRITICAL**: Do NOT proceed automatically.
 
@@ -258,6 +298,7 @@ User may:
 - Report confusion → Explain differently
 - Share their implementation → Provide feedback if requested
 - Report "done" → Proceed to next TODO
+- Ask whether to keep/remove assist comments → Advise based on whether they remain useful and accurate
 
 ### Example Interaction
 
@@ -281,7 +322,7 @@ AI: [Proceeds to next TODO]
 
 ---
 
-## Step 5: Update Progress
+## Step 6: Update Progress
 
 After "done":
 - Mark current TODO as "done"
@@ -289,7 +330,7 @@ After "done":
 
 ---
 
-## Step 6: Section Completion Check
+## Step 7: Section Completion Check
 
 After all TODOs in a section:
 
@@ -329,6 +370,7 @@ When the last section's validation passes:
 3. **JSDoc Comments**: For functions, classes, modules
 4. **Inline Comments**: For non-obvious logic
 5. **Type Annotations**: All parameters and returns typed
+6. **Assist Comment Prefix**: Use `// ASSIST:` for injected scaffolding comments
 
 ### Comment Style
 
@@ -340,6 +382,16 @@ const requiredRole?: UserRole
 // BAD: Explains WHAT (obvious from code)
 // Add the required role parameter
 const requiredRole?: UserRole
+```
+
+### Assist Comment Style
+
+```typescript
+// GOOD: Durable guidance with intent
+// ASSIST: Keep this branch side-effect free so later retries stay predictable.
+
+// BAD: Nearly writes the solution
+// ASSIST: Call retryRequest(), increment retries, then return the new response.
 ```
 
 ### Change Markers (Mode A)
@@ -382,6 +434,7 @@ Note: Your overall approach is valid. This is just a potential edge case.
 ## Success Criteria
 
 - [ ] TODO context clearly presented
+- [ ] If planned: assist comments injected and shown to the human
 - [ ] Complete code shown (no abbreviation)
 - [ ] Mode A: CURRENT → MODIFIED format used
 - [ ] Mode B: Full file with comprehensive comments

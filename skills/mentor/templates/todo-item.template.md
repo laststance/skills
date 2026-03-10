@@ -30,6 +30,27 @@ Use this template for presenting individual TODOs in the section-guidance workfl
 
 ---
 
+## Assist Comment Injection (Optional)
+
+Use this section only when the approved plan includes assist comments for the current TODO.
+
+📄 **ASSIST COMMENTS**: `[file:function]`
+
+```[language]
+// ASSIST: [placement, constraint, or edge-case guidance]
+```
+
+**Why These Were Added**:
+- [Reason 1]
+- [Reason 2]
+
+**How To Use Them**:
+- Treat them as guidance, not required wording
+- Keep them if still useful after implementation
+- Remove or rewrite them if they become stale
+
+---
+
 ## Code Example
 
 [For Mode A - Existing Codebase]
@@ -88,6 +109,7 @@ Use this template for presenting individual TODOs in the section-guidance workfl
 [Specific instructions for the human]
 
 - Create/modify the file at `[path]`
+- If assist comments were injected, implement around them and adjust wording if needed
 - [Additional specific instructions]
 - You may adapt styling/naming to match your preferences
 
@@ -125,6 +147,27 @@ We need to also verify they have the required permission level.
 - Called by: authMiddleware, loginHandler, API routes
 - Calls: jwt.verify, error handlers
 - Will enable: requireRole middleware (TODO T02.1)
+
+---
+
+## Code Example
+
+## Assist Comment Injection (Optional)
+
+📄 **ASSIST COMMENTS**: `src/services/auth.ts:validateUser`
+
+```typescript
+// ASSIST: Keep this backward-compatible so existing callers still work unchanged.
+// ASSIST: Add role validation before returning the decoded user.
+```
+
+**Why These Were Added**:
+- They mark the exact insertion point for the new behavior
+- They preserve the contract while the human implements the logic
+
+**How To Use Them**:
+- Implement the new code around these comments
+- Keep them only if they remain useful after implementation
 
 ---
 
@@ -183,6 +226,7 @@ Optional parameter maintains backward compatibility while enabling new functiona
 
 Modify the validateUser function in `src/services/auth.ts`:
 
+- Use the injected assist comments as placement/constraint hints
 - Add the optional `requiredRole` parameter
 - Implement the role checking logic
 - Keep the existing return behavior unchanged
@@ -221,6 +265,23 @@ Without this, we can't protect routes or identify users.
 - Will be called by: authMiddleware (T01.3), login/logout handlers (T02.x)
 - Depends on: JWT library, environment config
 - Exports: validateUser, generateToken
+
+---
+
+## Code Example
+
+## Assist Comment Injection (Optional)
+
+📄 **ASSIST COMMENTS**: `src/services/auth.ts`
+
+```typescript
+// ASSIST: Keep this module focused on token creation/validation only.
+// ASSIST: Use specific error types so later middleware can react differently.
+```
+
+**Why These Were Added**:
+- They preserve the intended module boundary while writing the new file
+- They highlight a non-obvious error-handling constraint
 
 ---
 
@@ -297,6 +358,7 @@ export function generateToken(user: User): string {
 Create the authentication service:
 
 - Create file at `src/services/auth.ts`
+- Use the assist comments as guardrails while writing the implementation
 - Implement both functions as shown
 - Ensure error types are imported/created
 

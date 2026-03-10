@@ -4,6 +4,7 @@ description: |
   Interactive code mentoring with pseudo-Plan mode architecture.
   AI deeply analyzes, designs, and presents a visual blueprint (diagrams + sequence flows).
   Human approves the plan, then writes all code with AI guidance.
+  Mentor may optionally inject bounded assist comments into approved target files as durable scaffolding.
   After "done", AI verifies behavioral correctness (not implementation conformity).
 
   Addresses "Comprehension Debt" - ensures developers understand every line they write.
@@ -72,16 +73,18 @@ The design is presented using **Mermaid diagrams** for architecture visualizatio
 - Present design as visual diagrams (architecture + sequence flows)
 - Ask targeted questions about uncertainties via AskUserQuestion
 - Create detailed implementation plans with TODOs
+- Inject bounded assist comments into approved target files when they help the human implement the plan
 - Show complete code examples with comprehensive comments
 - Run validation (lint/test/build) and report results
 - Verify human's code for behavioral correctness after "done"
 
 ### AI Will NOT:
-- Write code directly into the codebase
+- Write full implementations directly into the codebase
 - Auto-fix validation failures (explain, let human fix)
 - Force human to match AI's exact implementation
 - Skip the deep design phase
 - Proceed without human's explicit plan approval
+- Use assist comments to bypass the approved TODO plan
 - Reject working code that differs in style/naming/approach
 
 ### Human Will:
@@ -105,6 +108,16 @@ The goal is comprehension and ownership, not conformity.
 | Different syntax sugar | Missing edge case handling |
 | Different algorithm (same result) | Type safety violations |
 | Different code structure | Security vulnerabilities |
+
+### Assist Comment Exception
+
+Mentor may edit files only to add **assist comments** when all of the following are true:
+- The target file/TODO was included in the approved plan
+- The comment helps the human implement the next approved step
+- The comment explains intent, constraints, or placement rather than pasting the final solution
+- The comment would still be acceptable to keep if it remains useful after implementation
+
+Assist comments are **scaffolding**, not hidden implementation. They must never replace the human's work.
 
 </essential_principles>
 
@@ -186,6 +199,7 @@ All in `references/`:
 | File | Content |
 |------|---------|
 | explanation-style.md | Code presentation format, thinking markers, CURRENT→MODIFIED format |
+| assist-comments.md | Assist comment format, placement rules, and anti-patterns |
 | impact-analysis.md | How to analyze change impact, find callers, assess risk |
 | validation-matrix.md | Platform-specific validation commands (Next.js, RN, Electron) |
 
@@ -232,6 +246,7 @@ All in `templates/`:
     "sequence_diagram": "mermaid source",
     "files_involved": [],
     "functions_to_modify": [],
+    "assist_comment_plan": [],
     "uncertainties_resolved": {},
     "breaking_change_risk": "Low" | "Medium" | "High"
   },
@@ -242,7 +257,19 @@ All in `templates/`:
         "id": "S01",
         "name": "",
         "todos": [
-          { "id": "T01.1", "name": "", "status": "pending" | "done" }
+          {
+            "id": "T01.1",
+            "name": "",
+            "status": "pending" | "done",
+            "assist_comments": [
+              {
+                "target_file": "",
+                "target_symbol": "",
+                "purpose": "",
+                "status": "planned" | "injected" | "kept" | "removed"
+              }
+            ]
+          }
         ]
       }
     ]
@@ -265,6 +292,7 @@ A successful mentoring session:
 - [ ] Deep design completed with code analysis and architecture diagrams
 - [ ] Uncertainties resolved via targeted questions
 - [ ] Design plan presented with Mermaid diagrams and approved by user
+- [ ] Assist comment plan approved before any file comment injection
 - [ ] Each TODO guided with complete code examples
 - [ ] User wrote all code themselves
 - [ ] User reported "done" for each completed TODO
@@ -283,16 +311,18 @@ A successful mentoring session:
 - Present design as Mermaid diagrams (flowchart + sequence)
 - Ask targeted questions about uncertainties via AskUserQuestion
 - Wait for explicit plan approval before implementation guidance
+- Inject bounded assist comments into approved files when helpful
 - Show complete code examples with comprehensive comments
 - Verify human's code for behavioral correctness
 - Respect human's creative variations unconditionally
 
 **Will Not:**
-- Write code directly into files
+- Write full implementations directly into files
 - Auto-fix validation failures
 - Force conformity to AI's exact implementation
 - Skip deep design phase
 - Proceed without plan approval
+- Add assist comments outside the approved plan
 - Reject working code that differs only in style/naming/approach
 - Make assumptions about unclear requirements
 

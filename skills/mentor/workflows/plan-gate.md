@@ -13,7 +13,8 @@ The design presentation prioritizes visual comprehension:
 1. Architecture diagram shows WHAT changes and WHERE
 2. Sequence diagram shows HOW the new flow works
 3. File change table shows the SCOPE
-4. TODO plan shows the STEPS
+4. Assist comment plan shows any in-file scaffolding
+5. TODO plan shows the STEPS
 
 ---
 
@@ -93,7 +94,18 @@ sequenceDiagram
 
 ---
 
-## 5. Implementation Plan
+## 5. Assist Comment Plan
+
+| TODO | File | Symbol | Action | Purpose |
+|------|------|--------|--------|---------|
+| `T01.2` | `src/services/auth.ts` | `validateUser` | Inject | Mark where role validation belongs |
+| `T02.1` | `src/middleware/auth.ts` | `requireRole` | Skip | Prose guidance is sufficient |
+
+Comments are injected only after approval and only for rows marked `Inject`.
+
+---
+
+## 6. Implementation Plan
 
 ### Section S01: [Name]
 - T01.1: [Task]
@@ -121,11 +133,11 @@ After presenting the full blueprint, ask for explicit approval:
 
 ```
 AskUserQuestion:
-  question: "この設計で進めてよいですか？"
+  question: "この設計と assist comment 注入プランで進めてよいですか？"
   header: "Plan Gate"
   options:
     - label: "Accept (実装開始)"
-      description: "この設計プランを承認し、Section S01 からガイド開始"
+      description: "この設計と assist comment 計画を承認し、Section S01 からガイド開始"
     - label: "Adjust (調整)"
       description: "設計の一部を変更したい箇所がある"
     - label: "Redesign (再設計)"
@@ -143,6 +155,7 @@ AskUserQuestion:
 
 Starting with Section S01: [Name]
 Proceeding to implementation guidance...
+Assist comments will only be injected for the approved rows in the assist comment plan.
 ```
 
 → Route to `workflows/section-guidance.md` (Section S01, TODO T01.1)
@@ -247,6 +260,7 @@ Use additional diagrams only when they add clarity to the design.
 - [ ] Sequence diagram presented (Mermaid sequence)
 - [ ] Change scope table with file list
 - [ ] Design decisions documented
+- [ ] Assist comment plan shown when applicable
 - [ ] Implementation plan with sections and TODOs
 - [ ] User explicitly approved the plan via AskUserQuestion
 - [ ] If adjusted: changes incorporated and re-presented

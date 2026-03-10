@@ -124,6 +124,19 @@ sequenceDiagram
 | `src/services/auth.ts` | Modify | Add role param to validateUser |
 | `src/middleware/auth.ts` | Add | New requireRole() middleware |
 
+### 3.5 Draft Assist Comment Plan
+
+Reference `references/assist-comments.md`.
+
+Decide whether any TODOs need in-file scaffolding:
+
+| TODO | Target File | Target Symbol | Inject? | Purpose |
+|------|-------------|---------------|---------|---------|
+| `T01.2` | `src/services/auth.ts` | `validateUser` | Yes | Mark where role validation should be added |
+| `T02.1` | `src/middleware/auth.ts` | `requireRole` | No | Prose guidance is sufficient |
+
+Only plan assist comments when they add clarity beyond normal mentoring output.
+
 ---
 
 ## Step 4: Identify Uncertainties
@@ -165,6 +178,7 @@ After receiving user's answers:
 - Update architecture diagram to reflect choices
 - Adjust sequence diagram for chosen patterns
 - Finalize file change map
+- Finalize assist comment plan for each affected TODO/file
 
 ---
 
@@ -194,6 +208,14 @@ Each section contains concrete TODOs:
 - [Specific check]
 ```
 
+For TODOs that need in-file scaffolding, record it directly in the section plan:
+
+```markdown
+- T01.2: Add role parameter to `validateUser()`
+  - Assist comments:
+    - `src/services/auth.ts` → `validateUser` → explain where role validation belongs
+```
+
 ### 5.3 Include Impact Mitigation TODOs (Mode A)
 
 For caller updates, test updates, and regression watches:
@@ -216,6 +238,7 @@ Save the complete design for plan-gate:
     "architecture_diagram": "mermaid source",
     "sequence_diagram": "mermaid source",
     "file_change_map": [],
+    "assist_comment_plan": [],
     "uncertainties_resolved": { "error_handling": "custom_error_types" },
     "breaking_change_risk": "Medium",
     "sections": []
@@ -241,6 +264,7 @@ Pass the complete design (diagrams + plan + resolved uncertainties).
 - [ ] All uncertainties identified
 - [ ] User questions asked via AskUserQuestion with concrete choices
 - [ ] Answers incorporated into design
+- [ ] Assist comment plan drafted for TODOs that need in-file scaffolding
 - [ ] Sections and TODOs structured
 - [ ] Design state saved
 - [ ] Routed to plan-gate

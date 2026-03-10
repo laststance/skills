@@ -81,6 +81,7 @@ Visual: Use Electron MCP tools
 | TypeCheck | ✅ Pass | 4.1s |
 | Tests | ✅ Pass (15/15) | 8.2s |
 | Build | ✅ Pass | 12.5s |
+| Assist Comments | ✅ Useful | Reviewed |
 
 **Visual Verification**: [Screenshot attached]
 - UI renders correctly
@@ -226,7 +227,31 @@ Would you like to address the text issue now or note it for later?
 
 ---
 
-## Step 6: Save Validation State
+## Step 6: Assist Comment Review
+
+If assist comments were injected during mentoring, review them before saving validation state:
+
+- ✅ Keep when they are accurate, non-obvious, and still useful
+- ⚠️ Rewrite when they are mostly right but unclear
+- ❌ Remove when they are stale, misleading, contradictory, or just planning chatter
+
+Presentation format:
+
+```markdown
+## Assist Comment Review
+
+- `src/services/auth.ts`: ✅ Keep
+  - `// ASSIST: Keep this backward-compatible...`
+  - Reason: Still documents a real constraint for future edits
+
+- `src/middleware/auth.ts`: ❌ Rewrite or remove
+  - `// ASSIST: Add retry logic here later`
+  - Reason: Temporary planning note, no longer accurate
+```
+
+---
+
+## Step 7: Save Validation State
 
 Save validation results:
 
@@ -239,7 +264,8 @@ Save validation results:
     "typecheck": "pass",
     "tests": { "status": "pass", "passed": 15, "failed": 0 },
     "build": "pass",
-    "visual": "pass"
+    "visual": "pass",
+    "assist_comments": "pass"
   },
   "notes": "All checks passed on second attempt after fixing type error"
 }
@@ -247,7 +273,7 @@ Save validation results:
 
 ---
 
-## Step 7: Route to Next Step
+## Step 8: Route to Next Step
 
 ### If More Sections Remain
 
@@ -278,6 +304,7 @@ Save validation results:
 - [ ] All tests passing
 - [ ] Build succeeds
 - [ ] Visual verification completed (if applicable)
+- [ ] Assist comments reviewed if any were injected
 - [ ] Validation results saved
 - [ ] Human understood any errors they fixed
 - [ ] Routed to appropriate next step
