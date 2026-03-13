@@ -23,6 +23,7 @@ npx skills add laststance/skills --skill explain
 npx skills add laststance/skills --skill gif-analyzer
 npx skills add laststance/skills --skill git
 npx skills add laststance/skills --skill load
+npx skills add laststance/skills --skill lunch
 npx skills add laststance/skills --skill mentor
 npx skills add laststance/skills --skill product-inspiration
 npx skills add laststance/skills --skill prop-drill
@@ -46,6 +47,7 @@ npx skills add laststance/skills --skill troubleshoot
 | [gif-analyzer](skills/gif-analyzer/) | Analyze animated GIF files by extracting and viewing frames as sequential video. | — |
 | [git](skills/git/) | Git operations with intelligent commit messages and workflow optimization. Analyzes changes to generate Conventional Commit messages automatically. | — |
 | [load](skills/load/) | Load project context from Serena MCP memory for session initialization. Discovers memories, reads project overview, and validates context sufficiency. | [Serena MCP](https://github.com/oraios/serena) **(required)** |
+| [lunch](skills/lunch/) | Relaxed mealtime conversation companion. Claude declares a food choice with trivia, then chats about any topic in a casual tone. | — |
 | [mentor](skills/mentor/) | Interactive code mentoring with pseudo-Plan mode. AI analyzes, designs, and presents a visual blueprint — human approves then writes code with AI guidance. | — |
 | [product-inspiration](skills/product-inspiration/) | Provides UI/feature implementation inspiration by researching top-tier apps. Implements all proposed patterns in _trials/ folder for hands-on evaluation. | [Tavily MCP](https://github.com/tavily-ai/tavily-mcp-server) (recommended) |
 | [prop-drill](skills/prop-drill/) | Trace React prop-drilling paths from origin definition to leaf consumers. Shows the original prop definition as a clickable code block, the full drilling route as a table, and a Mermaid flowchart. | [Serena MCP](https://github.com/oraios/serena) (recommended), [Context7](https://github.com/upstash/context7) (recommended) |
@@ -80,6 +82,7 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /gif-analyzer ./demo.gif            # Analyze a GIF animation
 /git commit                         # Smart git commit with Conventional Commits
 /load                               # Load session context from Serena MCP
+/lunch                              # Casual mealtime chat companion
 /mentor                             # Interactive code mentoring
 /product-inspiration                # Get UI/feature inspiration
 /prop-drill orderData OrderTable    # Trace prop-drilling path
