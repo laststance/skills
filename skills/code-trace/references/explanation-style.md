@@ -249,6 +249,15 @@ Content-Type: application/json
 
 ---
 
+**Output format:**
+
+1. ASCII flowchart (shown above)
+2. 📊 Mermaid.js flowchart
+3. Both
+
+If user chooses 2 or 3: Read `references/mermaid-templates.md` and generate Mermaid
+from path_history using the algorithm and classDef styles defined there.
+
 **Save this trace?**
 
 1. Save as `{suggested_name}`

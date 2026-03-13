@@ -112,6 +112,7 @@ All in `references/`:
 | framework-patterns.md | Entry point detection and request flow for Express, Next.js, Fastify, etc. |
 | control-flow-types.md | How to present if/switch/try/loops as interactive choices |
 | explanation-style.md | Thinking markers, step format, summary format |
+| mermaid-templates.md | Mermaid.js flowchart generation from trace path_history |
 </reference_index>
 
 <workflows_index>
@@ -147,6 +148,7 @@ A successful code trace:
 - [ ] External dependencies summarized (not deep-traced)
 - [ ] User navigated to terminal point OR chose to stop
 - [ ] Path history shown in ASCII flowchart format
+- [ ] Mermaid flowchart offered as output option (if trace completed)
 - [ ] Key insights collected and displayed
 - [ ] Trace state available for resume (if user chose to save)
 </success_criteria>

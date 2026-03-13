@@ -343,6 +343,19 @@ Content-Type: application/json
 
 ---
 
+**Output format:**
+
+1. ASCII flowchart (shown above)
+2. 📊 Mermaid.js flowchart
+3. Both
+
+> Mermaid renders natively in GitHub, Obsidian, Notion, and most Markdown editors.
+
+If user chooses 2 or 3: Read `references/mermaid-templates.md` and generate Mermaid
+from `path_history` using the algorithm and style definitions described there.
+
+---
+
 **Save this trace?**
 
 1. Save as `trace_{method}_{path}_{outcome}`
@@ -433,6 +446,7 @@ This workflow is complete when:
 - [ ] Conditional branches presented as choices
 - [ ] Trace reached terminal OR user stopped
 - [ ] Path history displayed as ASCII flowchart
+- [ ] Mermaid flowchart offered as output option
 - [ ] Key insights collected
 - [ ] State saved to Serena (if user chose)
 </success_criteria>

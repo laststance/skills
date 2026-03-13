@@ -216,6 +216,19 @@ When trace completes:
 
 ---
 
+**Output format:**
+
+1. ASCII tree (shown above)
+2. 📊 Mermaid.js flowchart
+3. Both
+
+> Mermaid renders natively in GitHub, Obsidian, Notion, and most Markdown editors.
+
+If user chooses 2 or 3: Read `references/mermaid-templates.md` and generate Mermaid
+from `path_history` using the function trace template and algorithm described there.
+
+---
+
 **Options**:
 1. 🔍 Trace one of the called functions
 2. 🔍 Trace from a caller's perspective
@@ -286,5 +299,6 @@ This workflow is complete when:
 - [ ] Deep dives into called functions (if requested)
 - [ ] Return value / exit point reached
 - [ ] Path through function summarized
+- [ ] Mermaid flowchart offered as output option
 - [ ] Call relationships shown
 </success_criteria>
