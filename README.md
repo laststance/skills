@@ -16,6 +16,7 @@ Install a specific skill:
 npx skills add laststance/skills --skill analyze-app
 npx skills add laststance/skills --skill code-trace
 npx skills add laststance/skills --skill coderabbit-resolver
+npx skills add laststance/skills --skill design
 npx skills add laststance/skills --skill deep-trace
 npx skills add laststance/skills --skill electron-release
 npx skills add laststance/skills --skill english-conversation
@@ -40,6 +41,7 @@ npx skills add laststance/skills --skill troubleshoot
 | [analyze-app](skills/analyze-app/) | Analyze macOS .app bundles to identify technology stacks (Electron, Flutter, Qt, SwiftUI, native, etc.) by delegating to a specialized subagent. | — |
 | [code-trace](skills/code-trace/) | Interactive code execution path tracer. Explains how code flows from entry point to output with step-by-step navigation. | — |
 | [coderabbit-resolver](skills/coderabbit-resolver/) | Automates the full CodeRabbit PR review cycle — fix comments, resolve threads, pass CI, merge, and clean up. Supports `--bulk` for all open PRs. | — |
+| [design](skills/design/) | Architecture-driven plan creation with 5-phase pipeline: Research → Architecture → 3-reviewer loop (max 5 rounds) → Final Review → Plan Output. "Weakest LLM Proof" principle ensures plans are executable by any AI agent. | [Serena MCP](https://github.com/oraios/serena) (recommended), [Context7](https://github.com/upstash/context7) (recommended), [Perplexity MCP](https://github.com/ppl-ai/modelcontextprotocol) (recommended) |
 | [deep-trace](skills/deep-trace/) | Line-by-line execution path tracer for PR diffs, git diffs, or specified code sections. Maps every line to its screen/URL, data flow, and execution context like a debugger's step-through. | [Serena MCP](https://github.com/oraios/serena) (recommended) |
 | [electron-release](skills/electron-release/) | Guides Electron app release process including build, code signing, notarization, and GitHub Release with auto-update support. | — |
 | [english-conversation](skills/english-conversation/) | English conversation practice partner for Japanese learners. Responds naturally in English with implicit recast and session summary with corrections. | macOS `say` command (for TTS) |
@@ -74,6 +76,7 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /analyze-app Linear                 # Analyze macOS app technology stack
 /code-trace                         # Trace code execution paths
 /coderabbit-resolver 17             # Process PR #17
+/design user authentication system   # Create detailed implementation plan
 /deep-trace 42                      # Trace PR #42 line-by-line
 /english-conversation               # Start English conversation practice
 /coderabbit-resolver --bulk         # Process all open PRs
