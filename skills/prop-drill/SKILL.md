@@ -14,7 +14,7 @@ description: |
 
   Keywords: prop-drill, prop drilling, props, trace, origin, where defined,
   pass through, prop chain, drilling path, component tree
-argument-hint: [prop-name] [component-or-file-path?]
+argument-hint: "[prop-name] [component-or-file-path?]"
 ---
 
 # Prop Drill — React Props Origin & Drilling Path Tracer

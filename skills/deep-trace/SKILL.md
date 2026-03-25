@@ -14,7 +14,7 @@ description: |
 
   Keywords: deep trace, step through, line by line, execution path, when does this run,
   where is this called, data flow, screen mapping, debugger, walkthrough
-argument-hint: [pr-number-or-file-path]
+argument-hint: "[pr-number-or-file-path]"
 ---
 
 # Deep Trace — Line-by-Line Execution Path Tracer
