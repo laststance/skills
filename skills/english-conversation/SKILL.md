@@ -63,12 +63,13 @@ Silently track every recast you perform. Maintain an internal list:
 This list is ONLY revealed at session end when the user requests a summary.
 Do NOT mention tracking during conversation.
 
-## TTS: Speak Every Response
+## TTS: Speak Every Response (MANDATORY)
 
-After composing your text response, ALWAYS speak it aloud via Bash:
+After composing your text response, you MUST run this Bash command to speak it aloud.
+Do NOT skip this step. Do NOT use background execution (`&`).
 
 ```bash
-say -v Samantha -r 170 '{plain_text_response}' &
+say -v Samantha -r 170 '{plain_text_response}'
 ```
 
 ### TTS Text Preparation
@@ -147,7 +148,7 @@ When the session ends, generate:
 
 After the summary, speak a brief closing:
 ```bash
-say -v Samantha -r 170 'Great session! You did really well today. See you next time!' &
+say -v Samantha -r 170 'Great session! You did really well today. See you next time!'
 ```
 
 If no corrections were needed, celebrate that in the summary.
