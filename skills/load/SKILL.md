@@ -2,57 +2,45 @@
 name: load
 description: |
   Load project context from Serena MCP memory for session initialization.
-  Discovers memories, reads critical rules, and validates context sufficiency.
   Portable across all Serena-enabled agents (Claude Code, Cursor, Windsurf, etc.).
 
   Use when: starting a session, resuming work, or needing project context.
   Keywords: session, load, initialize, context, memory, restore, resume
+argument-hint: "[project]"
 ---
 
 # Session Load
 
-Load project context from Serena MCP memory for cross-session continuity.
+Load project context from Serena MCP memory.
 
 <essential_principles>
 
-## Core Requirements
-
 - All context loading uses Serena MCP tools exclusively (no agent-specific tools)
-- Follow cross-references: if any memory contains "MUST read", "CRITICAL", or "also read" directives, obey them
-- Never skip `think_about_collected_information` validation at the end
-- Report loaded context as a structured summary to the user
+- Follow cross-references found in loaded memories ("MUST read", "also read")
 
 </essential_principles>
 
-## Phase 1: Project Activation
+## Step 1: Activate
 
-1. Call `check_onboarding_performed` to verify Serena knows this project
-2. If not onboarded: call `onboarding` to index the project first
-3. Call `list_memories` to discover all available memory keys
+1. Call `check_onboarding_performed`
+2. If not onboarded: call `onboarding`
+3. Call `list_memories` to discover all memory keys
 
-## Phase 2: Context Loading
+## Step 2: Read Memories
 
-**If memories exist (returning session):**
+**If memories exist:**
 
-4. Read any `CRITICAL_*` prefixed memories from the list
-5. Scan loaded content for cross-reference directives:
-   - Look for: "CRITICAL", "MUST read", "also read", "see also"
-   - Read each referenced memory key
-6. Read the most recent `session_*` memory (sort by date in key name)
+4. Read all `CRITICAL_*` memories
+5. Follow cross-references: if any loaded memory says "MUST read", "also read", or "see also" — read those keys
+6. Read the most recent `session_*` memory (by date in key name)
 
-**If no memories exist (first session):**
+**If no memories exist:**
 
-4. Suggest running `onboarding` and creating memories for future sessions
-5. Present minimal context and note that `/save` should be run at end of session
+4. Note this is a first session — suggest running `/save` at end of session
 
-## Phase 3: Validation
+## Step 3: Report
 
-6. Call `think_about_collected_information` to verify context sufficiency
-7. If insufficient: read additional memories
-
-## Phase 4: Session Report
-
-Report to the user:
+Present to the user:
 
 ```
 ## Session Loaded
@@ -63,23 +51,3 @@ Report to the user:
 - **Previous Session**: [summary from session_* memory, or "None"]
 - **Status**: Ready
 ```
-
-## Memory Prefix Reference
-
-| Prefix | Purpose | Load Priority |
-|--------|---------|---------------|
-| `CRITICAL_*` | Must-read rules | 1st (never skip) |
-| Cross-referenced | Memories referenced by loaded content | 2nd |
-| `session_*` | Session checkpoints | 3rd (latest only) |
-| `plan_*` | Active plans | 4th (if relevant) |
-| `pattern_*` | Learned patterns | On demand |
-| `discovery_*` | Brainstorming results | On demand |
-| `todo_*` | Persistent TODOs | On demand |
-
-## Success Criteria
-
-- [ ] Serena project is activated/onboarded
-- [ ] All `CRITICAL_*` memories read
-- [ ] Cross-reference directives followed
-- [ ] `think_about_collected_information` called
-- [ ] Session report presented to user
