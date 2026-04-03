@@ -16,7 +16,7 @@ description: |
   "functional test", "edge cases", "UX review", "HIG compliance", "qa-team",
   "run QA", "verify app", "quality gate"
 argument-hint: "[--platform web|electron|ios|macos|auto] [--skip visual|functional|hig|edge|ux] [--quick]"
-allowed-tools: "Bash,Read,Write,Edit,Glob,Grep,Task,TaskCreate,TaskUpdate,TaskList,TaskGet,TeamCreate,TeamDelete,SendMessage,AskUserQuestion,mcp__claude-in-chrome__*,mcp__plugin_playwright_playwright__*,mcp__electron__*,mcp__ios-simulator__*,mcp__mac-mcp-server__*,mcp__serena__*,mcp__sequential-thinking__*"
+allowed-tools: "Bash,Read,Write,Edit,Glob,Grep,Task,TaskCreate,TaskUpdate,TaskList,TaskGet,TeamCreate,TeamDelete,SendMessage,AskUserQuestion,mcp__claude-in-chrome__*,mcp__plugin_playwright_playwright__*,mcp__electron__*,mcp__ios-simulator__*,mcp__mac-mcp-server__*,mcp__serena__*"
 ---
 
 # QA Agent Team

@@ -40,7 +40,6 @@ Key behaviors:
   │
   Phase 2: Architecture Design
   │  Optimal architecture + new library evaluation + Plan draft
-  │  Use sequential-thinking for complex design decisions
   │
   Phase 3: Review Loop (max 5 rounds) ── references/review-loop.md
   │  3 parallel reviewers per round:
@@ -86,7 +85,6 @@ Every step in the Plan MUST be executable by the lowest-performing LLM without f
 | `mcp__context7__resolve-library-id` -> `query-docs` | Current + candidate library docs |
 | `mcp__perplexity__perplexity_research` | Architecture best practices |
 | `mcp__exa__web_search_exa` | Code examples, real-world implementations |
-| `mcp__sequential-thinking__sequentialthinking` | Complex design decision decomposition |
 
 ## Phase 2: Architecture Design
 

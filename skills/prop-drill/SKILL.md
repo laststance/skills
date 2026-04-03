@@ -53,9 +53,6 @@ Locate the `type` or `type ... Props` that declares this prop.
 2. `Read` the matched files to confirm the type definition context
 3. Follow intersection types / imported types to the original declaration
 
-If `sequential-thinking` MCP is available, use it to plan the trace strategy
-before searching (especially useful when prop name is ambiguous or common).
-
 ### Phase 2: Find the Data Origin
 
 Identify where the prop's **value** is first created (not just passed through).
@@ -198,7 +195,6 @@ All MCP tools are optional. Use when available, fall back to standard tools.
 | Find type definitions | Serena `search_for_pattern` + `find_symbol` | `Grep` + `Read` |
 | Find references | Serena `find_referencing_symbols` | `Grep` for component usage |
 | File structure | Serena `get_symbols_overview` | `Glob` + `Read` |
-| Plan trace strategy | `sequential-thinking` | Skip (proceed directly) |
 | React docs | `context7` | Skip |
 | Alternative patterns | `exa` | Skip |
 
