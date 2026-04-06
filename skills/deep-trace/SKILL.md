@@ -135,7 +135,35 @@ Add these sections after the trace table:
 - [Notable patterns, potential issues, or design decisions]
 ```
 
-### Step 6: Save to Memory (Optional)
+### Step 6: Generate Extension-Compatible Output
+
+After the Summary, generate a **separate copyable table** for the [deep-trace-extension](https://github.com/laststance/deep-trace-extension) VS Code extension.
+
+**Extension format** (4 columns, specific header names required):
+
+```markdown
+## 📋 Deep Trace Extension
+
+| file | line | col | reason |
+| --- | --- | --- | --- |
+| src/components/FreewordSearchFilter.tsx | 40 | 1 | useFreewordSearchFormContext — Component render |
+| src/components/FreewordSearchFilter.tsx | 54 | 1 | useWatch target values — Form state change |
+```
+
+**Conversion rules from trace table → extension table:**
+
+| Trace column | → Extension column | Rule |
+|---|---|---|
+| `File:Line` | `file` + `line` | Split on last `:` — file path before, line number after |
+| — | `col` | Always `1` (column info not tracked in trace) |
+| `Code` + `Trigger` | `reason` | Combine: short code description + ` — ` + trigger |
+
+**Requirements:**
+- Every row from the trace table gets a corresponding row
+- `file` must be the **full relative path** (not just filename). Resolve from project root using Serena if the trace table only has the filename
+- Output inside a fenced code block (` ```markdown ... ``` `) so users can copy the raw Markdown
+
+### Step 7: Save to Memory (Optional)
 
 If the user wants to remember this trace:
 ```
@@ -169,6 +197,18 @@ Output:
 - **Where**: /freeword_search (ファイルフリーワード検索モード)
 - **What**: Shows multi-select filter for 種別 (drawing + document types)
 - **Data**: document_type_settings API → SelectOption[] → form state → API search params
+
+## 📋 Deep Trace Extension
+
+```markdown
+| file | line | col | reason |
+| --- | --- | --- | --- |
+| src/components/FreewordSearchFilter.tsx | 40 | 1 | useFreewordSearchFormContext — Component render |
+| src/components/FreewordSearchFilter.tsx | 54 | 1 | useWatch target values — Form state change |
+| src/components/FreewordSearchFilter.tsx | 65 | 1 | useDocumentTypeSettingsQuery — React Query cache/fetch |
+| src/components/FreewordSearchFilter.tsx | 70 | 1 | useMemo targetOptions — Deps change |
+| src/components/FreewordSearchFilter.tsx | 119 | 1 | MultiSelectRHF render — User opens filter |
+```
 ```
 
 ## Tools Used
@@ -190,3 +230,6 @@ Output:
 - [ ] Data flow shows inputs → transformations → outputs
 - [ ] Trace is readable top-to-bottom as an execution story
 - [ ] Summary captures when/where/what/data
+- [ ] Extension-compatible table included with `file`, `line`, `col`, `reason` columns
+- [ ] Extension table uses full relative paths (not just filenames)
+- [ ] Extension table wrapped in fenced code block for easy copy
