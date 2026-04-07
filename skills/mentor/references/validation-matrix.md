@@ -82,7 +82,7 @@ Platform-specific validation commands for different tech stacks.
 | Test | `npm test` | Jest or Mocha |
 | Build | `npm run build` | Webpack/Vite bundle |
 | Package | `npm run package` | electron-builder |
-| Visual | Electron MCP | Use Electron tools |
+| Visual | `/electron` skill | agent-browser based Electron operation |
 
 **Dev**: `npm run start` or `electron .`
 

@@ -64,7 +64,7 @@ npm run lint && tsc --noEmit  # Parallel
 npm test && npm run build     # Sequential
 ```
 
-Visual: Use Electron MCP tools
+Visual: Use `/electron` skill for Electron UI verification
 
 ---
 

@@ -16,7 +16,7 @@ description: |
   "functional test", "edge cases", "UX review", "HIG compliance", "qa-team",
   "run QA", "verify app", "quality gate"
 argument-hint: "[--platform web|electron|ios|macos|auto] [--skip visual|functional|hig|edge|ux] [--quick]"
-allowed-tools: "Bash,Read,Write,Edit,Glob,Grep,Task,TaskCreate,TaskUpdate,TaskList,TaskGet,TeamCreate,TeamDelete,SendMessage,AskUserQuestion,mcp__claude-in-chrome__*,mcp__plugin_playwright_playwright__*,mcp__electron__*,mcp__ios-simulator__*,mcp__mac-mcp-server__*,mcp__serena__*"
+allowed-tools: "Bash,Read,Write,Edit,Glob,Grep,Task,TaskCreate,TaskUpdate,TaskList,TaskGet,TeamCreate,TeamDelete,SendMessage,AskUserQuestion,Skill,mcp__claude-in-chrome__*,mcp__plugin_playwright_playwright__*,mcp__ios-simulator__*,mcp__mac-mcp-server__*,mcp__serena__*"
 ---
 
 # QA Agent Team
@@ -91,7 +91,7 @@ Then spawn 6 teammates using the Task tool with `team_name: "qa-team"`:
 | Platform | Primary MCP |
 |----------|------------|
 | Web | `mcp__claude-in-chrome__*` / `mcp__plugin_playwright_playwright__*` |
-| Electron | `mcp__electron__*` |
+| Electron | `/electron` skill (agent-browser based) |
 | iOS/Expo | `mcp__ios-simulator__*` |
 | macOS | `mcp__mac-mcp-server__*` |
 

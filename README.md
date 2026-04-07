@@ -63,7 +63,7 @@ npx skills add laststance/skills --skill troubleshoot
 | Platform | MCP Server |
 |----------|------------|
 | Web | [agent-browser](https://www.npmjs.com/package/agent-browser) (CLI via Bash) |
-| Electron | [Electron MCP](https://www.npmjs.com/package/electron-mcp) |
+| Electron | `/electron` skill (agent-browser based) |
 | iOS / Expo | [iOS Simulator MCP](https://github.com/nichochar/ios-simulator-mcp) |
 | macOS native | [Mac MCP Server](https://github.com/nichochar/mac-mcp-server) |
 | CLI / TUI | [Shellwright MCP](https://github.com/aorwall/shellwright) |

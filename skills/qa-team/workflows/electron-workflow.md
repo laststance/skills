@@ -2,21 +2,20 @@
 
 ## Prerequisites
 
-| Check | Command | Expected |
-|-------|---------|----------|
-| Electron app running | `mcp__electron__list_electron_windows` | Window list returned |
-| Electron MCP connected | `mcp__electron__get_electron_window_info` | Window info |
+| Check | Method | Expected |
+|-------|--------|----------|
+| Electron app running | `pnpm electron:dev` | App window visible |
+| `/electron` skill available | Invoke `/electron` skill | Skill loaded |
 | claudedocs/qa/ exists | `mkdir -p claudedocs/qa/screenshots` | Directory ready |
 
-## MCP Tools
+## Verification Tool
 
-| Purpose | Primary Tool |
-|---------|-------------|
-| Screenshot | `mcp__electron__take_screenshot` |
-| Execute JS | `mcp__electron__send_command_to_electron` |
-| Window info | `mcp__electron__get_electron_window_info` |
-| Window list | `mcp__electron__list_electron_windows` |
-| Read logs | `mcp__electron__read_electron_logs` |
+Use the `/electron` skill for all Electron UI operations. The skill provides agent-browser based capabilities:
+
+- Screenshot capture
+- UI element interaction
+- Window inspection
+- JS execution in renderer
 
 ## Electron-Specific Checks
 
@@ -24,7 +23,7 @@
 
 | Check | How |
 |-------|-----|
-| **Native menus** | Verify menu bar items via `send_command_to_electron` |
+| **Native menus** | Verify menu bar items via `/electron` skill |
 | **IPC communication** | Check renderer ↔ main process messaging |
 | **Window chrome** | Traffic light buttons (close/minimize/maximize) position and function |
 | **Multi-window** | If app supports multiple windows, verify each |
@@ -34,9 +33,9 @@
 
 ### Per-Perspective Workflow
 
-Same as Web workflow but using Electron MCP tools:
+Same as Web workflow but using `/electron` skill:
 
-- **Visual**: `mcp__electron__take_screenshot` for captures, resize window via `send_command_to_electron`
+- **Visual**: Screenshot capture and window resize via `/electron` skill
 - **Functional**: Execute JS commands to trigger user flows
 - **HIG**: Check window controls, keyboard shortcuts, native menu items
 - **Edge Cases**: Test with very large files, concurrent window operations
@@ -44,10 +43,7 @@ Same as Web workflow but using Electron MCP tools:
 
 ### Responsive Testing
 
-For Electron, resize the window instead of viewport:
-```js
-// Via send_command_to_electron
-mainWindow.setSize(320, 600)
-mainWindow.setSize(768, 1024)
-mainWindow.setSize(1440, 900)
+For Electron, resize the window via `/electron` skill:
+```
+Test at: 320x600, 768x1024, 1440x900
 ```

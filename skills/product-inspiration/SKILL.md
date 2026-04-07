@@ -13,7 +13,7 @@ description: |
   開発中のプロダクトの機能/UIインスピレーションを提供。
   トップティアアプリを調査し、5パターン前後のデザイン提案を全て実装。
   実物を見比べてから最良のパターンを選択する「Try All, Pick Best」ワークフロー。
-allowed-tools: "Read,Write,WebSearch,WebFetch,Task,AskUserQuestion,TodoWrite,Bash,mcp__electron__take_screenshot"
+allowed-tools: "Read,Write,WebSearch,WebFetch,Task,AskUserQuestion,TodoWrite,Bash,Skill"
 ---
 
 # Product Inspiration Skill
@@ -319,11 +319,7 @@ implemented_at: "[ISO timestamp]"
 ### 5.5 スクリーンショット取得
 
 Electronプロジェクトの場合：
-```typescript
-mcp__electron__take_screenshot({
-  // パターンのコンポーネントが表示されている状態で撮影
-})
-```
+`/electron` スキルを使用してスクリーンショット撮影・UI操作を行う。
 
 撮影したスクリーンショットは `_trials/pattern-N/screenshots/preview.png` に保存。
 
