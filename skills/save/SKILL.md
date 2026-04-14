@@ -22,7 +22,6 @@ Persist session context to Serena MCP memory for cross-session continuity.
 - Always check existing memories before writing to avoid overwriting valuable context
 - Session checkpoint keys must include date: `session_YYYY-MM-DD_<description>`
 - Pattern and learning memories use: `pattern_<topic>`
-- Never skip `think_about_collected_information` for save validation
 - Report what was saved as a structured summary to the user
 
 </essential_principles>
@@ -101,8 +100,7 @@ Persist session context to Serena MCP memory for cross-session continuity.
 
 ## Phase 6: Validation
 
-10. Call `think_about_collected_information` to verify save completeness
-11. Verify: session checkpoint created, learnings persisted, no critical context lost
+10. Verify: session checkpoint created, learnings persisted, no critical context lost
 
 ## Phase 7: Save Report
 
@@ -150,5 +148,4 @@ Quick summary:
 - [ ] Session checkpoint memory written with date-stamped key
 - [ ] Learnings/patterns persisted (if any discovered)
 - [ ] Project overview updated (if significant new understanding)
-- [ ] `think_about_collected_information` called
 - [ ] Save report presented to user
