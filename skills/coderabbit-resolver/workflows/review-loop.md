@@ -127,21 +127,13 @@ Or resolve manually with the GraphQL mutation for each thread ID.
 
 ### 6a. Wait for CodeRabbit Review
 
+Use the script — it polls internally with bounded iterations:
+
 ```bash
 bash ~/.claude/skills/coderabbit-resolver/scripts/check-ci-status.sh $OWNER $REPO $PR_NUMBER
 ```
 
-Or poll manually (30-120 seconds typical):
-```bash
-HEAD_SHA=$(gh pr view $PR_NUMBER --json headRefOid -q .headRefOid)
-# Check every 10 seconds for up to 5 minutes
-for i in $(seq 1 30); do
-  STATUS=$(gh api "repos/$OWNER/$REPO/commits/$HEAD_SHA/check-runs" \
-    --jq '.check_runs[] | select(.name | test("coderabbit"; "i")) | .status' 2>/dev/null)
-  if [ "$STATUS" = "completed" ]; then break; fi
-  sleep 10
-done
-```
+**DO NOT** write a top-level `for i in seq ...; do ...; sleep 10; done` polling loop as a Bash command. Claude Code's Bash policy blocks long leading `sleep` and chained sleeps. The script wraps its `sleep` calls so the entire poll runs as a single Bash invocation — that's the only safe form here. If you need to wait without a script, see Step 6d below.
 
 ### 6b. Check for Rate Limit and Trigger Full Review
 
@@ -166,7 +158,26 @@ gh pr checks $PR_NUMBER
 
 Report the CI results to the user.
 
-### 6d. Fix CI Failures (Even If Unrelated to PR)
+### 6d. Wait Without a Script Wrapper — Use ScheduleWakeup
+
+Sometimes you need to wait at the top level — e.g., the check-run completed but CodeRabbit hasn't posted its review comments yet (typically a 30-180s gap), or you want to give the rate-limit window extra slack beyond what the script handles. In those cases **use `ScheduleWakeup`, never a top-level `sleep`**.
+
+```
+ScheduleWakeup({
+  delaySeconds: 270,  // <300s keeps the prompt cache warm
+  reason: "waiting for CodeRabbit to post review comments after check-run completed",
+  prompt: "Continue /coderabbit-resolver workflow on PR #<number>. Re-query unresolved threads (Step 1a) and check for new CodeRabbit comments since <ISO-timestamp>. If new actionable comments exist, restart from Step 1. Otherwise proceed to Step 7 (Loop Check)."
+})
+```
+
+**Picking `delaySeconds`:**
+- `60–270` for short waits (CodeRabbit comment posting, retry after transient failure) — stays inside the 5-minute prompt cache TTL
+- `1200–1800` for genuinely idle waits (long rate-limit windows, scheduled re-review) — pays one cache miss but amortizes it
+- **Avoid `300`** — worst-of-both: cache miss without amortization
+
+**Why this matters:** A top-level `sleep 180; gh api ...` is rejected by Bash policy. Even chaining shorter sleeps (`sleep 60; sleep 60; sleep 60`) is blocked. `ScheduleWakeup` releases the session entirely and re-enters the workflow at the right moment with the right context.
+
+### 6e. Fix CI Failures (Even If Unrelated to PR)
 
 If any CI check fails:
 
@@ -200,7 +211,7 @@ Max CI fix attempts per PR: **3**. If still failing after 3 attempts, report to 
 Query unresolved threads again (Step 1a). If CodeRabbit posted **new** review comments OR CI is still failing:
 
 - **New comments exist** → Go back to Step 1 (new iteration)
-- **CI still failing** → Go back to Step 6d (CI fix iteration)
+- **CI still failing** → Go back to Step 6e (CI fix iteration)
 - **No unresolved threads AND all CI green** → Proceed to Step 8
 
 ## Step 8: Final Verification

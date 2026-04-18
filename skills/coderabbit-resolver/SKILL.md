@@ -32,6 +32,10 @@ Only merge when ALL conditions are met: CI green, no unresolved threads, CodeRab
 ### Principle 5: Rate Limit Handling
 
 CodeRabbit may hit API rate limits and post a comment instead of reviewing. When detected, the workflow automatically waits for the rate limit to expire (+ 30s buffer), then posts `@coderabbitai full review` to trigger a complete re-review. Max 3 rate limit retries per PR to prevent infinite loops.
+
+### Principle 6: Long Waits Use ScheduleWakeup, Not sleep
+
+Top-level `sleep` is blocked by Claude Code's Bash policy and burns the 5-minute prompt cache. **Internal `sleep` inside `scripts/*.sh` is fine** — Claude sees the script as a single command. But when YOU (the agent) need to wait between steps without a script wrapper (e.g., letting CodeRabbit post comments after a check completes), use `ScheduleWakeup` with a continuation prompt that re-enters the workflow. Never write `sleep 180; gh api ...` as a top-level Bash command.
 </essential_principles>
 
 <intake>
