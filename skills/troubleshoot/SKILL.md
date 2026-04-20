@@ -25,13 +25,14 @@ Systematic issue diagnosis with root cause tracing, validated fixes, and prevent
 
 ## Serena Think Checkpoints (Mandatory)
 
-These three tools MUST be called at the specified points. Never skip them.
+Call the following Serena tools at the specified points. Never skip them.
 
 | Checkpoint | Tool | When | Purpose |
 |------------|------|------|---------|
-| Information Gate | `mcp__serena__think_about_collected_information` | After Phase 1 (Reproduce) and Phase 2 (Hypothesize) | Verify sufficient evidence before proceeding |
 | Adherence Gate | `mcp__serena__think_about_task_adherence` | Before each code edit in Phase 4 (Fix) | Confirm fix aligns with identified root cause |
 | Completion Gate | `mcp__serena__think_about_whether_you_are_done` | Before exiting Phase 5 (Verify) | Confirm fix is verified with evidence |
+
+After Phase 1 and again after Phase 2, do a short **evidence sufficiency self-check** in prose (repro steps, observed vs expected, hypotheses tied to concrete evidence). If gaps remain, collect more evidence before continuing—do not rely on a removed Serena tool.
 
 ## Always Active
 
@@ -65,7 +66,7 @@ Understand and reproduce the issue before diagnosing.
 
 **Tools**: Bash, Read, Grep, Glob
 
-**🔶 `think_about_collected_information`** — Is the reproduction evidence sufficient?
+5. **Reproduction evidence self-check** — Confirm you have enough to proceed: exact command or steps, full error output, and environment hints if relevant. If reproduction is shaky or incomplete, gather more before Phase 2.
 
 ## Phase 2: Hypothesize
 
@@ -79,8 +80,7 @@ Form hypotheses about the root cause — do not jump to fixing.
    ```
 2. 🎯 Rank by likelihood based on evidence strength
 3. Start investigating the most likely hypothesis first
-
-**🔶 `think_about_collected_information`** — Are hypotheses grounded in evidence?
+4. **Hypothesis grounding self-check** — Each hypothesis should cite specific evidence (log line, code path, diff, measured behavior). Demote or drop guesses that are not tied to facts.
 
 ## Phase 3: Investigate
 

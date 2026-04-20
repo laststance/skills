@@ -24,13 +24,14 @@ Standard 5-phase workflow for all implementation tasks with built-in quality gat
 
 ## Serena Think Checkpoints (Mandatory)
 
-These three tools MUST be called at the specified points. Never skip them.
+Call the following Serena tools at the specified points. Never skip them.
 
 | Checkpoint | Tool | When | Purpose |
 |------------|------|------|---------|
-| Information Gate | `mcp__serena__think_about_collected_information` | After Phase 1 (Investigate) and Phase 2 (Plan) | Verify sufficient information before proceeding |
 | Adherence Gate | `mcp__serena__think_about_task_adherence` | Before each code edit in Phase 3 | Confirm still aligned with original task |
 | Completion Gate | `mcp__serena__think_about_whether_you_are_done` | Before exiting Phase 4 (Verify) | Confirm all work is truly complete |
+
+After Phase 1 and again after Phase 2, do a short **information sufficiency self-check** in prose (requirements understood, relevant code located, plan covers acceptance criteria and verification). If gaps remain, gather more context before continuing—do not rely on a removed Serena tool.
 
 ## Introspection Markers (Always Active)
 
@@ -59,7 +60,7 @@ Understand the task and gather context.
 2. Read relevant code files (Grep, Read, Serena symbolic tools)
 3. Check external libraries with Context7 if needed
 4. Identify existing patterns and conventions
-5. **🔶 `think_about_collected_information`** — Is the information sufficient?
+5. **Information sufficiency self-check** — Confirm you understand the task, have seen the relevant code paths, and know project conventions well enough to plan. If not, keep reading or ask the user before Phase 2.
 
 **Tools**: Grep, Read, Glob, `mcp__serena__find_symbol`, `mcp__serena__get_symbols_overview`, `mcp__context7__query-docs`
 
@@ -70,7 +71,7 @@ Break down the task and design the approach.
 1. Create task breakdown with `TodoWrite`
 2. Identify parallelizable steps: `Plan: 1) Parallel [Read A, B] → 2) Edit → 3) Parallel [Test, Lint]`
 3. Save plan to Serena Memory: `mcp__serena__write_memory("plan_<topic>", content)`
-4. **🔶 `think_about_collected_information`** — Any gaps in the plan?
+4. **Plan completeness self-check** — Confirm the plan and todos cover acceptance criteria, edge cases, and how you will verify the change. Revise the plan if anything important is missing.
 
 **Output**: TodoWrite entries with clear acceptance criteria per step.
 
