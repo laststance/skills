@@ -125,13 +125,18 @@ Or resolve manually with the GraphQL mutation for each thread ID.
 
 ## Step 6: Wait for CI and CodeRabbit Re-review
 
-### 6a. Wait for CodeRabbit Review
+### 6a. Wait for CodeRabbit Review (HEAD-gated)
 
 Use the script — it polls internally with bounded iterations:
 
 ```bash
 bash ~/.claude/skills/coderabbit-resolver/scripts/check-ci-status.sh $OWNER $REPO $PR_NUMBER
 ```
+
+Treat this script as a hard merge gate. It must confirm all of the following on `HEAD_SHA`:
+- At least one CodeRabbit check run exists
+- CodeRabbit check run is `completed` with `success`
+- No failing checks remain
 
 **DO NOT** write a top-level `for i in seq ...; do ...; sleep 10; done` polling loop as a Bash command. Claude Code's Bash policy blocks long leading `sleep` and chained sleeps. The script wraps its `sleep` calls so the entire poll runs as a single Bash invocation — that's the only safe form here. If you need to wait without a script, see Step 6d below.
 
@@ -208,11 +213,12 @@ Max CI fix attempts per PR: **3**. If still failing after 3 attempts, report to 
 
 ## Step 7: Loop Check — Are We Done?
 
-Query unresolved threads again (Step 1a). If CodeRabbit posted **new** review comments OR CI is still failing:
+Query unresolved threads again (Step 1a). If CodeRabbit posted **new** review comments OR CI is still failing OR CodeRabbit check is not `completed+success` on HEAD:
 
 - **New comments exist** → Go back to Step 1 (new iteration)
 - **CI still failing** → Go back to Step 6e (CI fix iteration)
-- **No unresolved threads AND all CI green** → Proceed to Step 8
+- **CodeRabbit not completed+success on HEAD** → Go back to Step 6a
+- **No unresolved threads AND all CI green AND CodeRabbit completed+success on HEAD** → Proceed to Step 8
 
 ## Step 8: Final Verification
 
@@ -226,11 +232,14 @@ echo "Unresolved threads: $UNRESOLVED"
 # 2. All CI checks passing
 gh pr checks $PR_NUMBER
 
-# 3. PR is mergeable
+# 3. CodeRabbit completed+success on HEAD (hard gate)
+bash ~/.claude/skills/coderabbit-resolver/scripts/check-ci-status.sh $OWNER $REPO $PR_NUMBER 180
+
+# 4. PR is mergeable
 gh pr view $PR_NUMBER --json mergeable,mergeStateStatus
 ```
 
-**ALL three must be satisfied before merging.**
+**ALL four must be satisfied before merging.**
 
 ## Step 9: Merge
 

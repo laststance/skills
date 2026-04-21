@@ -19,7 +19,7 @@ The workflow runs in a loop:
 1. Extract unresolved CodeRabbit review comments
 2. Fix code issues OR resolve already-fixed threads
 3. Commit → Push → Wait for CI + CodeRabbit re-review
-4. Repeat until: zero unresolved threads AND all CI checks pass
+4. Repeat until: zero unresolved threads AND all CI checks pass AND CodeRabbit check on current HEAD is `completed` + `success`
 
 ### Principle 3: Validation Before Every Push
 
@@ -27,7 +27,7 @@ Run `pnpm validate` (or project-specific validation) before every commit. Never 
 
 ### Principle 4: Safe Merge and Cleanup
 
-Only merge when ALL conditions are met: CI green, no unresolved threads, CodeRabbit check complete. After merge, delete remote branch and prune local.
+Only merge when ALL conditions are met: CI green, no unresolved threads, and CodeRabbit check is `completed` + `success` on the current HEAD commit. After merge, delete remote branch and prune local.
 
 ### Principle 5: Rate Limit Handling
 

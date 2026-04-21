@@ -8,7 +8,12 @@
 # @param repo - GitHub repository name
 # @param pr_number - Pull request number
 # @param max_wait_seconds - Maximum wait time (default: 300 = 5 minutes)
-# @returns Prints CI status summary when all checks complete or timeout
+# @returns Exit 0 only when:
+#          - all checks on HEAD are completed
+#          - no failing checks exist
+#          - at least one CodeRabbit check exists on HEAD and is completed+success
+#          Exit 1 for failed checks (including failed/non-success CodeRabbit)
+#          Exit 2 on timeout
 
 set -euo pipefail
 
@@ -38,8 +43,29 @@ while [ "$ELAPSED" -lt "$MAX_WAIT" ]; do
   # Count completed vs in-progress
   TOTAL=$(echo "$ALL_CHECKS" | wc -l | tr -d ' ')
   COMPLETED=$(echo "$ALL_CHECKS" | grep -c '|completed|' || true)
+  CR_CHECKS=$(echo "$ALL_CHECKS" | grep -i 'coderabbit' || true)
+  CR_TOTAL=$(echo "$CR_CHECKS" | sed '/^$/d' | wc -l | tr -d ' ')
+  CR_SUCCESS=$(echo "$CR_CHECKS" | grep -c '|completed|success$' || true)
+  CR_FAILED=$(echo "$CR_CHECKS" | grep -c '|completed|failure$' || true)
+  CR_NON_SUCCESS_COMPLETED=$(echo "$CR_CHECKS" | grep -c '|completed|' || true)
 
-  echo "  Checks: $COMPLETED/$TOTAL completed (${ELAPSED}s elapsed)"
+  echo "  Checks: $COMPLETED/$TOTAL completed, CodeRabbit: $CR_SUCCESS success / $CR_TOTAL found (${ELAPSED}s elapsed)"
+
+  if [ "$CR_TOTAL" -eq 0 ]; then
+    echo "  CodeRabbit check run not found on HEAD yet. Waiting..."
+    sleep "$INTERVAL"
+    ELAPSED=$((ELAPSED + INTERVAL))
+    continue
+  fi
+
+  if [ "$CR_FAILED" -gt 0 ]; then
+    echo ""
+    echo "CodeRabbit check failed."
+    echo "$CR_CHECKS" | while IFS='|' read -r name status conclusion; do
+      echo "  [FAIL] $name ($status/$conclusion)"
+    done
+    exit 1
+  fi
 
   if [ "$COMPLETED" -eq "$TOTAL" ]; then
     echo ""
@@ -54,11 +80,18 @@ while [ "$ELAPSED" -lt "$MAX_WAIT" ]; do
       echo "  [$icon] $name"
     done
 
-    # Check if CodeRabbit specifically passed
-    CR_STATUS=$(echo "$ALL_CHECKS" | grep -i 'coderabbit' | head -1 || true)
-    if [ -n "$CR_STATUS" ]; then
+    echo ""
+    echo "CodeRabbit checks:"
+    echo "$CR_CHECKS" | while IFS='|' read -r name status conclusion; do
+      echo "  - $name ($status/$conclusion)"
+    done
+
+    # Even with no unresolved threads, we must not merge until CodeRabbit
+    # check-run for current HEAD explicitly completed with success.
+    if [ "$CR_SUCCESS" -lt 1 ] || [ "$CR_NON_SUCCESS_COMPLETED" -gt "$CR_SUCCESS" ]; then
       echo ""
-      echo "CodeRabbit: $(echo "$CR_STATUS" | cut -d'|' -f3)"
+      echo "CodeRabbit review is not in completed+success state yet."
+      exit 1
     fi
 
     # Return success if no failures
