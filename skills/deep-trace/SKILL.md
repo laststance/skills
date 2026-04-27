@@ -163,6 +163,40 @@ After the Summary, generate a **separate copyable table** for the [deep-trace-ex
 - `file` must be the **full relative path** (not just filename). Resolve from project root using Serena if the trace table only has the filename
 - Output inside a fenced code block (` ```markdown ... ``` `) so users can copy the raw Markdown
 
+### Step 6.5: Copy Extension Table to Clipboard (Optional, OS-aware)
+
+Right after printing the fenced extension-table block from Step 6, **also pipe that same block into the bundled helper** so users can paste straight into the [deep-trace-extension](https://github.com/laststance/deep-trace-extension) without manual selection:
+
+```bash
+cat <<'EOF' | bash skills/deep-trace/scripts/copy-to-clipboard.sh
+| file | line | col | reason |
+| --- | --- | --- | --- |
+| src/components/FreewordSearchFilter.tsx | 40 | 1 | useFreewordSearchFormContext — Component render |
+| src/components/FreewordSearchFilter.tsx | 54 | 1 | useWatch target values — Form state change |
+EOF
+```
+
+The helper auto-detects the host clipboard tool:
+
+| OS / environment            | Tool tried                               |
+|-----------------------------|------------------------------------------|
+| macOS                       | `pbcopy`                                 |
+| Linux (Wayland session)     | `wl-copy`                                |
+| Linux (X11 session)         | `xclip -selection clipboard` → `xsel`    |
+| WSL                         | `clip.exe`                               |
+| Cygwin / MinGW / MSYS       | `clip`                                   |
+| No tool / unknown OS        | Skipped with a one-line stderr notice    |
+
+**Behavior contract (do not violate):**
+- The fenced markdown block from Step 6 is **always** printed first — clipboard copy is purely additive, never a replacement.
+- The script **always exits 0**, even when no clipboard tool exists. Skill workflow must not fail because clipboard is unavailable.
+- The script reports the chosen tool (or skip reason) on **stderr**, e.g. `copy-to-clipboard: copied via pbcopy (macOS)`. Surface that line back to the user so they know whether to copy manually.
+
+**When to skip this step entirely:**
+- Headless CI / non-interactive runs (no human to paste)
+- Sandboxed or remote environments where clipboard access is denied or meaningless
+- User explicitly opts out (e.g. security-sensitive context)
+
 ### Step 7: Save to Memory (Optional)
 
 If the user wants to remember this trace:
@@ -221,6 +255,7 @@ Output:
 | Serena `find_referencing_symbols` | Find callers (trace UP) |
 | Serena `get_symbols_overview` | Map file structure |
 | Serena `write_memory` | Save trace for future reference |
+| `scripts/copy-to-clipboard.sh` | OS-aware clipboard copy of the extension table (pbcopy / wl-copy / xclip / xsel / clip.exe / clip; graceful skip otherwise) |
 
 ## Success Criteria
 
@@ -233,3 +268,4 @@ Output:
 - [ ] Extension-compatible table included with `file`, `line`, `col`, `reason` columns
 - [ ] Extension table uses full relative paths (not just filenames)
 - [ ] Extension table wrapped in fenced code block for easy copy
+- [ ] Extension table also piped through `scripts/copy-to-clipboard.sh` (or step explicitly skipped with reason); helper's stderr status surfaced to the user
