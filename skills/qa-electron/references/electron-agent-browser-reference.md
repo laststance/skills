@@ -1,8 +1,17 @@
-# agent-browser + CDP + OS driving cheat sheet
+# playwright-cli + CDP + OS driving cheat sheet
 
 Quick lookup for the operations used during an Electron QA run. Only the
-commands the main SKILL.md flow references are listed. Full agent-browser
-docs: `agent-browser --help`.
+commands the main SKILL.md flow references are listed. Full CLI docs:
+`playwright-cli --help`.
+
+> Historical note: this skill previously used `agent-browser` and then
+> `electron-playwright-cli`. Both were dropped — `agent-browser` was
+> deprecated and `electron-playwright-cli@0.1.3` ships an unresolvable
+> `playwright/lib/mcp/browser/*` `require()`. The current path is
+> `playwright-cli` (Microsoft's standalone CLI) attached to Electron's
+> CDP port. Trade-off: CDP attach reaches the renderer (≈95% of practical
+> QA), but native `BrowserWindow` inventory and main-process introspection
+> are out of reach.
 
 ## App lifecycle
 
@@ -12,6 +21,7 @@ docs: `agent-browser --help`.
 | Launch with CDP (Linux) | `<appname> --remote-debugging-port=9222 &` |
 | Launch with CDP (Windows) | `Start-Process "<path>.exe" -ArgumentList "--remote-debugging-port=9222"` |
 | Launch dev inner binary (macOS) | `./<App>.app/Contents/MacOS/<App> --remote-debugging-port=9222` |
+| Launch project dev server | `pnpm dev` (must pass `--remote-debugging-port=9222` through to Electron) |
 | Check if app is running | `pgrep -f "<AppName>"` |
 | Check port availability | `lsof -i :9222` |
 | Quit gracefully (macOS) | `osascript -e 'quit app "<AppName>"'` |
@@ -19,46 +29,53 @@ docs: `agent-browser --help`.
 **The flag must be set at launch.** If the app was already running, CDP is
 not available — quit and relaunch with `--remote-debugging-port`.
 
-## Connecting with agent-browser
+## Connecting with playwright-cli
 
 | Goal | Command |
 |------|---------|
-| Connect to port | `agent-browser connect 9222` |
-| One-off with port | `agent-browser --cdp 9222 snapshot -i` |
-| Auto-discover running Chromium | `agent-browser --auto-connect snapshot -i` |
-| Disconnect | `agent-browser disconnect` |
-| Named session (for >1 app) | `agent-browser --session slack connect 9222` |
+| Attach to CDP port | `playwright-cli attach --cdp=http://localhost:9222` |
+| Detach (keeps app alive) | `playwright-cli --s=default detach` |
+| List active sessions | `playwright-cli list` |
+| Force-kill all sessions | `playwright-cli kill-all` |
+| Named session (for >1 app) | `playwright-cli attach --cdp=http://localhost:9222 slack` (then `--s=slack` on every command) |
+
+`attach` is one-shot per session; subsequent commands target the session
+via `--s=<name>` (defaults to `default` when no name is given to attach).
 
 ## Inspecting targets (windows + webviews)
 
 | Goal | Command |
 |------|---------|
-| List all targets | `agent-browser tab` |
-| Switch by index | `agent-browser tab 2` |
-| Switch by URL pattern | `agent-browser tab --url "*settings*"` |
+| List all CDP-visible tabs | `playwright-cli --s=default tab-list` |
+| Switch by index | `playwright-cli --s=default tab-select 2` |
 
 An Electron app typically has: 1 main `page` target + N `webview` targets.
 Dev mode may show an extra `devtools` target.
+
+**Limitation:** unattached / hidden `BrowserWindow` instances are NOT
+enumerable via CDP. For those, fall back to `mcp__computer-use__screenshot`
+plus `osascript` (macOS) / PowerShell (Windows).
 
 ## Driving the renderer
 
 | Goal | Command |
 |------|---------|
-| Screenshot current target | `agent-browser screenshot <path>.png` |
-| Full-page screenshot | `agent-browser screenshot --full <path>.png` |
-| Annotated screenshot | `agent-browser screenshot --annotate <path>.png` |
-| Accessibility snapshot | `agent-browser snapshot -i` |
-| JSON snapshot | `agent-browser snapshot --json > snapshot.json` |
-| Click by element ref | `agent-browser click @e5` |
-| Fill input | `agent-browser fill @e3 "text"` |
-| Press key | `agent-browser press Enter` (Tab, Escape, ArrowDown, etc.) |
-| Type at focus | `agent-browser keyboard type "text"` |
-| Bypass key events | `agent-browser keyboard inserttext "text"` |
-| Get text of element | `agent-browser get text @e5` |
-| Wait ms | `agent-browser wait 1000` |
-| Evaluate JS in renderer | `agent-browser evaluate 'document.title'` |
+| Screenshot current target | `playwright-cli --s=default screenshot --filename=<path>.png` |
+| Element-only screenshot | `playwright-cli --s=default screenshot eN --filename=<path>.png` |
+| Accessibility snapshot | `playwright-cli --s=default snapshot` |
+| Snapshot to file | `playwright-cli --s=default snapshot --filename=<path>.yaml` |
+| Click by element ref | `playwright-cli --s=default click eN` |
+| Fill input | `playwright-cli --s=default fill eN "text"` |
+| Press key | `playwright-cli --s=default press Enter` (Tab, Escape, ArrowDown, etc.) |
+| Type at focus | `playwright-cli --s=default type "text"` |
+| Hover | `playwright-cli --s=default hover eN` |
+| Select option | `playwright-cli --s=default select eN <value>` |
+| Evaluate JS in renderer | `playwright-cli --s=default eval 'document.title'` |
+| Resize window | `playwright-cli --s=default resize 1280 800` |
+| Reload page | `playwright-cli --s=default reload` |
+| Navigate | `playwright-cli --s=default goto <url>` |
 
-The `@eN` refs come from the most recent `snapshot -i` — re-snapshot after
+The `eN` refs come from the most recent `snapshot` — re-snapshot after
 any action that changes the DOM.
 
 ## Renderer console + CDP probing
@@ -67,28 +84,31 @@ Used for security spot-checks and runtime-error detection:
 
 ```bash
 # Is nodeIntegration enabled here?
-agent-browser evaluate 'typeof require'
+playwright-cli --s=default eval 'typeof require'
 # "function" → nodeIntegration is ON
 
 # Is contextIsolation enabled?
-agent-browser evaluate 'typeof __electron_preload__'
+playwright-cli --s=default eval 'typeof __electron_preload__'
 # "undefined" in strict-isolated renderers
 
 # CSP meta tag
-agent-browser evaluate 'document.querySelector("meta[http-equiv=Content-Security-Policy]")?.content'
+playwright-cli --s=default eval 'document.querySelector("meta[http-equiv=Content-Security-Policy]")?.content'
 
 # Electron version
-agent-browser evaluate 'process.versions.electron'
+playwright-cli --s=default eval 'process.versions.electron'
 # Only works if nodeIntegration is on — useful diagnostic either way
 
 # Chrome version
-agent-browser evaluate 'navigator.userAgent'
+playwright-cli --s=default eval 'navigator.userAgent'
+
+# Console messages since attach
+playwright-cli --s=default console
 ```
 
 ## Native OS driving (macOS)
 
 `osascript` can drive the menu bar, Dock, and system dialogs when
-`agent-browser` can't.
+`playwright-cli` can't.
 
 | Goal | Command |
 |------|---------|
@@ -109,7 +129,8 @@ grant this.
 Windows has less mature CLI tooling for menu-bar driving. Two approaches:
 
 - **Keyboard shortcut** (preferred): every menu item usually has an Alt+X
-  mnemonic. `agent-browser press Alt+F` (if the app has focus) opens File.
+  mnemonic. `playwright-cli --s=default press Alt+F` (if the app has focus)
+  opens File.
 - **Computer-use MCP**: use `mcp__computer-use__*` to right-click tray icons
   and click native menu items by coordinate.
 
@@ -149,15 +170,15 @@ skill. Quote the metadata (date, executable, reason) only.
 Named sessions let one QA run cover >1 app or >1 instance:
 
 ```bash
-# Instance A
-agent-browser --session a connect 9222
+# Instance A on port 9222
+playwright-cli attach --cdp=http://localhost:9222 a
 
-# Instance B
-agent-browser --session b connect 9223
+# Instance B on port 9223
+playwright-cli attach --cdp=http://localhost:9223 b
 
 # Each command targets its session
-agent-browser --session a snapshot -i
-agent-browser --session b click @e3
+playwright-cli --s=a snapshot
+playwright-cli --s=b click e3
 ```
 
 Useful when testing IPC between apps that expect to find each other (e.g.,
@@ -165,13 +186,20 @@ an Electron editor calling out to another Electron plugin host).
 
 ## Common gotchas
 
-- **Screenshots taken via `agent-browser` only capture the renderer**, not
+- **Screenshots taken via `playwright-cli` only capture the renderer**, not
   the macOS menu bar or native chrome. For menu-bar evidence, use
   `mcp__computer-use__screenshot` (full screen).
-- **`evaluate` runs in the renderer context**. It cannot access Node APIs
+- **`eval` runs in the renderer context**. It cannot access Node APIs
   unless `nodeIntegration: true` (which is itself a finding).
 - **CDP disconnects silently if the app crashes.** If commands start
   returning connection errors, the app may have died — check the log tail
   and `pgrep`.
 - **Multiple Electron apps on the same port will collide.** Pick a unique
   port per app if you're running more than one.
+- **Detach ≠ quit.** `playwright-cli --s=default detach` only ends the CDP
+  session; the Electron app keeps running. To stop the app, quit it via
+  the dev server (`Ctrl-C`), `osascript -e 'quit app "<App>"'`, or `pkill`.
+- **Native BrowserWindow without an attached page is invisible to CDP.**
+  Open the window via the UI / menu so its renderer attaches; for
+  permanently hidden BrowserWindows used as background workers, screenshot
+  via computer-use isn't possible either — read the app's main-process logs.

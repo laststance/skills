@@ -71,7 +71,7 @@ npx skills add laststance/skills --skill ux-gap-detector
 | [product-inspiration](skills/product-inspiration/) | Provides UI/feature implementation inspiration by researching top-tier apps. Implements all proposed patterns in _trials/ folder for hands-on evaluation. | [Tavily MCP](https://github.com/tavily-ai/tavily-mcp-server) (recommended) |
 | [prop-drill](skills/prop-drill/) | Trace React prop-drilling paths from origin definition to leaf consumers. Shows the original prop definition as a clickable code block, the full drilling route as a table, and a Mermaid flowchart. | [Serena MCP](https://github.com/oraios/serena) (recommended), [Context7](https://github.com/upstash/context7) (recommended) |
 | [qa-cli](skills/qa-cli/) | Systematic black-box QA for command-line tools (one-shot commands, flags, subcommands, pipes). Covers `--help` / `--version` sanity, flag parsing, exit codes, stdout vs stderr, error message quality, stdin / file / pipe I/O, env + config precedence, signal handling. Report-only — does not modify the tool. | — |
-| [qa-electron](skills/qa-electron/) | Systematic black-box QA for a running Electron app via `electron-playwright-cli` (config-based auto-launch, no CDP port needed): evidence capture, structured bug reports with severity, accessibility, native OS integration, and security spot-checks. Report-only — does not modify app source. | `electron-playwright-cli` **(required)**; Computer Use MCP (recommended) for native menu/tray checks |
+| [qa-electron](skills/qa-electron/) | Systematic black-box QA for a running Electron app via `playwright-cli` (CDP attach to Electron's `--remote-debugging-port=9222`): evidence capture, structured bug reports with severity, accessibility, native OS integration, and security spot-checks. Report-only — does not modify app source. | `playwright-cli` **(required)**; Computer Use MCP (recommended) for native menu/tray checks |
 | [qa-ios](skills/qa-ios/) | Systematic black-box QA for iOS apps in the iOS Simulator. Severity-graded bug reports with screenshots, AX-tree evidence, and HIG compliance findings. Report-only — does not modify Swift source. | [iOS Simulator MCP](https://github.com/nichochar/ios-simulator-mcp) **(required)** |
 | [qa-react-native](skills/qa-react-native/) | Systematic black-box QA for React Native (bare RN or Expo) on iOS Simulator and Android Emulator. Bug reports with screenshots, AX evidence, redbox / LogBox findings, native log excerpts, and platform-parity observations. | [iOS Simulator MCP](https://github.com/nichochar/ios-simulator-mcp) **(required)**, Android SDK / `adb` |
 | [qa-team](skills/qa-team/) | Launch comprehensive QA Agent Team for post-implementation verification. Tests 5 perspectives in parallel: Visual Integrity, Functional Correctness, Apple HIG, Edge Cases, and UX Sensibility. | [Serena MCP](https://github.com/oraios/serena) (recommended), platform-dependent MCP (see below) |
@@ -87,7 +87,7 @@ npx skills add laststance/skills --skill ux-gap-detector
 | Platform | MCP Server |
 |----------|------------|
 | Web | `playwright-cli` (CLI via Bash) |
-| Electron | `/qa-electron` skill (`electron-playwright-cli` based) |
+| Electron | `/qa-electron` skill (`playwright-cli` CDP-attach based) |
 | iOS / Expo | [iOS Simulator MCP](https://github.com/nichochar/ios-simulator-mcp) |
 | macOS native | [Mac MCP Server](https://github.com/nichochar/mac-mcp-server) |
 | CLI / TUI | [Shellwright MCP](https://github.com/aorwall/shellwright) |
@@ -119,7 +119,7 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /product-inspiration                # Get UI/feature inspiration
 /prop-drill orderData OrderTable    # Trace prop-drilling path
 /qa-cli mytool --version            # QA test a CLI tool (black-box)
-/qa-electron                        # Systematic Electron desktop QA (electron-playwright-cli + report)
+/qa-electron                        # Systematic Electron desktop QA (playwright-cli CDP-attach + report)
 /qa-ios                             # QA test iOS app in Simulator
 /qa-react-native                    # QA test React Native app on iOS + Android
 /qa-team                            # Launch QA verification team
