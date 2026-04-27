@@ -91,7 +91,7 @@ Then spawn 6 teammates using the Task tool with `team_name: "qa-team"`:
 | Platform | Primary MCP |
 |----------|------------|
 | Web | `mcp__claude-in-chrome__*` / `mcp__plugin_playwright_playwright__*` |
-| Electron | `/electron` skill (agent-browser based) |
+| Electron | `/qa-electron` skill (electron-playwright-cli based) |
 | iOS/Expo | `mcp__ios-simulator__*` |
 | macOS | `mcp__mac-mcp-server__*` |
 

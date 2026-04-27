@@ -5,12 +5,12 @@
 | Check | Method | Expected |
 |-------|--------|----------|
 | Electron app running | `pnpm electron:dev` | App window visible |
-| `/electron` skill available | Invoke `/electron` skill | Skill loaded |
+| `/qa-electron` skill available | Invoke `/qa-electron` skill | Skill loaded |
 | claudedocs/qa/ exists | `mkdir -p claudedocs/qa/screenshots` | Directory ready |
 
 ## Verification Tool
 
-Use the `/electron` skill for all Electron UI operations. The skill provides agent-browser based capabilities:
+Use the `/qa-electron` skill for all Electron UI operations. The skill provides electron-playwright-cli based capabilities:
 
 - Screenshot capture
 - UI element interaction
@@ -23,7 +23,7 @@ Use the `/electron` skill for all Electron UI operations. The skill provides age
 
 | Check | How |
 |-------|-----|
-| **Native menus** | Verify menu bar items via `/electron` skill |
+| **Native menus** | Verify menu bar items via `/qa-electron` skill |
 | **IPC communication** | Check renderer ↔ main process messaging |
 | **Window chrome** | Traffic light buttons (close/minimize/maximize) position and function |
 | **Multi-window** | If app supports multiple windows, verify each |
@@ -33,9 +33,9 @@ Use the `/electron` skill for all Electron UI operations. The skill provides age
 
 ### Per-Perspective Workflow
 
-Same as Web workflow but using `/electron` skill:
+Same as Web workflow but using `/qa-electron` skill:
 
-- **Visual**: Screenshot capture and window resize via `/electron` skill
+- **Visual**: Screenshot capture and window resize via `/qa-electron` skill
 - **Functional**: Execute JS commands to trigger user flows
 - **HIG**: Check window controls, keyboard shortcuts, native menu items
 - **Edge Cases**: Test with very large files, concurrent window operations
@@ -43,7 +43,7 @@ Same as Web workflow but using `/electron` skill:
 
 ### Responsive Testing
 
-For Electron, resize the window via `/electron` skill:
+For Electron, resize the window via `/qa-electron` skill:
 ```
 Test at: 320x600, 768x1024, 1440x900
 ```

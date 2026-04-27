@@ -2,11 +2,16 @@
 name: qa-electron
 version: 0.1.0
 description: |
-  Systematically QA test an Electron desktop app by driving it via agent-browser
-  over Chrome DevTools Protocol, then produce a structured bug report with
-  severity-graded issues, screenshots, accessibility evidence, native-OS
-  integration checks, and security spot-checks. Report-only — does NOT modify
-  the app's source code.
+  Systematically QA test an Electron desktop app by driving it via
+  electron-playwright-cli (config-based auto-launch, no CDP port needed),
+  then produce a structured bug report with severity-graded issues, screenshots,
+  accessibility evidence, native-OS integration checks, and security spot-checks.
+  Report-only — does NOT modify the app's source code.
+
+  Primary scope: the developer's own Electron app launched from a project root
+  with `.playwright/cli.config.json`. For arbitrary installed third-party
+  Electron apps (Slack, VS Code, etc.), point `executablePath` in the config
+  at the app's Electron binary.
 
   Proactively suggest when the user mentions:
   - "QA the Electron app", "test the desktop app", "check Slack/VS Code/Discord/Figma/Notion"
@@ -64,10 +69,11 @@ classes of Electron bugs without reading the app's Swift/TypeScript source.
 
 ## Scope and non-goals
 
-**In scope:** Black-box testing of a running Electron app on the current host
-— driving the renderer via CDP (`agent-browser`), driving the native surface
-via `osascript` (macOS) / PowerShell (Windows) / computer-use MCP, reading log
-files, comparing against cross-platform conventions.
+**In scope:** Black-box testing of an Electron app on the current host —
+driving the renderer via `electron-playwright-cli` (auto-launches Electron via
+`.playwright/cli.config.json`), driving the native surface via `osascript`
+(macOS) / PowerShell (Windows) / computer-use MCP, reading log files, comparing
+against cross-platform conventions.
 
 **Out of scope:**
 - Source-code reading or editing (delegate fixes elsewhere)
@@ -83,11 +89,15 @@ files, comparing against cross-platform conventions.
 
 If any of these are unknown, use `AskUserQuestion` to collect them:
 
-1. **App name & launch method** — e.g. "Slack" launched via `open -a`, or a
-   dev build at `./dist/mac-arm64/MyApp.app/Contents/MacOS/MyApp`. The skill
-   needs the exact command.
-2. **CDP port** — pick one not already in use (default 9222). `lsof -i :9222`
-   to check.
+1. **Project root & launch config** — the directory containing
+   `.playwright/cli.config.json`, with `browser.launchOptions.args` pointing at
+   the app's main process entry (e.g. `["./out/main/index.js"]` or
+   `["./dist/main.js"]`). For installed third-party apps, set
+   `executablePath` to the app's Electron binary instead.
+2. **`readyCondition`** — for React/Vue apps, set
+   `browser.readyCondition.waitForSelector` to a stable post-mount selector
+   (e.g. `"[data-testid='app-ready']"`). Without it, commands may race the
+   first paint.
 3. **Scope** — "the whole app" vs "only the onboarding flow" vs "only the
    settings window". A scoped run is cheaper and usually more useful.
 4. **Host OS** — the skill adapts its checks to macOS / Windows / Linux. If
@@ -103,45 +113,46 @@ miss real issues.
 
 ---
 
-## Phase 0: Launch with CDP and baseline
+## Phase 0: Launch and baseline
 
-Goal: clean start, CDP attached, baseline screenshot + DOM snapshot recorded,
-log tail running.
+Goal: clean start, app auto-launched via electron-playwright-cli config,
+baseline screenshot + DOM snapshot recorded, log tail running.
 
-1. Verify the app isn't already running (without the debug flag, CDP won't
-   attach):
+1. Verify the config file exists at the project root:
    ```bash
-   pgrep -f "<AppName>" && echo "Quit the app first, then relaunch with --remote-debugging-port"
+   cat .playwright/cli.config.json
    ```
-   If it is, ask the user to quit it (or `osascript -e 'quit app "<AppName>"'`
-   on macOS). Do not force-kill without asking — unsaved work could be lost.
+   Expected shape:
+   ```json
+   {
+     "browser": {
+       "launchOptions": {
+         "args": ["./out/main/index.js"]
+       },
+       "readyCondition": {
+         "waitForSelector": "[data-testid='app-ready']",
+         "timeout": 10000
+       }
+     }
+   }
+   ```
+   If missing or `args` points at a stale path, ask the user before editing it.
 
-2. Launch with remote debugging enabled:
-
-   **macOS:**
+2. Verify the app isn't already running under another daemon (sessions own the
+   Electron instance):
    ```bash
-   open -a "<AppName>" --args --remote-debugging-port=9222
+   electron-playwright-cli list
    ```
-
-   **Linux:**
+   If a previous session is still alive (`default` or named), close it first:
    ```bash
-   <appname> --remote-debugging-port=9222 &
+   electron-playwright-cli close-all
    ```
-
-   **Windows (PowerShell):**
-   ```powershell
-   Start-Process "C:\...\<AppName>.exe" -ArgumentList "--remote-debugging-port=9222"
-   ```
-
-   Wait 3 seconds for the app to initialize: `sleep 3`.
-
-3. Connect `agent-browser`:
+   Or for a stuck daemon:
    ```bash
-   agent-browser connect 9222
+   electron-playwright-cli kill-all
    ```
-   From here, all `agent-browser` commands target this app — no `--cdp` needed.
 
-4. Start a log tail **in the background**:
+3. Start a log tail **in the background**:
    ```bash
    mkdir -p /tmp/qa-electron-session
    tail -F "<log-path>" > /tmp/qa-electron-session/app.log 2>&1 &
@@ -151,26 +162,32 @@ log tail running.
    macOS, `log stream --process "<AppName>"` is an alternative that also
    catches stderr (requires `sudo` on some versions — skip if it prompts).
 
-5. List every open window/webview target:
+4. Trigger first command — the daemon launches Electron via the config file
+   automatically and waits for `readyCondition` before responding:
    ```bash
-   agent-browser tab
+   electron-playwright-cli snapshot --filename=/tmp/qa-electron-session/00-snapshot.yaml
+   ```
+   If the daemon refuses to start, STOP and report. Common causes: bad
+   `args` path in config (Electron exits immediately), `readyCondition`
+   selector never matches (renderer never reaches that state — increase
+   timeout or pick a different selector), missing `playwright` peer
+   dependency in the project (`pnpm add -D playwright @playwright/test`).
+
+5. List every native Electron window and every webview/tab target:
+   ```bash
+   electron-playwright-cli electron_windows   # native BrowserWindow inventory
+   electron-playwright-cli tab-list           # webview/tab inventory inside the focused window
    ```
    Record the output — this is the target inventory for Phase 2 (matrix
    generation) and Phase 4 (multi-window coverage). Typical Electron app:
-   1 main window + 0–N webviews. If you see >5, confirm with the user
-   that's expected.
+   1 main BrowserWindow + 0–N webviews. If you see >5, confirm with the
+   user that's expected.
 
 6. Baseline — main window only for now:
    ```bash
-   agent-browser tab 0
-   agent-browser screenshot /tmp/qa-electron-session/00-baseline.png
-   agent-browser snapshot -i > /tmp/qa-electron-session/00-snapshot.txt
+   electron-playwright-cli tab-select 0
+   electron-playwright-cli screenshot --filename=/tmp/qa-electron-session/00-baseline.png
    ```
-
-If CDP connection fails, STOP and report. Common causes: app already running
-without the flag (most common — quit and relaunch), port in use
-(`lsof -i :9222` → another process owns it), app not Electron-based (Safari,
-native macOS apps don't expose CDP).
 
 ## Phase 1: Surface mapping
 
@@ -189,8 +206,8 @@ An Electron app's surfaces:
 
 Walk them breadth-first:
 
-1. **Main window routes** — use `agent-browser snapshot -i` to see what's
-   interactive, click through top-level nav, screenshot each route.
+1. **Main window routes** — use `electron-playwright-cli snapshot` to see
+   what's interactive, click through top-level nav, screenshot each route.
 2. **Every menu bar top-level item** (macOS):
    ```bash
    osascript -e 'tell application "System Events" to tell process "<AppName>" to get title of every menu of menu bar 1'
@@ -203,8 +220,9 @@ Walk them breadth-first:
    integration).
 3. **Secondary windows** — open each via the main window's UI (Preferences,
    About, etc.) or via the menu (`Cmd+,` for preferences is a macOS
-   convention). After each open: `agent-browser tab` → note new target →
-   screenshot + snapshot.
+   convention). After each open: `electron-playwright-cli electron_windows`
+   (native BrowserWindow inventory) plus `electron-playwright-cli tab-list`
+   (webview/tab targets) → note new target → screenshot + snapshot.
 4. **Tray icon** — if the app has one, right-click it (use computer-use MCP
    `right_click` on the tray icon's screen coordinates) and screenshot the
    menu. Record the items.
@@ -260,8 +278,8 @@ tells you **what** to run; the subsections below are the **how** per-row
    candidate issue for Phase 10 (Triage). On `PASS`: move on — don't
    gold-plate a passing case.
 
-Re-snapshot (`agent-browser snapshot -i`) after any action that mutates the
-DOM — `@eN` refs are valid only for the most recent snapshot.
+Re-snapshot (`electron-playwright-cli snapshot`) after any action that mutates the
+DOM — `eN` refs are valid only for the most recent snapshot.
 
 Most bugs fall out of a matrix run plus the lenses below — the point is
 to be **systematic**, not clever.
@@ -270,7 +288,7 @@ to be **systematic**, not clever.
 
 - Screenshot → eyeball for overlaps, truncation, missing assets, broken
   layout
-- `agent-browser snapshot` → look for elements with empty `name` (probably
+- `electron-playwright-cli snapshot` → look for elements with empty `name` (probably
   unlabeled buttons), elements with role `button` but no keyboard focus
   marker, obvious placeholder text ("Lorem ipsum", "TODO", "Untitled")
 - Compare against `references/cross-platform-conventions.md` — window
@@ -280,7 +298,7 @@ to be **systematic**, not clever.
 
 Enumerate every interactive element from the snapshot. For each:
 
-- `agent-browser click @eN` → screenshot → check: expected action, no unhandled
+- `electron-playwright-cli click eN` → screenshot → check: expected action, no unhandled
   exception in the log tail, no new window opened unexpectedly
 - If the click opens a modal: can it be dismissed? Esc, click outside, an
   explicit Close/Cancel button — at least one of these should work. If none
@@ -293,7 +311,7 @@ Enumerate every interactive element from the snapshot. For each:
 
 - Every input field: empty submit, valid input, invalid input, overflow input
   (2000+ chars), paste-heavy input. Use
-  `agent-browser fill @eN "..."` and `agent-browser press Enter` (or Tab).
+  `electron-playwright-cli fill eN "..."` and `electron-playwright-cli press Enter` (or Tab).
 - **Shortcut coverage** — standard shortcuts MUST work:
   - `Cmd/Ctrl+C/V/X/A/Z` in any text field
   - `Cmd/Ctrl+W` closes the focused window (or tab, depending on app)
@@ -322,16 +340,18 @@ webviews that share surface. Common bugs:
 
 Tool loop:
 ```bash
-agent-browser tab                    # list targets
-agent-browser tab 2                  # switch to webview
-agent-browser snapshot -i            # new context
-agent-browser click @e3
+electron-playwright-cli tab-list               # list webview/tab targets
+electron-playwright-cli electron_windows       # list native BrowserWindow targets
+electron-playwright-cli tab-select 2           # switch to webview/tab index 2
+electron-playwright-cli snapshot               # new context
+electron-playwright-cli click e3
 # ...
-agent-browser tab 0                  # back to main
+electron-playwright-cli tab-select 0           # back to main
 ```
 
 If the app spawns a new window during a flow (OAuth popup, file picker
-preview, deep link), `agent-browser tab` will show it on the next call.
+preview, deep link), `electron-playwright-cli electron_windows` will show it
+on the next call.
 
 ## Phase 5: Native OS integration
 
@@ -394,7 +414,7 @@ three catch the most state bugs for desktop apps.
 ## Phase 7: Accessibility
 
 - Every interactive element has a non-empty accessible name. Use
-  `agent-browser snapshot -i` — empty-name buttons / inputs are flagged.
+  `electron-playwright-cli snapshot` — empty-name buttons / inputs are flagged.
 - **Keyboard-only navigation** — starting from the app's first focusable
   element, Tab through the entire primary flow. Every action the user might
   take with the mouse must be reachable via keyboard.
@@ -423,15 +443,15 @@ Electron has no gatekeeper — the app's author decides what's safe. Spot-check:
   indicate `nodeIntegration` exposure)?
 - **nodeIntegration smoke test** — in a renderer console (via CDP):
   ```bash
-  agent-browser evaluate 'typeof require'
+  electron-playwright-cli eval 'typeof require'
   ```
   If the result is `"function"`, `nodeIntegration` is enabled on this
   renderer. This is a **critical security finding** unless the app author
   has a deliberate reason (and for the main window, there's almost never a
   good reason — it should be `false` with `contextIsolation: true`).
-- **CSP presence** — `agent-browser evaluate 'document.querySelector("meta[http-equiv=Content-Security-Policy]")?.content'`
+- **CSP presence** — `electron-playwright-cli eval 'document.querySelector("meta[http-equiv=Content-Security-Policy]")?.content'`
   on the main window. No CSP is not automatically critical, but note it.
-- **Renderer console** — `agent-browser evaluate "console.error('qa probe')"`
+- **Renderer console** — `electron-playwright-cli eval "console.error('qa probe')"`
   plus check the app log for security warnings Electron itself logs
   (`Electron Security Warning` messages in the devtools console when running
   in development). These tell the user their own app is warning them.
@@ -529,7 +549,7 @@ affected screens — not six.
 Use `templates/qa-report-template-electron.md` as the skeleton. Fill in:
 
 - App metadata (name, version, Electron version if determinable from
-  `agent-browser evaluate 'process.versions.electron'`, host OS)
+  `electron-playwright-cli eval 'process.versions.electron'`, host OS)
 - Health score per category (see the template)
 - Top 3 things to fix, with issue IDs linking below
 - Full issue list, severity-grouped
@@ -550,13 +570,18 @@ Always, even if the report isn't finished:
 # Kill the log tail
 [ -f /tmp/qa-electron-session/log.pid ] && kill "$(cat /tmp/qa-electron-session/log.pid)" 2>/dev/null
 
-# Disconnect agent-browser (doesn't quit the app, just ends the CDP session)
-agent-browser disconnect 2>/dev/null || true
+# Close the electron-playwright-cli session — this also exits the launched
+# Electron app, since the daemon owns the process.
+electron-playwright-cli close 2>/dev/null || true
+
+# If a daemon is wedged:
+# electron-playwright-cli kill-all
 ```
 
-Do **not** force-quit the app — the user may have state in it. If the app
-was launched specifically for this QA run and is empty, ask the user before
-quitting.
+Note: unlike the old CDP-attach model, `electron-playwright-cli` *owns* the
+Electron process via the daemon — there is no "disconnect without quitting".
+If the user wants to keep the app running after QA, instruct them to relaunch
+manually after the report is delivered.
 
 Restore any OS-level toggles you changed (Dark Mode, Network Link
 Conditioner, Reduce Motion). Leaving them flipped creates confusing
@@ -586,7 +611,7 @@ Before telling the user "done":
 ## Reference files
 
 - `references/issue-taxonomy-electron.md` — severity + category definitions
-- `references/electron-agent-browser-reference.md` — agent-browser + CDP
+- `references/electron-electron-playwright-cli-reference.md` — electron-playwright-cli + CDP
   commands used by this skill
 - `references/cross-platform-conventions.md` — macOS / Windows / Linux
   expectations the skill checks against
@@ -607,22 +632,26 @@ needs them.
 
 ## Escape hatches
 
-- **CDP port busy / connect refused:** `lsof -i :9222` → identify owner. If
-  it's a stale agent-browser session, `agent-browser disconnect`. If it's
-  another app, pick a different port.
-- **App launches but no windows open:** some apps have a splash/background
-  mode. Wait another 3–5 seconds, then `agent-browser tab` again. If still
-  empty, the app may have crashed silently — check the log tail.
-- **`agent-browser snapshot` returns nothing useful:** the renderer might be
+- **Daemon stuck / commands hang:** `electron-playwright-cli list` to see
+  active sessions. `electron-playwright-cli close-all` for graceful, or
+  `electron-playwright-cli kill-all` to force-terminate every daemon.
+- **App launches but no windows open:** the daemon's `readyCondition` may have
+  matched a hidden splash screen. Increase `timeout` in
+  `.playwright/cli.config.json` or pick a more specific selector. Then re-run
+  `electron-playwright-cli electron_windows` — if still empty, the app may
+  have crashed silently — check the log tail.
+- **`electron-playwright-cli snapshot` returns nothing useful:** the renderer might be
   rendering with Canvas or WebGL with no accessible DOM. Fall back to
-  visual-only (`agent-browser screenshot`) and note AX coverage is limited.
+  visual-only (`electron-playwright-cli screenshot`) and note AX coverage is limited.
 - **Menu-bar `osascript` returns "not authorized":** macOS System Settings
   → Privacy & Security → Accessibility → add Terminal (or the relevant
   agent host). Do not work around this — it's the user's consent boundary.
 - **Crash on launch, no obvious cause:** check the app log, then macOS
   Crashlytics-style dumps at `~/Library/Logs/DiagnosticReports/<AppName>*`.
   Quote the first 20 lines + crashed thread into the report.
-- **App uses its own auto-launcher (e.g. Figma's helper):** launching the
-  `.app` bundle with `--args` may not propagate flags through the wrapper.
-  Work around by launching the inner binary directly:
-  `./Contents/MacOS/<AppName> --remote-debugging-port=9222`.
+- **Third-party installed app (Slack, VS Code, etc.):** point
+  `browser.launchOptions.executablePath` in the config at the app's Electron
+  binary (e.g. `/Applications/Slack.app/Contents/MacOS/Slack`) and leave
+  `args` empty — Electron uses the app's own bundled main. Some helper-style
+  apps (Figma) wrap the binary; point at the inner `Contents/MacOS/<Helper>`
+  if the wrapper swallows flags.
