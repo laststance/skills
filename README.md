@@ -24,6 +24,8 @@ npx skills add laststance/skills --skill english-conversation
 npx skills add laststance/skills --skill explain
 npx skills add laststance/skills --skill gif-analyzer
 npx skills add laststance/skills --skill git
+npx skills add laststance/skills --skill issue
+npx skills add laststance/skills --skill laststance-publish-skill
 npx skills add laststance/skills --skill load
 npx skills add laststance/skills --skill lunch
 npx skills add laststance/skills --skill mentor
@@ -51,6 +53,8 @@ npx skills add laststance/skills --skill troubleshoot
 | [explain](skills/explain/) | Deep, systematic explanation of code, concepts, and system behavior. Always operates at advanced level with introspection markers and validation. | [Serena MCP](https://github.com/oraios/serena) (recommended), [Context7](https://github.com/upstash/context7) (recommended) |
 | [gif-analyzer](skills/gif-analyzer/) | Analyze animated GIF files by extracting and viewing frames as sequential video. | — |
 | [git](skills/git/) | Git operations with intelligent commit messages and workflow optimization. Analyzes changes to generate Conventional Commit messages automatically. | — |
+| [issue](skills/issue/) | Creates issues on the project's tracker (GitHub Issues or Linear) and lists open issues. Auto-detects which tracker the project uses; feature requests follow a strict non-engineer-voice template. | — |
+| [laststance-publish-skill](skills/laststance-publish-skill/) | Publishes a stable skill to the laststance/skills GitHub registry for distribution via `npx skills add`. Updates README install commands, skills table, and usage examples in alphabetical order. | — |
 | [load](skills/load/) | Load project context from Serena MCP memory for session initialization. Discovers memories, reads project overview, and validates context sufficiency. | [Serena MCP](https://github.com/oraios/serena) **(required)** |
 | [lunch](skills/lunch/) | Relaxed mealtime conversation companion. Claude declares a food choice with trivia, then chats about any topic in a casual tone. | — |
 | [mentor](skills/mentor/) | Interactive code mentoring with pseudo-Plan mode. AI analyzes, designs, and presents a visual blueprint — human approves then writes code with AI guidance. | — |
@@ -89,6 +93,8 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /explain src/auth/middleware.ts      # Deep code explanation
 /gif-analyzer ./demo.gif            # Analyze a GIF animation
 /git commit                         # Smart git commit with Conventional Commits
+/issue <description>                # Create issue on GitHub or Linear (auto-detects)
+/laststance-publish-skill           # Publish a stable skill to laststance/skills
 /load                               # Load session context from Serena MCP
 /lunch                              # Casual mealtime chat companion
 /mentor                             # Interactive code mentoring
