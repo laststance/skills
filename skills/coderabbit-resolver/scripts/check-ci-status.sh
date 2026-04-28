@@ -29,9 +29,26 @@ INTERVAL=10
 ELAPSED=0
 
 while [ "$ELAPSED" -lt "$MAX_WAIT" ]; do
-  # Check all check runs
-  ALL_CHECKS=$(gh api "repos/$OWNER/$REPO/commits/$HEAD_SHA/check-runs" \
+  # Query BOTH the Checks API and the legacy Statuses API because GitHub
+  # bots split between them. CodeRabbit (and many CI services) publish via
+  # commit statuses, not check_runs — querying check-runs alone returns 0
+  # CodeRabbit results and the script would otherwise wait forever.
+  # `gh pr checks` aggregates both, but `repos/.../check-runs` does not.
+  #
+  # Statuses API state mapping (state → status|conclusion):
+  #   pending          → in_progress|pending
+  #   success          → completed|success
+  #   failure | error  → completed|failure
+  # Mirroring the check_runs shape lets the rest of the loop stay unchanged.
+  CHECK_RUNS=$(gh api "repos/$OWNER/$REPO/commits/$HEAD_SHA/check-runs" \
     --jq '.check_runs[] | "\(.name)|\(.status)|\(.conclusion // "pending")"' 2>/dev/null || true)
+  COMMIT_STATUSES=$(gh api "repos/$OWNER/$REPO/commits/$HEAD_SHA/status" \
+    --jq '.statuses[] |
+      if .state == "pending" then "\(.context)|in_progress|pending"
+      elif .state == "success" then "\(.context)|completed|success"
+      elif .state == "failure" or .state == "error" then "\(.context)|completed|failure"
+      else "\(.context)|completed|\(.state)" end' 2>/dev/null || true)
+  ALL_CHECKS=$(printf '%s\n%s\n' "$CHECK_RUNS" "$COMMIT_STATUSES" | sed '/^$/d')
 
   if [ -z "$ALL_CHECKS" ]; then
     echo "  No checks found yet... (${ELAPSED}s elapsed)"
@@ -52,7 +69,7 @@ while [ "$ELAPSED" -lt "$MAX_WAIT" ]; do
   echo "  Checks: $COMPLETED/$TOTAL completed, CodeRabbit: $CR_SUCCESS success / $CR_TOTAL found (${ELAPSED}s elapsed)"
 
   if [ "$CR_TOTAL" -eq 0 ]; then
-    echo "  CodeRabbit check run not found on HEAD yet. Waiting..."
+    echo "  CodeRabbit not found on HEAD yet (queried both check-runs and commit-status APIs). Waiting..."
     sleep "$INTERVAL"
     ELAPSED=$((ELAPSED + INTERVAL))
     continue
@@ -86,8 +103,8 @@ while [ "$ELAPSED" -lt "$MAX_WAIT" ]; do
       echo "  - $name ($status/$conclusion)"
     done
 
-    # Even with no unresolved threads, we must not merge until CodeRabbit
-    # check-run for current HEAD explicitly completed with success.
+    # Even with no unresolved threads, we must not merge until the CodeRabbit
+    # signal for current HEAD (check_run OR commit_status) is completed+success.
     if [ "$CR_SUCCESS" -lt 1 ] || [ "$CR_NON_SUCCESS_COMPLETED" -gt "$CR_SUCCESS" ]; then
       echo ""
       echo "CodeRabbit review is not in completed+success state yet."
