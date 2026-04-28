@@ -21,17 +21,23 @@ BUFFER_SECONDS=30
 
 echo "Checking for CodeRabbit rate limit on PR #$PR_NUMBER..."
 
-# Fetch the 10 most recent issue comments from coderabbitai (newest first)
-COMMENTS=$(gh api "repos/$OWNER/$REPO/issues/$PR_NUMBER/comments?per_page=10&sort=created&direction=desc" \
-  --jq '.[] | select(.user.login == "coderabbitai") | .body' 2>/dev/null || true)
+# Fetch the most recent CodeRabbit comment body.
+#
+# Two bug-fixes vs prior versions:
+# 1. REST returns `coderabbitai[bot]` for App-installed bots; older accounts
+#    and some GraphQL endpoints return the bare `coderabbitai`. Match both.
+# 2. CodeRabbit comment bodies are multi-line (starting with HTML auto-gen
+#    markers, then markdown). The previous `head -1` of the joined-bodies
+#    string took the *first line of the first body* — which is just the HTML
+#    summary marker, never the rate-limit warning that lives further down.
+#    Reduce to a single body inside jq so the entire body lands in the var.
+LATEST_COMMENT=$(gh api "repos/$OWNER/$REPO/issues/$PR_NUMBER/comments?per_page=10&sort=created&direction=desc" \
+  --jq '[.[] | select(.user.login == "coderabbitai" or .user.login == "coderabbitai[bot]") | .body] | .[0] // empty' 2>/dev/null || true)
 
-if [ -z "$COMMENTS" ]; then
+if [ -z "$LATEST_COMMENT" ]; then
   echo "  No CodeRabbit comments found."
   exit 1
 fi
-
-# Check only the most recent CodeRabbit comment for rate limit patterns
-LATEST_COMMENT=$(echo "$COMMENTS" | head -1)
 
 # Match rate limit patterns (case-insensitive)
 # Common CodeRabbit rate limit messages:

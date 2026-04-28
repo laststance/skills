@@ -42,7 +42,7 @@ query($owner: String!, $repo: String!, $pr: Int!) {
 THREAD_IDS=$(echo "$THREAD_DATA" | jq -r '
   .data.repository.pullRequest.reviewThreads.nodes
   | map(select(.isResolved == false))
-  | map(select(.comments.nodes[0].author.login == "coderabbitai"))
+  | map(select(.comments.nodes[0].author.login == "coderabbitai" or .comments.nodes[0].author.login == "coderabbitai[bot]"))
   | .[].id
 ')
 
