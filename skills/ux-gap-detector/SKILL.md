@@ -1,23 +1,6 @@
 ---
 name: ux-gap-detector
-description: |
-  Detects UI/UX quality gaps in authenticated SaaS web applications by
-  using the user's logged-in browser session via playwright-cli. The user logs
-  in manually, then this skill takes over to crawl the app interior,
-  capture screenshots at every interaction step, score across 4 dimensions
-  (Typography & Spacing, Interactive States, Content Hierarchy, Loading & Error UX),
-  and generate an actionable Markdown gap report with screenshots.
-  Optionally creates GitHub Issues for each detected gap.
-
-  Use when:
-  - User wants to audit their SaaS web app's UX quality after login
-  - UI/UX feels rough, unpolished, or amateur compared to industry leaders
-  - User needs specific, actionable design improvement recommendations
-  - Post-implementation design quality audit of app interior screens
-  - User says "check my app's UX", "design quality audit", "compare our dashboard to Linear"
-
-  Keywords: ux gap, design audit, ui quality, polish, saas app, dashboard,
-  authenticated, logged-in, app interior, design quality, web app comparison
+description: SaaS UX audit
 argument-hint: "[--category dashboard|data-management|form-workflow|navigation-shell|settings-profile] [target-url]"
 allowed-tools: "Bash,Read,Write,Edit,Glob,Grep,AskUserQuestion,mcp__sequential-thinking__*,mcp__serena__*"
 ---

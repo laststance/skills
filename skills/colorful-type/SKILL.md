@@ -1,7 +1,6 @@
 ---
 name: colorful-type
-description: Use when TypeScript codebase has primitive types (string, number, boolean) representing domain concepts. Symptoms - function params typed as plain string/number with no domain meaning, ReturnType/Parameters utility types instead of named types, ID fields as raw string, boolean flags with no context. Triggers - "make types descriptive", "replace primitives", "domain types", "型に色をつけて", type quality audit, code review reveals types don't communicate intent.
----
+description: Brand TS types---
 
 # Colorful Type
 

@@ -1,7 +1,6 @@
 ---
 name: exhaustive-real-world-scenario-qa
-description: "Exhaustive Real World Scenario QA testing via playwright-cli (headed mode default). Analyzes source code + spec using Serena/sequential-thinking/Context7 to generate test cases with 99.9% happy path coverage + TC3-style exhaustive edge cases. Three execution modes: Main Claude (default), Fresh Agent (--fresh-agent) for bias-free testing, Team (--team) for 3-agent coordinated testing with Design Checker + Bug Hunter. Loops 3x to catch state-dependent bugs. Use PROACTIVELY when: '/exhaustive-qa', 'real world scenario test', 'exhaustive QA', 'browser QA', 'team QA', after feature implementation, or when thorough browser-based verification is needed."
----
+description: Scenario QA---
 
 # Exhaustive Real World Scenario QA
 

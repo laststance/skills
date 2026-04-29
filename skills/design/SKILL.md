@@ -1,12 +1,6 @@
 ---
 name: design
-description: |
-  Architect comprehensive implementation plans through exhaustive codebase analysis,
-  web research, and multi-agent review loops. Creates Plan files detailed enough for
-  any LLM to execute without failure.
-  Use when: designing new features, planning system architecture, preparing complex
-  refactors, or creating implementation specs before coding. Keywords: plan, design,
-  architect, blueprint, spec, implementation plan, system design, RFC.
+description: Plan architect
 argument-hint: "<target feature or system to design>"
 ---
 

@@ -1,11 +1,6 @@
 ---
 name: load
-description: |
-  Load project context from Serena MCP memory for session initialization.
-  Portable across all Serena-enabled agents (Claude Code, Cursor, Windsurf, etc.).
-
-  Use when: starting a session, resuming work, or needing project context.
-  Keywords: session, load, initialize, context, memory, restore, resume
+description: Load session
 argument-hint: "[project]"
 ---
 

@@ -1,20 +1,6 @@
 ---
 name: qa-team
-description: |
-  Launch comprehensive QA Agent Team for post-implementation verification.
-  Tests 5 perspectives in parallel using AGENT_TEAMS: Visual Integrity,
-  Functional Correctness (with Impact Propagation), Apple HIG Compliance,
-  Edge Cases, and UX Sensibility. Falls back to Task tool if AGENT_TEAMS unavailable.
-
-  Use when:
-  - Implementation is complete and needs QA verification
-  - User requests "run QA", "test everything", "quality check"
-  - After /workflow completion for end-to-end validation
-  - User says "check if the app works", "verify the UI"
-
-  Keywords: "QA team", "quality assurance", "test everything", "visual check",
-  "functional test", "edge cases", "UX review", "HIG compliance", "qa-team",
-  "run QA", "verify app", "quality gate"
+description: QA team runner
 argument-hint: "[--platform web|electron|ios|macos|auto] [--skip visual|functional|hig|edge|ux] [--quick]"
 allowed-tools: "Bash,Read,Write,Edit,Glob,Grep,Task,TaskCreate,TaskUpdate,TaskList,TaskGet,TeamCreate,TeamDelete,SendMessage,AskUserQuestion,Skill,mcp__claude-in-chrome__*,mcp__plugin_playwright_playwright__*,mcp__ios-simulator__*,mcp__mac-mcp-server__*,mcp__serena__*"
 ---

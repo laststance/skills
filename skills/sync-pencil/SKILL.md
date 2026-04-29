@@ -1,12 +1,6 @@
 ---
 name: sync-pencil
-description: |
-  Bidirectional sync between .pen design files and implementation code.
-  Supports Electron, Web (Chrome), and iOS Simulator platforms.
-
-  Use when: updating designs from code, generating code from designs,
-  or resolving drift between design and implementation.
----
+description: .pen<->code sync---
 
 # Sync Pencil
 

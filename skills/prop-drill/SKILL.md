@@ -1,19 +1,6 @@
 ---
 name: prop-drill
-description: |
-  Trace React prop-drilling paths from origin definition to leaf consumers.
-  Shows the original prop definition as a clickable code block, then the full drilling route
-  as a table and Mermaid flowchart.
-
-  Use when:
-  - User wants to find where a prop is originally defined
-  - User asks "where does this prop come from?"
-  - User wants to see the prop-drilling chain for a specific prop
-  - User mentions "prop-drill", "prop drilling", "props trace", "prop origin"
-  - User points at a prop in a component and asks about its source
-
-  Keywords: prop-drill, prop drilling, props, trace, origin, where defined,
-  pass through, prop chain, drilling path, component tree
+description: Prop drill map
 argument-hint: "[prop-name] [component-or-file-path?]"
 ---
 

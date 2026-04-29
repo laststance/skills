@@ -1,28 +1,7 @@
 ---
 name: qa-electron
 version: 0.2.0
-description: |
-  Systematically QA test an Electron desktop app by driving it via
-  `playwright-cli` (CDP attach to the app's `--remote-debugging-port`),
-  then produce a structured bug report with severity-graded issues, screenshots,
-  accessibility evidence, native-OS integration checks, and security spot-checks.
-  Report-only — does NOT modify the app's source code.
-
-  Primary scope: the developer's own Electron app launched from a project root,
-  with the app exposing CDP on `:9222` (e.g. via `pnpm dev` configured to pass
-  `--remote-debugging-port=9222` to Electron). For arbitrary installed
-  third-party Electron apps (Slack, VS Code, etc.), launch the app's binary
-  with `--remote-debugging-port=9222` and attach the same way.
-
-  Proactively suggest when the user mentions:
-  - "QA the Electron app", "test the desktop app", "check Slack/VS Code/Discord/Figma/Notion"
-  - "Does this Electron app work?", "find bugs in the desktop build"
-  - Pre-release QA on an Electron app (auto-updater, code signing, notarization)
-  - Accessibility audit on a desktop app (VoiceOver / Narrator, keyboard nav)
-  - Security spot-check (context isolation, nodeIntegration, external links)
-  - Cross-platform parity (macOS vs Windows vs Linux behavior)
-
-  Voice triggers: "qa this electron app", "run electron qa", "test the desktop"
+description: Electron QA
 allowed-tools:
   - Bash
   - Read

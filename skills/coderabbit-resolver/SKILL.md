@@ -1,6 +1,6 @@
 ---
 name: coderabbit-resolver
-description: Automates the full CodeRabbit PR review cycle — extracts review comments, fixes code, commits, pushes, monitors CI, resolves threads, and repeats until all checks pass and threads are resolved, then merges and cleans up branches. Supports --bulk to process all open PRs sequentially. Use when asked to fix CodeRabbit reviews, resolve PR comments, or handle the complete review-fix-merge workflow.
+description: CodeRabbit loop
 argument-hint: "[pr-number|--bulk]"
 ---
 

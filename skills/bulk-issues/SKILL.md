@@ -1,18 +1,6 @@
 ---
 name: bulk-issues
-description: |
-  Resolves all open GitHub Issues in bulk on a single feature branch, then creates a PR
-  and runs a CodeRabbit review loop until merged. Each issue follows the full task skill
-  5-phase cycle (Investigate, Plan, Implement, Verify, Complete) with mandatory frontend
-  verification, E2E tests, and unit tests. Determines optimal issue processing order based
-  on dependencies and complexity.
-
-  Use when:
-  - User wants to resolve all open GitHub issues at once
-  - User says "handle all issues", "bulk fix", "resolve all issues", "close all issues"
-  - Multiple issues need to be addressed in a single feature branch and PR
-
-  Keywords: bulk, issues, all issues, batch, resolve all, close all
+description: Bulk issue fix
 argument-hint: "[--repo owner/repo]"
 ---
 

@@ -1,22 +1,7 @@
 ---
 name: qa-react-native
 version: 0.1.0
-description: |
-  Systematically QA test a React Native app (bare RN or Expo) on the iOS
-  Simulator AND/OR the Android Emulator, then produce a structured bug report
-  with severity-graded issues, screenshots, AX-tree evidence, redbox / LogBox
-  findings, native logcat / simctl log excerpts, and platform-parity
-  observations. Report-only — does NOT modify JS/TS or native source.
-
-  Proactively suggest when the user mentions:
-  - "QA the RN app", "test the React Native build", "check both platforms"
-  - "Does this app work on iOS and Android?", "find bugs in my Expo app"
-  - Pre-release / pre-TestFlight / pre-Play-Store validation for a RN app
-  - LogBox / redbox / yellow warnings cleanup
-  - Platform parity audit (iOS vs Android behavior)
-  - Accessibility audit on an RN app (screen reader, font scale)
-
-  Voice triggers: "qa this rn app", "qa the expo app", "test rn on both sims"
+description: React Native QA
 allowed-tools:
   - Bash
   - Read

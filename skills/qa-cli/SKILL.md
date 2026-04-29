@@ -1,18 +1,7 @@
 ---
 name: qa-cli
 version: 0.1.0
-description: |
-  Systematic black-box QA for command-line tools (non-TUI: one-shot
-  commands, flags, subcommands, pipes). Use this skill whenever the user
-  mentions QA / testing / auditing a CLI, binary, command, shell tool,
-  or any program that runs and exits — even if they only say "test my
-  CLI", "audit my tool", or "find bugs in this script". Covers
-  `--help` / `--version` sanity, flag parsing, exit codes, stdout vs
-  stderr, error-message quality, stdin / file / pipe I/O, env + config
-  precedence, signal handling, and localization. Produces a report-only
-  deliverable at `./qa-reports/` — never modifies the tool under test.
-  NOT for interactive terminal UIs (full-screen apps, `curses`, `ink`,
-  `blessed`) — for those use `qa-tui`.
+description: CLI tool QA
 allowed-tools:
   - Bash
   - Read

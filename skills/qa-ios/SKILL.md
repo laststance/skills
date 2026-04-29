@@ -1,21 +1,7 @@
 ---
 name: qa-ios
 version: 0.1.0
-description: |
-  Systematically QA test an iOS app running in the iOS Simulator and produce
-  a structured bug report with severity-graded issues, screenshots, AX-tree
-  evidence, and HIG compliance findings. Report-only — does NOT modify Swift
-  source code.
-
-  Proactively suggest when the user mentions:
-  - "QA the iOS app", "test the iPhone build", "check the simulator"
-  - "Does this app work on iPhone?", "find bugs in the iOS version"
-  - An app is already running in Simulator and they want a quality check
-  - Pre-release / pre-TestFlight / pre-App Store validation
-  - Accessibility audit on iOS (VoiceOver, Dynamic Type, contrast)
-  - HIG / Apple Human Interface Guidelines compliance review
-
-  Voice triggers: "qa this iOS app", "run ios qa", "test the sim"
+description: iOS Sim QA
 allowed-tools:
   - Bash
   - Read

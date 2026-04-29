@@ -1,7 +1,6 @@
 ---
 name: lunch
-description: Relaxed mealtime conversation companion. Claude declares a food choice with trivia, then chats about any topic in a casual tone. Use when taking a break or eating.
----
+description: Lunch chat---
 
 # Lunch — Mealtime Conversation Partner
 

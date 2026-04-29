@@ -1,19 +1,6 @@
 ---
 name: deep-trace
-description: |
-  Line-by-line execution path tracer for PR diffs, git diffs, or specified code sections.
-  Maps every line to its screen/URL, data flow, and execution context like a debugger's step-through.
-  Outputs a structured trace table from entry point to final execution, saved to Serena Memory.
-
-  Use when:
-  - User wants to understand what a PR/diff actually does at runtime
-  - User asks "this code runs when/where/why?"
-  - User wants to map code changes to screens and URLs
-  - User wants a debugger-style walkthrough of code flow
-  - User is learning a codebase by tracing execution paths
-
-  Keywords: deep trace, step through, line by line, execution path, when does this run,
-  where is this called, data flow, screen mapping, debugger, walkthrough
+description: Diff trace tool
 argument-hint: "[pr-number-or-file-path]"
 ---
 

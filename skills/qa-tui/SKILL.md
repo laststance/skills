@@ -1,24 +1,7 @@
 ---
 name: qa-tui
 version: 0.1.0
-description: |
-  Systematically QA test a TUI (terminal user interface) program — htop, vim,
-  neovim, lazygit, k9s, tmux, fzf, dialog-based CLIs, Claude Code itself —
-  running inside a shellwright PTY session, then produce a structured bug
-  report with severity-graded issues, screenshots, key-sequence repros, and
-  terminal-compatibility findings. Report-only — does NOT modify the target
-  program's source.
-
-  Proactively suggest when the user mentions:
-  - "QA the TUI", "test the CLI", "check the terminal app"
-  - "Does lazygit / htop / nvim / my-tui-tool work?"
-  - "Find bugs in the TUI", "terminal rendering issues"
-  - Pre-release QA on a TUI before `cargo publish` / `npm publish` / `brew bump`
-  - Terminal-emulator compatibility sweep (Kitty / iTerm2 / Alacritty / Ghostty
-    / Apple Terminal / Windows Terminal)
-  - Accessibility sweep on a TUI (screen reader, high-contrast, NO_COLOR)
-
-  Voice triggers: "qa this tui", "run tui qa", "test the terminal app"
+description: Terminal UI QA
 allowed-tools:
   - Bash
   - Read

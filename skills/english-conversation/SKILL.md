@@ -1,17 +1,6 @@
 ---
 name: english-conversation
-description: |
-  English conversation practice partner for Japanese learners.
-  Responds naturally in English, speaks responses aloud via macOS say,
-  and uses implicit recast to model correct forms without explicit correction.
-  Provides session summary with tracked corrections on exit.
-
-  Use when:
-  - User wants to practice English conversation
-  - User says "English practice", "let's talk in English", "eikaiwa"
-  - User starts speaking English informally and wants feedback
-
-  Keywords: english, conversation, practice, speaking, eikaiwa
+description: EN practice
 argument-hint: "[topic or just start talking]"
 ---
 

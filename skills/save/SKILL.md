@@ -1,14 +1,6 @@
 ---
 name: save
-description: |
-  Save session context to Serena MCP memory for cross-session persistence.
-  Analyzes accomplishments, persists learnings as structured memories,
-  creates checkpoint for future session restoration.
-  Portable across all Serena-enabled agents (Claude Code, Cursor, Windsurf, etc.).
-
-  Use when: ending a session, pausing work, saving progress, or preserving learnings.
-  Keywords: session, save, persist, checkpoint, memory, store, context, end
----
+description: Save session---
 
 # Session Save
 

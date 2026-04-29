@@ -1,7 +1,6 @@
 ---
 name: electron-release
-description: Guides Electron app release process including build, code signing, notarization, and GitHub Release with auto-update support. Use when releasing Electron apps, creating DMG installers, setting up auto-update, or troubleshooting notarization issues.
----
+description: Electron ship---
 
 # Electron Release Guide
 

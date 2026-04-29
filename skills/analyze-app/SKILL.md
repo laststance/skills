@@ -1,6 +1,6 @@
 ---
 name: analyze-app
-description: "Analyze macOS .app bundles to identify technology stacks (Electron, Flutter, Qt, SwiftUI, native, etc.) by delegating to a specialized subagent. Use when given a .app file path, asked about app technology, or investigating how an application was built."
+description: macOS app stack
 argument-hint: "[app-path]"
 ---
 

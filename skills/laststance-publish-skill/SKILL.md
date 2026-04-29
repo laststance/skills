@@ -1,7 +1,6 @@
 ---
 name: laststance-publish-skill
-description: Use when publishing a stable skill to the laststance/skills GitHub repository, or when moving a skill from ~/.claude/skills/ to the shared registry
----
+description: Publish skill---
 
 # Publish Skill to laststance/skills
 

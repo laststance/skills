@@ -1,15 +1,6 @@
 ---
 name: issue
-description: |
-  Creates issues on the project's tracker (GitHub Issues or Linear) and lists open issues.
-  Auto-detects which tracker the project uses.
-
-  Use when:
-  - User says "/issue <description>" to create a new issue
-  - User says "/issue list" to view open issues
-  - User wants to file a bug, feature request, or task as an issue
-
-  Keywords: issue, bug, feature request, ticket, create issue, list issues, open issues
+description: Tracker issues
 argument-hint: "<description> | list [--assignee me] [--label bug]"
 ---
 

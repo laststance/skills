@@ -1,20 +1,6 @@
 ---
 name: code-trace
-description: |
-  Interactive code execution path tracer that explains how code flows from entry point to output.
-  Uses step-by-step navigation with AskUserQuestion to explore conditional branches and function calls.
-
-  Use when:
-  - User asks "How does X work in this codebase?"
-  - User wants to understand HTTP request/response flow
-  - User asks about middleware execution order
-  - User wants to trace a function call chain
-  - User asks "What happens when..." questions
-  - User wants to learn how code paths connect
-
-  Keywords: trace, flow, execution, path, call chain, middleware, request handling,
-  what happens, how does, step through, follow the code
----
+description: Trace code flow---
 
 <essential_principles>
 ## How Code Tracing Works
