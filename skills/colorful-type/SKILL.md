@@ -1,6 +1,7 @@
 ---
 name: colorful-type
-description: Brand TS types---
+description: Brand TS types
+---
 
 # Colorful Type
 

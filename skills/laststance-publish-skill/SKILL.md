@@ -1,6 +1,7 @@
 ---
 name: laststance-publish-skill
-description: Publish skill---
+description: Publish skill
+---
 
 # Publish Skill to laststance/skills
 

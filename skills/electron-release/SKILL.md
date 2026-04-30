@@ -1,6 +1,7 @@
 ---
 name: electron-release
-description: Electron ship---
+description: Electron ship
+---
 
 # Electron Release Guide
 

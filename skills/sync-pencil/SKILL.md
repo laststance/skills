@@ -1,6 +1,7 @@
 ---
 name: sync-pencil
-description: .pen<->code sync---
+description: .pen<->code sync
+---
 
 # Sync Pencil
 

@@ -1,6 +1,7 @@
 ---
 name: code-trace
-description: Trace code flow---
+description: Trace code flow
+---
 
 <essential_principles>
 ## How Code Tracing Works

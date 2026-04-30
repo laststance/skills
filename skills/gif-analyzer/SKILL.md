@@ -1,6 +1,7 @@
 ---
 name: gif-analyzer
-description: GIF analyzer---
+description: GIF analyzer
+---
 
 # GIF Analyzer
 

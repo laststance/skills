@@ -1,6 +1,7 @@
 ---
 name: exhaustive-real-world-scenario-qa
-description: Scenario QA---
+description: Scenario QA
+---
 
 # Exhaustive Real World Scenario QA
 

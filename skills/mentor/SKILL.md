@@ -1,6 +1,7 @@
 ---
 name: mentor
-description: Code mentor---
+description: Code mentor
+---
 
 <essential_principles>
 
