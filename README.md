@@ -44,6 +44,7 @@ npx skills add laststance/skills --skill sync-pencil
 npx skills add laststance/skills --skill task
 npx skills add laststance/skills --skill troubleshoot
 npx skills add laststance/skills --skill ux-gap-detector
+npx skills add laststance/skills --skill x-agents-cross-review
 ```
 
 ## Available Skills
@@ -81,6 +82,7 @@ npx skills add laststance/skills --skill ux-gap-detector
 | [task](skills/task/) | Standard implementation workflow with systematic 5-phase cycle: Investigate → Plan → Implement → Verify → Complete. Integrates quality gates and introspection markers. | [Serena MCP](https://github.com/oraios/serena) **(required)**, [Context7](https://github.com/upstash/context7) (recommended) |
 | [troubleshoot](skills/troubleshoot/) | Diagnose and fix issues in code, builds, deployments, and system behavior. Hypothesis-driven 6-phase debugging with evidence-based verification and `--frontend-verify` support. | [Serena MCP](https://github.com/oraios/serena) **(required)**, [Context7](https://github.com/upstash/context7) (recommended) |
 | [ux-gap-detector](skills/ux-gap-detector/) | Detects UI/UX quality gaps in authenticated SaaS web apps via `playwright-cli`. Crawls app interior, captures screenshots, scores across 4 dimensions (Typography & Spacing, Interactive States, Content Hierarchy, Loading & Error UX), and generates an actionable Markdown gap report. Optionally creates GitHub Issues. | `playwright-cli` **(required)**, [Serena MCP](https://github.com/oraios/serena) (recommended) |
+| [x-agents-cross-review](skills/x-agents-cross-review/) | Multi-agent parallel cross-review. Launches X agents in parallel (Opus, full tool access) to independently review the same scope from different perspectives (baseline, devil's advocate, type safety, security, etc.), then consolidates findings into a unified consensus report. | [Serena MCP](https://github.com/oraios/serena) (recommended), [Context7](https://github.com/upstash/context7) (recommended) |
 
 ### Platform-dependent MCP for `--frontend-verify` (task, troubleshoot) and qa-team
 
@@ -129,6 +131,7 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /task fix the login button          # Systematic implementation workflow
 /troubleshoot "build failing"       # Hypothesis-driven debugging
 /ux-gap-detector                    # Detect UX gaps in authenticated SaaS web app
+/x-agents-cross-review              # Multi-agent parallel review of code/specs/PRs
 ```
 
 ## License
