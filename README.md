@@ -41,6 +41,7 @@ npx skills add laststance/skills --skill qa-react-native
 npx skills add laststance/skills --skill qa-team
 npx skills add laststance/skills --skill qa-tui
 npx skills add laststance/skills --skill save
+npx skills add laststance/skills --skill skill-inspect
 npx skills add laststance/skills --skill sync-pencil
 npx skills add laststance/skills --skill task
 npx skills add laststance/skills --skill troubleshoot
@@ -80,6 +81,7 @@ npx skills add laststance/skills --skill x-agents-cross-review
 | [qa-team](skills/qa-team/) | Launch comprehensive QA Agent Team for post-implementation verification. Tests 5 perspectives in parallel: Visual Integrity, Functional Correctness, Apple HIG, Edge Cases, and UX Sensibility. | [Serena MCP](https://github.com/oraios/serena) (recommended), platform-dependent MCP (see below) |
 | [qa-tui](skills/qa-tui/) | Systematic black-box QA for TUI apps (htop, vim, lazygit, tmux, k9s, etc.) running in a shellwright PTY session. Bug reports with screenshots, key-sequence repros, and terminal-compatibility findings. Report-only — does not modify the tool. | [Shellwright MCP](https://github.com/aorwall/shellwright) **(required)** |
 | [save](skills/save/) | Save session context to Serena MCP memory for cross-session persistence. Analyzes accomplishments, persists learnings, and creates session checkpoints. | [Serena MCP](https://github.com/oraios/serena) **(required)** |
+| [skill-inspect](skills/skill-inspect/) | Read-only diagnostic. Resolves any name across the skill ecosystem (skills, plugins, agents, MCP servers, legacy commands) and displays a structured info card with provenance, metadata, and cross-tool availability across `~/.claude`, `~/.cursor`, `~/.codex`, `~/.gemini`, `~/.vscode`, `~/.antigravity`. | — |
 | [sync-pencil](skills/sync-pencil/) | Bidirectional sync between `.pen` design files and implementation code. Supports Electron, Web, and iOS Simulator. Use when updating designs from code, generating code from designs, or resolving drift. | Pencil MCP **(required)**, platform-dependent screenshot tool (`electron-playwright-cli` / `playwright-cli` / [iOS Simulator MCP](https://github.com/nichochar/ios-simulator-mcp)) |
 | [task](skills/task/) | Standard implementation workflow with systematic 5-phase cycle: Investigate → Plan → Implement → Verify → Complete. Integrates quality gates and introspection markers. | [Serena MCP](https://github.com/oraios/serena) **(required)**, [Context7](https://github.com/upstash/context7) (recommended) |
 | [troubleshoot](skills/troubleshoot/) | Diagnose and fix issues in code, builds, deployments, and system behavior. Hypothesis-driven 6-phase debugging with evidence-based verification and `--frontend-verify` support. | [Serena MCP](https://github.com/oraios/serena) **(required)**, [Context7](https://github.com/upstash/context7) (recommended) |
@@ -130,6 +132,7 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /qa-team                            # Launch QA verification team
 /qa-tui lazygit                     # QA test a TUI app via shellwright
 /save                               # Save session context to Serena MCP
+/skill-inspect mentor               # Display info card for any skill/agent/MCP server
 /sync-pencil                        # Sync .pen design ↔ code
 /task fix the login button          # Systematic implementation workflow
 /troubleshoot "build failing"       # Hypothesis-driven debugging
