@@ -149,8 +149,8 @@ Apply to every surface visited during Phases 2–6:
 
 1. **Visual scan** — screenshot; compare against cross-platform conventions
    (window controls, menu bar, shortcut keys)
-2. **Accessibility snapshot** — `agent-browser snapshot -i`; scan for
-   unlabeled controls, empty-name interactive elements, placeholder text
+2. **Accessibility snapshot** — `playwright-cli --s=default snapshot`; scan
+   for unlabeled controls, empty-name interactive elements, placeholder text
 3. **Every button / menu item** — click or fire each in turn; confirm action,
    confirm close/back path works, check log tail for errors
 4. **Every field** — empty submit, valid input, invalid input, 2000+ char

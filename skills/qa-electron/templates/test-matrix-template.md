@@ -102,7 +102,7 @@ Cases that could not be executed this run. Tag each with a reason the reviewer c
 
 ## Matrix execution notes
 
-- Pre-flight verified `pnpm dev` running with CDP 9222 and `agent-browser connect 9222`
+- Pre-flight verified `pnpm dev` running with CDP 9222 and `playwright-cli attach --cdp=http://localhost:9222`
 - Cases were executed in surface order (Main → Secondary → Preferences → Menu → Tray → Deep links → E2E flows)
 - Any case touching filesystem, DB, or network was followed by a **truth check** (compare UI state vs on-disk state)
 - Each surface was screenshot-baselined before running cases on it

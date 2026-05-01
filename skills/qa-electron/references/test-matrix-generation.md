@@ -15,10 +15,10 @@ sequences are the job of Phase 9 (Exploratory testing), not the matrix.
 You must have completed Phase 1 (Surface mapping) before entering Phase 2.
 Phase 1 produced:
 
-- List of windows and webviews (from `agent-browser tab`)
+- List of windows and webviews (from `playwright-cli --s=default tab-list`)
 - Menu bar tree, every top-level menu, every leaf item
 - Tray menu items (if the app has a tray icon)
-- Interactive-element inventory per surface (from `agent-browser snapshot -i`)
+- Interactive-element inventory per surface (from `playwright-cli --s=default snapshot`)
 - Secondary windows and how to reach them (Preferences, About, etc.)
 - Deep-link protocols the app has registered
 

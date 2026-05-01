@@ -99,6 +99,11 @@ If any of these are unknown, use `AskUserQuestion` to collect them:
 Do not guess. Missing context causes the skill to automate the wrong app or
 miss real issues.
 
+**Before any browser interaction**: invoke `/dnd` to load the drag-and-drop
+verification protocol. Required even when DnD is not yet known to be involved —
+ref-based `drag` returns false success on `dnd-kit` and similar libraries
+running inside the Electron renderer.
+
 ---
 
 ## Phase 0: Launch and baseline

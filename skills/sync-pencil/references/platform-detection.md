@@ -1,6 +1,7 @@
 # Platform Detection Reference
 
-Detect project platform and select appropriate MCP for screenshots.
+Detect project platform and select the appropriate tool for screenshots and
+interaction. All browser/Electron platforms standardize on `playwright-cli`.
 
 ## Detection Logic
 
@@ -28,7 +29,7 @@ async function detectPlatform() {
 
   // Determine platform
   if (hasElectronConfig || hasElectronDep) {
-    return { platform: "electron", tool: "electron-playwright-cli" }
+    return { platform: "electron", tool: "playwright-cli", attachMode: "cdp" }
   }
 
   if (hasExpoConfig || (hasIosDir && hasAndroidDir)) {
@@ -36,56 +37,59 @@ async function detectPlatform() {
   }
 
   // Default to web
-  return { platform: "web", mcp: "mcp__claude-in-chrome" }
+  return { platform: "web", tool: "playwright-cli" }
 }
 ```
 
-## MCP Capabilities by Platform
+## Tool Capabilities by Platform
 
-### Electron (electron-playwright-cli)
+### Electron (`playwright-cli` attached via CDP)
+
+Launch the Electron app with `--remote-debugging-port=9222` (configured in the
+project's `pnpm dev` script), then attach `playwright-cli` to that port.
 
 | Command | Purpose |
 |---------|---------|
-| `electron-playwright-cli snapshot` | Discover interactive elements |
-| `electron-playwright-cli screenshot --filename=<name>.png` | Full window screenshot |
-| `electron-playwright-cli click @e5` | Click element by ref |
-| `electron-playwright-cli fill @e5 "text"` | Fill input field |
-| `electron-playwright-cli electron_windows` | List Electron BrowserWindows |
-| `electron-playwright-cli tab-list` / `tab-select N` | List/switch tabs |
+| `playwright-cli attach --cdp=http://localhost:9222` | Attach to running Electron renderer |
+| `playwright-cli --s=default snapshot` | Discover interactive elements |
+| `playwright-cli --s=default screenshot --filename=<name>.png` | Full window screenshot |
+| `playwright-cli --s=default click <ref>` | Click element by ref |
+| `playwright-cli --s=default fill <ref> "text"` | Fill input field |
+| `playwright-cli --s=default tab-list` / `tab-select N` | List / switch attached pages |
+| `playwright-cli --s=default detach` | Release the CDP session (does not quit Electron) |
 
 **Usage:**
 ```bash
-# Verify .playwright/cli.config.json points to ./out/main/index.js
-cat .playwright/cli.config.json
+# Launch app with CDP exposed (project-specific dev script)
+pnpm dev   # must pass --remote-debugging-port=9222
 
-# Daemon auto-launches Electron from config on first command
-electron-playwright-cli snapshot
-electron-playwright-cli click @e5
-electron-playwright-cli screenshot --filename=electron-app.png
+# Attach and operate
+playwright-cli attach --cdp=http://localhost:9222
+playwright-cli --s=default snapshot
+playwright-cli --s=default click e5
+playwright-cli --s=default screenshot --filename=electron-app.png
 ```
 
-### Web (mcp__claude-in-chrome)
+### Web (`playwright-cli`)
 
-| Tool | Purpose |
-|------|---------|
-| `read_page` | Page content and screenshot |
-| `navigate` | Go to URL |
-| `computer` | Mouse/keyboard actions |
+| Command | Purpose |
+|---------|---------|
+| `playwright-cli open <url> --headed` | Launch headed browser to URL |
+| `playwright-cli navigate <url>` | Navigate current session |
+| `playwright-cli snapshot` | Page accessibility tree + refs |
+| `playwright-cli screenshot --filename=<name>.png` | Capture screenshot |
+| `playwright-cli click <ref>` | Click element |
+| `playwright-cli fill <ref> "text"` | Fill input |
+| `playwright-cli eval "<expr>"` | Evaluate JS in page context |
 
 **Usage:**
-```javascript
-// Navigate and capture
-mcp__claude-in-chrome__navigate({ url: "http://localhost:3000" })
-mcp__claude-in-chrome__read_page()
-
-// Interact
-mcp__claude-in-chrome__computer({
-  action: "click",
-  coordinate: [100, 200]
-})
+```bash
+playwright-cli open http://localhost:3000 --headed
+playwright-cli snapshot
+playwright-cli screenshot --filename=web-impl.png
 ```
 
-### iOS Simulator (mcp__ios-simulator)
+### iOS Simulator (`mcp__ios-simulator`)
 
 | Tool | Purpose |
 |------|---------|
@@ -95,37 +99,32 @@ mcp__claude-in-chrome__computer({
 
 **Usage:**
 ```javascript
-// Screenshot
 mcp__ios-simulator__screenshot()
-
-// Get UI tree
 mcp__ios-simulator__ui_describe_all()
-
-// Tap button
 mcp__ios-simulator__ui_tap({ label: "Submit" })
 ```
+
+## Drag-and-Drop
+
+Before invoking any browser interaction (Web or Electron) that may involve
+drag-and-drop, load the `/dnd` skill. Ref-based `drag <source> <target>`
+returns false success on `dnd-kit` and similar libraries — coordinate-based
+pointer ops (`mousemove` / `mousedown` / `mouseup`) are mandatory for
+verification.
 
 ## Platform-Specific Considerations
 
 ### Electron
 - Dev server usually on port 5173 (Vite) or 3000
-- Debug port typically 9222
+- CDP debug port typically 9222 (must be passed via `--remote-debugging-port`)
 - Window title may differ from web
 
 ### Web
-- Need Chrome extension active
+- `playwright-cli` launches a managed Chromium — no extension required
 - Works with any localhost port
-- Can target specific tabs
+- Use `playwright-cli state-save / state-load` to persist authenticated sessions
 
 ### iOS Simulator
 - Simulator must be running
 - App must be launched
 - Coordinates are point-based, not pixel
-
-## Fallback Strategy
-
-If primary MCP unavailable:
-
-1. **Electron** → Try `playwright-cli` against the dev server URL, or `mcp__claude-in-chrome`
-2. **Web** → Try `mcp__plugin_playwright_playwright` for screenshots
-3. **iOS** → No fallback, simulator required

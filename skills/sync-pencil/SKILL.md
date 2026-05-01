@@ -14,11 +14,15 @@ Bidirectional synchronization between Pencil .pen designs and implementation cod
 
 This skill works across multiple platforms using unified screenshot capture:
 
-| Platform | MCP Server | Screenshot Tool |
-|----------|------------|-----------------|
-| Electron | electron-playwright-cli | `electron-playwright-cli screenshot` |
-| Web | mcp__claude-in-chrome | `read_page` + screenshot |
-| iOS Sim | mcp__ios-simulator | `screenshot` |
+| Platform | Tool | Screenshot Command |
+|----------|------|--------------------|
+| Electron | `playwright-cli` (attached to Electron CDP) | `playwright-cli --s=default screenshot --filename=<name>.png` |
+| Web | `playwright-cli` | `playwright-cli screenshot --filename=<name>.png` |
+| iOS Sim | `mcp__ios-simulator` | `mcp__ios-simulator__screenshot` |
+
+**Before any browser interaction**: invoke `/dnd` to load the drag-and-drop
+verification protocol. Required even when DnD is not yet known to be involved —
+ref-based `drag` returns false success on `dnd-kit` and similar libraries.
 
 ### Component Matching
 

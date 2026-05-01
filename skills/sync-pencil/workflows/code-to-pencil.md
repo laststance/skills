@@ -11,13 +11,13 @@ Update .pen design file from current implementation screenshots.
 <process>
 ## Step 1: Detect Platform
 
-Determine the project type and available MCP:
+Determine the project type and the appropriate tool:
 
 ```javascript
 // Check for Electron
 if (exists("electron.vite.config.ts") || package.json has "electron") {
   platform = "electron"
-  tool = "electron-playwright-cli"  // config-based daemon auto-launch
+  tool = "playwright-cli"        // attached to Electron's CDP port
 }
 // Check for iOS/React Native
 else if (exists("ios/") || exists("app.json" with expo)) {
@@ -27,25 +27,30 @@ else if (exists("ios/") || exists("app.json" with expo)) {
 // Default to web
 else {
   platform = "web"
-  mcp = "mcp__claude-in-chrome"
+  tool = "playwright-cli"
 }
 ```
 
+**Before any browser interaction**: invoke `/dnd` to load the drag-and-drop
+verification protocol (Web and Electron only).
+
 ## Step 2: Capture Implementation Screenshots
 
-**Electron (electron-playwright-cli):**
+**Electron (`playwright-cli` via CDP):**
 ```bash
-# Verify .playwright/cli.config.json points at ./out/main/index.js
-cat .playwright/cli.config.json
-# Daemon auto-launches the Electron app on first command
-electron-playwright-cli screenshot --filename=electron-impl.png
-electron-playwright-cli snapshot  # get page structure
+# Launch Electron with CDP exposed (project's pnpm dev must pass --remote-debugging-port=9222)
+pnpm dev
+# Attach and capture
+playwright-cli attach --cdp=http://localhost:9222
+playwright-cli --s=default screenshot --filename=electron-impl.png
+playwright-cli --s=default snapshot  # get page structure
 ```
 
-**Web:**
-```javascript
-mcp__claude-in-chrome__read_page({ url: "http://localhost:..." })
-// Then screenshot specific elements
+**Web (`playwright-cli`):**
+```bash
+playwright-cli open http://localhost:3000 --headed
+playwright-cli screenshot --filename=web-impl.png
+playwright-cli snapshot
 ```
 
 **iOS Simulator:**

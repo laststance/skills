@@ -27,6 +27,8 @@ playwright-cli extension connected.
 
 ### Phase 0: Setup (Authenticated Session)
 
+**Before any browser interaction**: invoke `/dnd` to load the drag-and-drop verification protocol. Required even when DnD is not yet known to be involved — ref-based `drag` returns false success on `dnd-kit` and similar libraries.
+
 1. **Verify playwright-cli connection**: Take a `browser_screenshot` to confirm the extension is active
 2. **Navigate to target**: If a URL is provided, `browser_navigate` to it.
    Otherwise ask the user:

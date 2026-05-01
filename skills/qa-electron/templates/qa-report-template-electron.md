@@ -55,7 +55,7 @@ Errors and crashes surfaced during the session.
 
 ### Renderer console errors
 
-Captured via `agent-browser evaluate` + log tail.
+Captured via `playwright-cli --s=default eval` + log tail.
 
 | Level | Message | Target | Count |
 |-------|---------|--------|-------|
@@ -143,7 +143,7 @@ By category:
 **Renderer evaluation evidence** (for security findings):
 
 ```
-$ agent-browser evaluate 'typeof require'
+$ playwright-cli --s=default eval 'typeof require'
 "function"
 ```
 Indicates `nodeIntegration: true` on this window — the renderer has
@@ -208,9 +208,9 @@ fix before release."}
 
 - **Host OS**: {e.g., macOS 15.2}
 - **Host arch**: {arm64 / x64}
-- **Electron**: {version — from `agent-browser evaluate 'process.versions.electron'` or app's package.json}
+- **Electron**: {version — from `playwright-cli --s=default eval 'process.versions.electron'` or app's package.json}
 - **Chromium**: {version — from `navigator.userAgent`}
-- **agent-browser**: {version — `agent-browser --version`}
+- **playwright-cli**: {version — `playwright-cli --version`}
 - **Locale**: {e.g., en_US}
 - **Display scale**: {1x / 2x / 3x}
 - **Secondary display**: {present / absent}

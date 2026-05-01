@@ -106,6 +106,9 @@ Edit({
 
 ## Step 6: Visual Verification
 
+Before any browser interaction (Web or Electron), invoke `/dnd` to load the
+drag-and-drop verification protocol.
+
 Capture both design and implementation for comparison:
 
 ```javascript
@@ -113,10 +116,12 @@ Capture both design and implementation for comparison:
 mcp__pencil__get_screenshot({ nodeId: "frameId" })
 
 // Implementation screenshot (platform-specific)
-// Electron (electron-playwright-cli):
-electron-playwright-cli screenshot --filename=electron-impl.png
+// Electron (playwright-cli via CDP — pnpm dev must expose --remote-debugging-port=9222):
+playwright-cli attach --cdp=http://localhost:9222
+playwright-cli --s=default screenshot --filename=electron-impl.png
 // Web:
-mcp__claude-in-chrome__read_page(...)
+playwright-cli open http://localhost:3000 --headed
+playwright-cli screenshot --filename=web-impl.png
 // iOS:
 mcp__ios-simulator__screenshot()
 ```

@@ -20,6 +20,7 @@ npx skills add laststance/skills --skill colorful-type
 npx skills add laststance/skills --skill coderabbit-resolver
 npx skills add laststance/skills --skill design
 npx skills add laststance/skills --skill deep-trace
+npx skills add laststance/skills --skill dnd
 npx skills add laststance/skills --skill electron-release
 npx skills add laststance/skills --skill english-conversation
 npx skills add laststance/skills --skill exhaustive-real-world-scenario-qa
@@ -60,6 +61,7 @@ npx skills add laststance/skills --skill x-agents-cross-review
 | [coderabbit-resolver](skills/coderabbit-resolver/) | Automates the full CodeRabbit PR review cycle — fix comments, resolve threads, pass CI, merge, and clean up. Supports `--bulk` for all open PRs. | — |
 | [design](skills/design/) | Architecture-driven plan creation with 5-phase pipeline: Research → Architecture → 3-reviewer loop (max 5 rounds) → Final Review → Plan Output. "Weakest LLM Proof" principle ensures plans are executable by any AI agent. | [Serena MCP](https://github.com/oraios/serena) (recommended), [Context7](https://github.com/upstash/context7) (recommended), [Perplexity MCP](https://github.com/ppl-ai/modelcontextprotocol) (recommended) |
 | [deep-trace](skills/deep-trace/) | Line-by-line execution path tracer for PR diffs, git diffs, or specified code sections. Maps every line to its screen/URL, data flow, and execution context like a debugger's step-through. | [Serena MCP](https://github.com/oraios/serena) (recommended) |
+| [dnd](skills/dnd/) | Browser drag-and-drop QA via coordinate-based pointer ops. Knowledge-injection skill loaded by browser-using skills (`task`, `troubleshoot`, `qa-team`, `qa-electron`, `ux-gap-detector`, `exhaustive-real-world-scenario-qa`, `sync-pencil`, `bulk-issues`) before any browser interaction — ref-based `drag` returns false success on `dnd-kit` and similar libraries. | `playwright-cli` (recommended) |
 | [electron-release](skills/electron-release/) | Guides Electron app release process including build, code signing, notarization, and GitHub Release with auto-update support. | — |
 | [english-conversation](skills/english-conversation/) | English conversation practice partner for Japanese learners. Responds naturally in English with implicit recast and session summary with corrections. | macOS `say` command (for TTS) |
 | [exhaustive-real-world-scenario-qa](skills/exhaustive-real-world-scenario-qa/) | Exhaustive Real World Scenario QA via `playwright-cli` (headed mode). Generates 99.9% happy-path coverage + TC3-style edge cases from source + spec, loops 3x to catch state-dependent bugs. Three modes: Main Claude (default), Fresh Agent (`--fresh-agent`), Team (`--team`) with Design Checker + Bug Hunter. | `playwright-cli` **(required)**, [Serena MCP](https://github.com/oraios/serena) (recommended), [Context7](https://github.com/upstash/context7) (recommended) |
@@ -82,7 +84,7 @@ npx skills add laststance/skills --skill x-agents-cross-review
 | [qa-tui](skills/qa-tui/) | Systematic black-box QA for TUI apps (htop, vim, lazygit, tmux, k9s, etc.) running in a shellwright PTY session. Bug reports with screenshots, key-sequence repros, and terminal-compatibility findings. Report-only — does not modify the tool. | [Shellwright MCP](https://github.com/aorwall/shellwright) **(required)** |
 | [save](skills/save/) | Save session context to Serena MCP memory for cross-session persistence. Analyzes accomplishments, persists learnings, and creates session checkpoints. | [Serena MCP](https://github.com/oraios/serena) **(required)** |
 | [skill-inspect](skills/skill-inspect/) | Read-only diagnostic. Resolves any name across the skill ecosystem (skills, plugins, agents, MCP servers, legacy commands) and displays a structured info card with provenance, metadata, and cross-tool availability across `~/.claude`, `~/.cursor`, `~/.codex`, `~/.gemini`, `~/.vscode`, `~/.antigravity`. | — |
-| [sync-pencil](skills/sync-pencil/) | Bidirectional sync between `.pen` design files and implementation code. Supports Electron, Web, and iOS Simulator. Use when updating designs from code, generating code from designs, or resolving drift. | Pencil MCP **(required)**, platform-dependent screenshot tool (`electron-playwright-cli` / `playwright-cli` / [iOS Simulator MCP](https://github.com/nichochar/ios-simulator-mcp)) |
+| [sync-pencil](skills/sync-pencil/) | Bidirectional sync between `.pen` design files and implementation code. Supports Electron, Web, and iOS Simulator. Use when updating designs from code, generating code from designs, or resolving drift. | Pencil MCP **(required)**, `playwright-cli` (Web + Electron via CDP) / [iOS Simulator MCP](https://github.com/nichochar/ios-simulator-mcp) (iOS) |
 | [task](skills/task/) | Standard implementation workflow with systematic 5-phase cycle: Investigate → Plan → Implement → Verify → Complete. Integrates quality gates and introspection markers. | [Serena MCP](https://github.com/oraios/serena) **(required)**, [Context7](https://github.com/upstash/context7) (recommended) |
 | [troubleshoot](skills/troubleshoot/) | Diagnose and fix issues in code, builds, deployments, and system behavior. Hypothesis-driven 6-phase debugging with evidence-based verification and `--frontend-verify` support. | [Serena MCP](https://github.com/oraios/serena) **(required)**, [Context7](https://github.com/upstash/context7) (recommended) |
 | [ux-gap-detector](skills/ux-gap-detector/) | Detects UI/UX quality gaps in authenticated SaaS web apps via `playwright-cli`. Crawls app interior, captures screenshots, scores across 4 dimensions (Typography & Spacing, Interactive States, Content Hierarchy, Loading & Error UX), and generates an actionable Markdown gap report. Optionally creates GitHub Issues. | `playwright-cli` **(required)**, [Serena MCP](https://github.com/oraios/serena) (recommended) |
@@ -110,6 +112,7 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /coderabbit-resolver 17             # Process PR #17
 /design user authentication system   # Create detailed implementation plan
 /deep-trace 42                      # Trace PR #42 line-by-line
+/dnd                                # Load drag-and-drop coordinate-based verification protocol
 /english-conversation               # Start English conversation practice
 /exhaustive-real-world-scenario-qa  # Exhaustive QA via playwright-cli (3x loop, 3 modes)
 /coderabbit-resolver --bulk         # Process all open PRs

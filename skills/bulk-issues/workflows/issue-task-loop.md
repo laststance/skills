@@ -121,9 +121,11 @@ Auto-detect platform from `package.json`:
 | Dependency | Platform | Preflight | Verification Tool |
 |------------|----------|-----------|-------------------|
 | _(default)_ | Web | `kill-port <port> && pnpm dev` | playwright-cli (`open --headed`, `snapshot`, `screenshot`) |
-| `electron` | Electron | `pnpm electron:dev` | `/qa-electron` skill (electron-playwright-cli based) |
+| `electron` | Electron | `pnpm electron:dev` | `/qa-electron` skill (`playwright-cli` attached to Electron CDP) |
 | `expo` / `react-native` | Mobile | `mcp__ios-simulator__open_simulator` | iOS Simulator MCP |
 | `commander` / `inquirer` / `oclif` | CLI | shell session | Shellwright MCP |
+
+**Before any browser interaction**: invoke `/dnd` to load the drag-and-drop verification protocol (Web and Electron only).
 
 **Frontend Verify Workflow:**
 1. Start dev server / app, confirm MCP connection

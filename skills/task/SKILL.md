@@ -106,10 +106,12 @@ Visual verification across platforms. Auto-detect platform from `package.json`:
 
 | Dependency | Platform | Preflight | Verification Tool |
 |------------|----------|-----------|-------------------|
-| _(default)_ | Web | `kill-port <port> && pnpm dev` | agent-browser (`open --headed`, `snapshot -i`, `screenshot`) |
-| `electron` | Electron | `pnpm electron:dev` | `/electron` skill (agent-browser based Electron operation) |
+| _(default)_ | Web | `kill-port <port> && pnpm dev` | `playwright-cli` (`open --headed`, `snapshot`, `screenshot`) |
+| `electron` | Electron | `pnpm electron:dev` | `/qa-electron` skill (`playwright-cli` attached to Electron CDP) |
 | `expo` / `react-native` | Mobile | `mcp__ios-simulator__open_simulator` | iOS Simulator MCP (`screenshot`, `ui_tap`, `ui_swipe`) |
 | `commander` / `inquirer` / `oclif` | CLI | shell session | Shellwright MCP (TUI/CLI operation and output verification) |
+
+**Before any browser interaction**: invoke `/dnd` to load the drag-and-drop verification protocol. Ref-based `drag` reports false success on `dnd-kit` and similar libraries — load this preemptively for Web and Electron flows.
 
 **Frontend Verify Workflow:**
 
@@ -120,26 +122,24 @@ Visual verification across platforms. Auto-detect platform from `package.json`:
 
 ### Authentication for Frontend Verify
 
-When verifying authenticated apps (SaaS dashboards, admin panels, OAuth-protected pages), use agent-browser's auth persistence:
+When verifying authenticated apps (SaaS dashboards, admin panels, OAuth-protected pages), use `playwright-cli`'s auth persistence:
 
 | Strategy | Command | Use Case |
 |----------|---------|----------|
-| `state save/load` | `agent-browser state save auth.json` | Session cookies + localStorage. Best for most web apps |
-| `--profile <dir>` | `agent-browser open <url> --profile ./browser-data` | Full Chromium user data dir. Best for complex OAuth (Google, GitHub SSO) |
-| `auth save` | `agent-browser auth save <name> --url <login-url>` | Encrypted credential store. Best for CI/shared environments |
+| `state-save / state-load` | `playwright-cli state-save auth.json` | Session cookies + localStorage. Best for most web apps |
+| `--profile <dir>` | `playwright-cli open <url> --profile ./browser-data` | Full Chromium user data dir. Best for complex OAuth (Google, GitHub SSO) |
 
 **OAuth Flow:**
 
-1. `agent-browser open <login-url> --headed` (must be headed for OAuth redirects)
-2. Complete OAuth manually or via `snapshot -i` + `fill` + `click`
-3. `agent-browser state save auth.json` to persist session
-4. Future runs: `agent-browser state load auth.json` before navigating to app
+1. `playwright-cli open <login-url> --headed` (must be headed for OAuth redirects)
+2. Complete OAuth manually or via `snapshot` + `fill` + `click`
+3. `playwright-cli state-save auth.json` to persist session
+4. Future runs: `playwright-cli state-load auth.json` before navigating to app
 
 **Security:**
 
 - Add `auth.json`, `browser-data/` to `.gitignore`
-- `auth save` uses AES-256-GCM encryption via `AGENT_BROWSER_ENCRYPTION_KEY` env var
-- State files auto-expire after 30 days
+- State files contain session secrets — treat as credentials
 - Use `--headed` for initial OAuth setup (redirects require visible browser)
 
 ### Completion Gate

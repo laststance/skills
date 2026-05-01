@@ -2,7 +2,7 @@
 name: qa-team
 description: QA team runner
 argument-hint: "[--platform web|electron|ios|macos|auto] [--skip visual|functional|hig|edge|ux] [--quick]"
-allowed-tools: "Bash,Read,Write,Edit,Glob,Grep,Task,TaskCreate,TaskUpdate,TaskList,TaskGet,TeamCreate,TeamDelete,SendMessage,AskUserQuestion,Skill,mcp__claude-in-chrome__*,mcp__plugin_playwright_playwright__*,mcp__ios-simulator__*,mcp__mac-mcp-server__*,mcp__serena__*"
+allowed-tools: "Bash,Read,Write,Edit,Glob,Grep,Task,TaskCreate,TaskUpdate,TaskList,TaskGet,TeamCreate,TeamDelete,SendMessage,AskUserQuestion,Skill,mcp__ios-simulator__*,mcp__mac-mcp-server__*,mcp__serena__*"
 ---
 
 # QA Agent Team
@@ -72,14 +72,19 @@ Then spawn 6 teammates using the Task tool with `team_name: "qa-team"`:
 - Report to `claudedocs/qa/qa-ux-sensibility.md`
 - **blockedBy**: visual-tester task
 
-### Step 3: MCP Selection by Platform
+### Step 3: Tool Selection by Platform
 
-| Platform | Primary MCP |
-|----------|------------|
-| Web | `mcp__claude-in-chrome__*` / `mcp__plugin_playwright_playwright__*` |
-| Electron | `/qa-electron` skill (electron-playwright-cli based) |
+| Platform | Primary Tool |
+|----------|-------------|
+| Web | `playwright-cli` (`open --headed`, `snapshot`, `screenshot`, `click`, `fill`) |
+| Electron | `/qa-electron` skill (`playwright-cli` attached to Electron CDP) |
 | iOS/Expo | `mcp__ios-simulator__*` |
 | macOS | `mcp__mac-mcp-server__*` |
+
+**Before any browser interaction** (Web or Electron): invoke `/dnd` to load the
+drag-and-drop verification protocol. Ref-based `drag` reports false success on
+`dnd-kit` and similar libraries — load this preemptively, even when DnD is not
+yet known to be involved.
 
 ### Step 4: Enter Delegate Mode
 

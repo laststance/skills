@@ -28,17 +28,24 @@ mcp__pencil__get_variables()
 ```
 
 ### Implementation State (Platform-specific)
-```javascript
-// Electron (electron-playwright-cli — config-based auto-launch)
-electron-playwright-cli screenshot --filename=impl-screenshot.png
-electron-playwright-cli snapshot  // get page structure
 
-// Web
-const implScreenshot = mcp__claude-in-chrome__read_page(...)
+Before any browser interaction (Web or Electron), invoke `/dnd` to load the
+drag-and-drop verification protocol.
 
-// iOS
-const implScreenshot = mcp__ios-simulator__screenshot()
-const implStructure = mcp__ios-simulator__ui_describe_all()
+```bash
+# Electron (playwright-cli attached to Electron CDP port 9222)
+playwright-cli attach --cdp=http://localhost:9222
+playwright-cli --s=default screenshot --filename=impl-screenshot.png
+playwright-cli --s=default snapshot   # get page structure
+
+# Web (playwright-cli)
+playwright-cli open http://localhost:3000 --headed
+playwright-cli screenshot --filename=web-impl.png
+playwright-cli snapshot
+
+# iOS
+mcp__ios-simulator__screenshot()
+mcp__ios-simulator__ui_describe_all()
 ```
 
 ## Step 2: Visual Diff Analysis
@@ -147,7 +154,9 @@ Take new screenshots of both:
 mcp__pencil__get_screenshot({ nodeId: "targetFrame" })
 
 // Updated implementation
-electron-playwright-cli screenshot --filename=updated-impl.png  // or platform equivalent
+playwright-cli --s=default screenshot --filename=updated-impl.png  // Electron via CDP
+// or for Web:
+// playwright-cli screenshot --filename=updated-impl.png
 ```
 
 Compare visually to confirm sync achieved.

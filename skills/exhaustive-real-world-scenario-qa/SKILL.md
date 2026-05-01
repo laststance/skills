@@ -71,6 +71,10 @@ Options:
 
 ## Phase 0: Setup
 
+**Before any browser interaction**: invoke `/dnd` to load the drag-and-drop
+verification protocol. Required even when DnD is not yet known to be involved —
+ref-based `drag` returns false success on `dnd-kit` and similar libraries.
+
 1. **Parse arguments** — extract URL, spec source, loop count, tier, headed/headless flag
 2. **Clean tree check:**
    ```bash
