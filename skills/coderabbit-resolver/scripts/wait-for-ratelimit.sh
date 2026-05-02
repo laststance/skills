@@ -39,6 +39,18 @@ if [ -z "$LATEST_COMMENT" ]; then
   exit 1
 fi
 
+# Real CodeRabbit walkthrough comments include an informational footer
+#   <sub>Review rate limit: X/Y reviews remaining, refill in N minutes.</sub>
+# which the old naive `grep -qiE 'rate.?limit'` matched as if it were a
+# "we couldn't review" notice — leading to a 60-minute wait + redundant
+# `@coderabbitai full review` post when CodeRabbit had ALREADY reviewed.
+# Reject those comments first using the walkthrough marker as a positive
+# signal of a real review.
+if echo "$LATEST_COMMENT" | grep -qE '<!-- walkthrough_start -->|^## Walkthrough'; then
+  echo "  Latest CodeRabbit comment is a real review (walkthrough), not a rate-limit notice."
+  exit 1
+fi
+
 # Match rate limit patterns (case-insensitive)
 # Common CodeRabbit rate limit messages:
 #   "rate limit" / "rate-limited" / "rate limited"
@@ -55,28 +67,35 @@ echo "  Rate limit detected!"
 # Patterns: "X minutes", "X min", "X hours", "X seconds", "X sec"
 WAIT_SECONDS=0
 
-# Try to extract minutes
-MINUTES=$(echo "$LATEST_COMMENT" | grep -oiP '(\d+)\s*(?:minutes?|mins?)' | head -1 | grep -oP '\d+' || true)
+# Extract wait time using POSIX ERE so the script works on BSD/macOS grep too
+# (BSD grep does not support `-P` Perl regex). Pattern uses `[0-9]+` instead of
+# `\d+` and ERE alternation `(...)` instead of non-capturing `(?:...)`.
+#
+# CodeRabbit's rate-limit comment can include multiple numbers (e.g.
+# "wait 24 minutes and 22 seconds before requesting another review"), so we
+# add minutes + seconds together and treat hours separately as a max-unit
+# fallback for very long limits.
+
+# Minutes
+MINUTES=$(echo "$LATEST_COMMENT" | grep -oiE '[0-9]+ ?(minutes?|mins?)' | head -1 | grep -oE '[0-9]+' || true)
 if [ -n "$MINUTES" ]; then
   WAIT_SECONDS=$((MINUTES * 60))
   echo "  Detected wait time: ${MINUTES} minute(s)"
 fi
 
-# Try to extract hours (if no minutes found)
+# Seconds — added on top of minutes when the comment mentions both
+SECONDS_VAL=$(echo "$LATEST_COMMENT" | grep -oiE '[0-9]+ ?(seconds?|secs?)' | head -1 | grep -oE '[0-9]+' || true)
+if [ -n "$SECONDS_VAL" ]; then
+  WAIT_SECONDS=$((WAIT_SECONDS + SECONDS_VAL))
+  echo "  Detected additional wait time: ${SECONDS_VAL} second(s)"
+fi
+
+# Hours — used only if neither minutes nor seconds were found
 if [ "$WAIT_SECONDS" -eq 0 ]; then
-  HOURS=$(echo "$LATEST_COMMENT" | grep -oiP '(\d+)\s*(?:hours?|hrs?)' | head -1 | grep -oP '\d+' || true)
+  HOURS=$(echo "$LATEST_COMMENT" | grep -oiE '[0-9]+ ?(hours?|hrs?)' | head -1 | grep -oE '[0-9]+' || true)
   if [ -n "$HOURS" ]; then
     WAIT_SECONDS=$((HOURS * 3600))
     echo "  Detected wait time: ${HOURS} hour(s)"
-  fi
-fi
-
-# Try to extract seconds (if nothing else found)
-if [ "$WAIT_SECONDS" -eq 0 ]; then
-  SECONDS_VAL=$(echo "$LATEST_COMMENT" | grep -oiP '(\d+)\s*(?:seconds?|secs?)' | head -1 | grep -oP '\d+' || true)
-  if [ -n "$SECONDS_VAL" ]; then
-    WAIT_SECONDS=$SECONDS_VAL
-    echo "  Detected wait time: ${SECONDS_VAL} second(s)"
   fi
 fi
 

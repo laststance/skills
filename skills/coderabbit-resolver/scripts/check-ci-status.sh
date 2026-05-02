@@ -119,20 +119,32 @@ while [ "$ELAPSED" -lt "$MAX_WAIT" ]; do
 
     # The Checks API reports completed/success even when CodeRabbit is
     # rate-limited and only posted a warning comment instead of a real review.
-    # Inspect the latest CodeRabbit issue comment to disambiguate. If it
-    # matches a rate-limit pattern, treat the "success" as misleading and
-    # exit 3 so the caller can wait + re-trigger via wait-for-ratelimit.sh.
+    # Inspect the latest CodeRabbit issue comment to disambiguate.
+    #
+    # IMPORTANT: real walkthrough comments include an informational footer
+    #   <sub>Review rate limit: X/Y reviews remaining, refill in N minutes.</sub>
+    # which is a STATUS report, not a "we couldn't review" notice. The old
+    # naive `grep -qiE 'rate.?limit'` matched that footer and produced
+    # false-positive exit 3 even when CodeRabbit had genuinely reviewed
+    # (just used its last credit). Resolve by checking for the walkthrough
+    # marker first — if present, the comment IS a real review regardless
+    # of any rate-limit text in its footer.
     echo ""
     echo "Verifying CodeRabbit's success is a real review (not a rate-limit response)..."
     LATEST_CR_COMMENT=$(gh api "repos/$OWNER/$REPO/issues/$PR_NUMBER/comments?per_page=10&sort=created&direction=desc" \
       --jq '[.[] | select(.user.login == "coderabbitai" or .user.login == "coderabbitai[bot]") | .body] | .[0] // empty' 2>/dev/null || true)
 
-    if [ -n "$LATEST_CR_COMMENT" ] && echo "$LATEST_CR_COMMENT" | grep -qiE 'rate.?limit'; then
-      echo "  Latest CodeRabbit comment is a rate-limit notice — no real review ran."
-      echo "  Caller must run wait-for-ratelimit.sh and retry."
-      exit 3
+    if [ -n "$LATEST_CR_COMMENT" ]; then
+      if echo "$LATEST_CR_COMMENT" | grep -qE '<!-- walkthrough_start -->|^## Walkthrough'; then
+        echo "  Confirmed: latest CodeRabbit comment contains walkthrough markers — real review ran."
+      elif echo "$LATEST_CR_COMMENT" | grep -qiE 'rate.?limit'; then
+        echo "  Latest CodeRabbit comment is a rate-limit notice — no real review ran."
+        echo "  Caller must run wait-for-ratelimit.sh and retry."
+        exit 3
+      else
+        echo "  Confirmed: latest CodeRabbit comment is not a rate-limit notice."
+      fi
     fi
-    echo "  Confirmed: latest CodeRabbit comment is not a rate-limit notice."
 
     # Return success if no failures
     FAILURES=$(echo "$ALL_CHECKS" | grep -c '|failure$' || true)
