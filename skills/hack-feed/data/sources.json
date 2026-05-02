@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "tier1_autopass": {
+    "description": "一次情報。keyword 判定せず常に通過",
+    "github_repos": [
+      "facebook/react",
+      "vercel/next.js",
+      "tc39/proposals",
+      "oven-sh/bun",
+      "nodejs/node",
+      "tc39/ecma262",
+      "WebKit/standards-positions",
+      "whatwg/html"
+    ],
+    "rss_feeds": [
+      "https://v8.dev/blog.atom",
+      "https://bun.sh/rss.xml",
+      "https://webkit.org/feed/"
+    ]
+  },
+  "tier2_filter": {
+    "description": "keyword 判定通過時に採用",
+    "hacker_news": {
+      "api_url": "https://hn.algolia.com/api/v1/search_by_date",
+      "tags": ["story", "front_page"],
+      "top_n": 30
+    },
+    "exa_queries": [
+      "React internals deep dive last 24h",
+      "Next.js canary architecture changes",
+      "TC39 proposal advancing last 24h",
+      "V8 blog JavaScript engine optimization",
+      "JavaScript compiler transpiler news"
+    ]
+  },
+  "tier3_reject": {
+    "description": "URL にこれらが含まれていたら無条件 reject",
+    "domains_blocklist": [
+      "medium.com/freecodecamp",
+      "dev.to/tutorial",
+      "section.io/engineering-education"
+    ]
+  }
+}

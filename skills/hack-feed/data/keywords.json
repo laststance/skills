@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "positive": {
+    "tier_a": {
+      "weight": 10,
+      "words": [
+        "internals", "RFC", "proposal", "bytecode", "scheduler",
+        "fiber", "JIT", "V8", "SpiderMonkey", "JavaScriptCore",
+        "memory model", "AST", "transpilation", "compiler",
+        "reconciler", "hydration", "partial prerendering",
+        "TC39", "WICG", "stage 3", "stage 4",
+        "React Server Components", "Suspense", "use() hook",
+        "Turbopack", "SWC", "React Forget", "React Compiler",
+        "realm", "reified", "tail call", "temporal dead zone"
+      ]
+    },
+    "tier_b": {
+      "weight": 5,
+      "words": [
+        "performance", "optimization", "benchmark", "deep dive",
+        "architecture", "design decision", "trade-off",
+        "algorithm", "data structure", "caching",
+        "concurrent", "parallel", "async", "race condition"
+      ]
+    }
+  },
+  "negative": {
+    "weight": -15,
+    "words": [
+      "top 10", "beginner", "tutorial", "getting started",
+      "hello world", "my first", "announcing our new course",
+      "build a blog", "build a todo", "quick start",
+      "you should know", "things every developer",
+      "why you should switch"
+    ]
+  },
+  "pass_threshold": 5
+}
