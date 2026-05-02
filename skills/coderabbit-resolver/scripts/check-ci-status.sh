@@ -12,8 +12,14 @@
 #          - all checks on HEAD are completed
 #          - no failing checks exist
 #          - at least one CodeRabbit check exists on HEAD and is completed+success
+#          - the latest CodeRabbit issue comment is NOT a rate-limit notice
 #          Exit 1 for failed checks (including failed/non-success CodeRabbit)
 #          Exit 2 on timeout
+#          Exit 3 when CodeRabbit reported success via the Checks API but the
+#                 latest issue comment is a rate-limit warning. The Checks API
+#                 returns completed/success for rate-limited responses too —
+#                 only the comment body distinguishes a real review from a
+#                 rate-limit notice. Caller should run wait-for-ratelimit.sh.
 
 set -euo pipefail
 
@@ -110,6 +116,23 @@ while [ "$ELAPSED" -lt "$MAX_WAIT" ]; do
       echo "CodeRabbit review is not in completed+success state yet."
       exit 1
     fi
+
+    # The Checks API reports completed/success even when CodeRabbit is
+    # rate-limited and only posted a warning comment instead of a real review.
+    # Inspect the latest CodeRabbit issue comment to disambiguate. If it
+    # matches a rate-limit pattern, treat the "success" as misleading and
+    # exit 3 so the caller can wait + re-trigger via wait-for-ratelimit.sh.
+    echo ""
+    echo "Verifying CodeRabbit's success is a real review (not a rate-limit response)..."
+    LATEST_CR_COMMENT=$(gh api "repos/$OWNER/$REPO/issues/$PR_NUMBER/comments?per_page=10&sort=created&direction=desc" \
+      --jq '[.[] | select(.user.login == "coderabbitai" or .user.login == "coderabbitai[bot]") | .body] | .[0] // empty' 2>/dev/null || true)
+
+    if [ -n "$LATEST_CR_COMMENT" ] && echo "$LATEST_CR_COMMENT" | grep -qiE 'rate.?limit'; then
+      echo "  Latest CodeRabbit comment is a rate-limit notice — no real review ran."
+      echo "  Caller must run wait-for-ratelimit.sh and retry."
+      exit 3
+    fi
+    echo "  Confirmed: latest CodeRabbit comment is not a rate-limit notice."
 
     # Return success if no failures
     FAILURES=$(echo "$ALL_CHECKS" | grep -c '|failure$' || true)

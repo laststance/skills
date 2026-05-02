@@ -29,9 +29,15 @@ Run `pnpm validate` (or project-specific validation) before every commit. Never 
 
 Only merge when ALL conditions are met: CI green, no unresolved threads, and CodeRabbit check is `completed` + `success` on the current HEAD commit. After merge, delete remote branch and prune local.
 
-### Principle 5: Rate Limit Handling
+### Principle 5: Rate Limit Handling — Comment-First, API-Status Second
 
-CodeRabbit may hit API rate limits and post a comment instead of reviewing. When detected, the workflow automatically waits for the rate limit to expire (+ 30s buffer), then posts `@coderabbitai full review` to trigger a complete re-review. Max 3 rate limit retries per PR to prevent infinite loops.
+CodeRabbit may hit API rate limits and post a rate-limit warning comment **instead of** running a real review. Critically, the GitHub Checks API still reports `completed/success` for that case — there's no API-only signal to distinguish a real review from a rate-limit response. **Trusting the Checks API alone leads to merging unreviewed PRs.**
+
+Therefore: every "CodeRabbit success" must be cross-validated against the latest CodeRabbit issue comment. If the latest comment matches a rate-limit pattern (e.g. "Rate limit exceeded", "wait X minutes before requesting another review"), the run is rate-limited regardless of API status.
+
+`check-ci-status.sh` performs this comment-content check internally and returns **exit 3** when a rate-limit notice is detected. The workflow's Step 6a treats exit 3 as "go to rate-limit handling," and Step 8 (Final Verification) treats exit 3 as "do not merge." This makes the rate-limit gate impossible to skip.
+
+When detected, the workflow waits for the rate-limit window to expire (+ 30s buffer), then posts `@coderabbitai full review` to trigger a complete re-review. Max 3 rate-limit retries per PR to prevent infinite loops.
 
 ### Principle 6: Long Waits Use ScheduleWakeup, Not sleep
 

@@ -125,24 +125,34 @@ Or resolve manually with the GraphQL mutation for each thread ID.
 
 ## Step 6: Wait for CI and CodeRabbit Re-review
 
-### 6a. Wait for CodeRabbit Review (HEAD-gated)
+### 6a. Wait for CodeRabbit Review (HEAD-gated, rate-limit aware)
 
-Use the script — it polls internally with bounded iterations:
+Use the script — it polls CI checks AND inspects the latest CodeRabbit issue comment internally:
 
 ```bash
 bash ~/.claude/skills/coderabbit-resolver/scripts/check-ci-status.sh $OWNER $REPO $PR_NUMBER
+EXIT_CODE=$?
 ```
 
-Treat this script as a hard merge gate. It must confirm all of the following on `HEAD_SHA`:
+Treat this script as a hard merge gate. On exit 0, it has confirmed all of the following on `HEAD_SHA`:
 - At least one CodeRabbit check run exists
 - CodeRabbit check run is `completed` with `success`
+- The latest CodeRabbit issue comment is **not** a rate-limit notice
 - No failing checks remain
+
+**Why the comment check matters:** The GitHub Checks API returns `completed/success` even when CodeRabbit was rate-limited and only posted a rate-limit warning comment instead of a real review. The script disambiguates by reading the latest CodeRabbit issue comment — if it matches a rate-limit pattern, the script returns exit 3 (NOT 0). **Never trust API success alone.**
+
+**Exit code handling:**
+- **Exit 0** — All conditions met (real CodeRabbit review, no failures). Continue to Step 6c.
+- **Exit 1** — CI failure or CodeRabbit non-success. Go to Step 6e.
+- **Exit 2** — Timeout. Report to user.
+- **Exit 3** — Rate limit detected (Checks API said success, but latest CodeRabbit comment is a rate-limit notice). **Go to Step 6b.**
 
 **DO NOT** write a top-level `for i in seq ...; do ...; sleep 10; done` polling loop as a Bash command. Claude Code's Bash policy blocks long leading `sleep` and chained sleeps. The script wraps its `sleep` calls so the entire poll runs as a single Bash invocation — that's the only safe form here. If you need to wait without a script, see Step 6d below.
 
-### 6b. Check for Rate Limit and Trigger Full Review
+### 6b. Handle Rate Limit (Exit 3 from Step 6a)
 
-After CodeRabbit's check run completes, check whether CodeRabbit posted a rate limit comment instead of an actual review. Run:
+Run wait-for-ratelimit.sh to wait for the rate-limit window to expire and re-trigger CodeRabbit:
 
 ```bash
 bash ~/.claude/skills/coderabbit-resolver/scripts/wait-for-ratelimit.sh $OWNER $REPO $PR_NUMBER
@@ -150,7 +160,7 @@ bash ~/.claude/skills/coderabbit-resolver/scripts/wait-for-ratelimit.sh $OWNER $
 
 **Exit code handling:**
 - **Exit 0** — Rate limit was detected. The script waited for expiry and posted `@coderabbitai full review`. **Go back to Step 6a** to wait for the new review to complete.
-- **Exit 1** — No rate limit found. Continue to Step 6c (normal flow).
+- **Exit 1** — No rate limit found in latest comment (defensive case — Step 6a already returned 3, so this should be rare; possible if CodeRabbit posted a follow-up review since 6a checked).
 - **Exit 2** — Error occurred. Report to user.
 
 **IMPORTANT:** Max rate limit retry: **3 times**. If CodeRabbit is still rate-limited after 3 cycles, report to user and ask for guidance (single PR mode) or mark as SKIPPED (bulk mode).
@@ -232,14 +242,16 @@ echo "Unresolved threads: $UNRESOLVED"
 # 2. All CI checks passing
 gh pr checks $PR_NUMBER
 
-# 3. CodeRabbit completed+success on HEAD (hard gate)
+# 3. CodeRabbit completed+success on HEAD AND latest comment is a real review (not rate-limit)
+#    The script returns exit 0 ONLY when both API status AND comment content are clean.
+#    Exit 3 here means rate-limit — DO NOT MERGE; loop back to Step 6b.
 bash ~/.claude/skills/coderabbit-resolver/scripts/check-ci-status.sh $OWNER $REPO $PR_NUMBER 180
 
 # 4. PR is mergeable
 gh pr view $PR_NUMBER --json mergeable,mergeStateStatus
 ```
 
-**ALL four must be satisfied before merging.**
+**ALL four must be satisfied before merging.** A non-zero exit from check-ci-status.sh blocks the merge — exit 3 in particular means CodeRabbit never actually reviewed (rate-limit), even though the GitHub Checks API reports success.
 
 ## Step 9: Merge
 
