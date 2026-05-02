@@ -48,6 +48,7 @@ npx skills add laststance/skills --skill qa-tui
 npx skills add laststance/skills --skill save
 npx skills add laststance/skills --skill skill-inspect
 npx skills add laststance/skills --skill sync-pencil
+npx skills add laststance/skills --skill syncing-docs-and-memory
 npx skills add laststance/skills --skill task
 npx skills add laststance/skills --skill troubleshoot
 npx skills add laststance/skills --skill ux-gap-detector
@@ -93,6 +94,7 @@ npx skills add laststance/skills --skill x-agents-cross-review
 | [save](skills/save/) | Save session context to Serena MCP memory for cross-session persistence. Analyzes accomplishments, persists learnings, and creates session checkpoints. | [Serena MCP](https://github.com/oraios/serena) **(required)** |
 | [skill-inspect](skills/skill-inspect/) | Read-only diagnostic. Resolves any name across the skill ecosystem (skills, plugins, agents, MCP servers, legacy commands) and displays a structured info card with provenance, metadata, and cross-tool availability across `~/.claude`, `~/.cursor`, `~/.codex`, `~/.gemini`, `~/.vscode`, `~/.antigravity`. | — |
 | [sync-pencil](skills/sync-pencil/) | Bidirectional sync between `.pen` design files and implementation code. Supports Electron, Web, and iOS Simulator. Use when updating designs from code, generating code from designs, or resolving drift. | Pencil MCP **(required)**, `playwright-cli` (Web + Electron via CDP) / [iOS Simulator MCP](https://github.com/nichochar/ios-simulator-mcp) (iOS) |
+| [syncing-docs-and-memory](skills/syncing-docs-and-memory/) | Bidirectional sync between project docs (README/AGENTS.md/CLAUDE.md/SPEC.md/etc.) and memory systems. Serena MCP automatic; gstack-learnings, gbrain, Notion/Obsidian/Inkdrop opt-in via speech. Scale-aware (Small/Medium/Large), AskUserQuestion-gated risky edits, and observed-truth memory write-back. | [Serena MCP](https://github.com/oraios/serena) (recommended), [GitHub CLI](https://cli.github.com/) (recommended) |
 | [task](skills/task/) | Standard implementation workflow with systematic 5-phase cycle: Investigate → Plan → Implement → Verify → Complete. Integrates quality gates and introspection markers. | [Serena MCP](https://github.com/oraios/serena) **(required)**, [Context7](https://github.com/upstash/context7) (recommended) |
 | [troubleshoot](skills/troubleshoot/) | Diagnose and fix issues in code, builds, deployments, and system behavior. Hypothesis-driven 6-phase debugging with evidence-based verification and `--frontend-verify` support. | [Serena MCP](https://github.com/oraios/serena) **(required)**, [Context7](https://github.com/upstash/context7) (recommended) |
 | [ux-gap-detector](skills/ux-gap-detector/) | Detects UI/UX quality gaps in authenticated SaaS web apps via `playwright-cli`. Crawls app interior, captures screenshots, scores across 4 dimensions (Typography & Spacing, Interactive States, Content Hierarchy, Loading & Error UX), and generates an actionable Markdown gap report. Optionally creates GitHub Issues. | `playwright-cli` **(required)**, [Serena MCP](https://github.com/oraios/serena) (recommended) |
@@ -149,6 +151,7 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /save                               # Save session context to Serena MCP
 /skill-inspect mentor               # Display info card for any skill/agent/MCP server
 /sync-pencil                        # Sync .pen design ↔ code
+/syncing-docs-and-memory            # Sync project docs and memory systems with current branch state
 /task fix the login button          # Systematic implementation workflow
 /troubleshoot "build failing"       # Hypothesis-driven debugging
 /ux-gap-detector                    # Detect UX gaps in authenticated SaaS web app
