@@ -131,13 +131,12 @@ Visual verification across platforms. Auto-detect platform from `package.json`:
 | `expo` / `react-native` | Mobile | `mcp__ios-simulator__open_simulator` | iOS Simulator MCP (`screenshot`, `ui_tap`, `ui_swipe`) |
 | `commander` / `inquirer` / `oclif` | CLI | shell session | Shellwright MCP (TUI/CLI operation and output verification) |
 
-**Before any browser interaction**: invoke `/dnd` to load the drag-and-drop verification protocol. Ref-based `drag` reports false success on `dnd-kit` and similar libraries — load this preemptively for Web and Electron flows.
-
 **Frontend Verify Workflow:**
 
-1. **Preflight**: Start dev server / app, confirm MCP connection
-2. **Before screenshot**: Take screenshot of the broken state (if reproducible in UI)
-3. **After fix screenshot**: Take screenshot of the corrected state
+0. **Pre-flight knowledge**: invoke `/dnd` to load the drag-and-drop coordinate protocol. Ref-based `drag` reports false success on `dnd-kit` and similar libraries — required before any Web or Electron interaction.
+1. **Preflight**: `kill-port <port> && pnpm dev`, confirm `playwright-cli` is available (Web direct; Electron via `playwright-cli attach --cdp=http://localhost:9222`)
+2. **Before screenshot**: Use `playwright-cli` to capture the broken state (if reproducible in UI)
+3. **After fix screenshot**: Use `playwright-cli` to capture the corrected state
 4. **Compare**: Present before/after to user for confirmation
 5. **Judge**: All pass → continue. Any fail → return to Phase 4
 
