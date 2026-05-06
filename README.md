@@ -46,6 +46,7 @@ npx skills add laststance/skills --skill qa-react-native
 npx skills add laststance/skills --skill qa-team
 npx skills add laststance/skills --skill qa-tui
 npx skills add laststance/skills --skill save
+npx skills add laststance/skills --skill search-first
 npx skills add laststance/skills --skill skill-inspect
 npx skills add laststance/skills --skill sync-pencil
 npx skills add laststance/skills --skill syncing-docs-and-memory
@@ -92,6 +93,7 @@ npx skills add laststance/skills --skill x-agents-cross-review
 | [qa-team](skills/qa-team/) | Launch comprehensive QA Agent Team for post-implementation verification. Tests 5 perspectives in parallel: Visual Integrity, Functional Correctness, Apple HIG, Edge Cases, and UX Sensibility. | [Serena MCP](https://github.com/oraios/serena) (recommended), platform-dependent MCP (see below) |
 | [qa-tui](skills/qa-tui/) | Systematic black-box QA for TUI apps (htop, vim, lazygit, tmux, k9s, etc.) running in a shellwright PTY session. Bug reports with screenshots, key-sequence repros, and terminal-compatibility findings. Report-only — does not modify the tool. | [Shellwright MCP](https://github.com/aorwall/shellwright) **(required)** |
 | [save](skills/save/) | Save session context to Serena MCP memory for cross-session persistence. Analyzes accomplishments, persists learnings, and creates session checkpoints. | [Serena MCP](https://github.com/oraios/serena) **(required)** |
+| [search-first](skills/search-first/) | Research-before-coding workflow. Search for existing tools, libraries, and patterns (repo, npm/PyPI, MCP servers, skills, GitHub) before writing custom code. Adopt → Extend → Compose → Build decision matrix. | — |
 | [skill-inspect](skills/skill-inspect/) | Read-only diagnostic. Resolves any name across the skill ecosystem (skills, plugins, agents, MCP servers, legacy commands) and displays a structured info card with provenance, metadata, and cross-tool availability across `~/.claude`, `~/.cursor`, `~/.codex`, `~/.gemini`, `~/.vscode`, `~/.antigravity`. | — |
 | [sync-pencil](skills/sync-pencil/) | Bidirectional sync between `.pen` design files and implementation code. Supports Electron, Web, and iOS Simulator. Use when updating designs from code, generating code from designs, or resolving drift. | Pencil MCP **(required)**, `playwright-cli` (Web + Electron via CDP) / [iOS Simulator MCP](https://github.com/nichochar/ios-simulator-mcp) (iOS) |
 | [syncing-docs-and-memory](skills/syncing-docs-and-memory/) | Bidirectional sync between project docs (README/AGENTS.md/CLAUDE.md/SPEC.md/etc.) and memory systems. Serena MCP automatic; gstack-learnings, gbrain, Notion/Obsidian/Inkdrop opt-in via speech. Scale-aware (Small/Medium/Large), AskUserQuestion-gated risky edits, and observed-truth memory write-back. | [Serena MCP](https://github.com/oraios/serena) (recommended), [GitHub CLI](https://cli.github.com/) (recommended) |
@@ -149,6 +151,7 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /qa-team                            # Launch QA verification team
 /qa-tui lazygit                     # QA test a TUI app via shellwright
 /save                               # Save session context to Serena MCP
+/search-first add dead link checker # Research existing tools before writing custom code
 /skill-inspect mentor               # Display info card for any skill/agent/MCP server
 /sync-pencil                        # Sync .pen design ↔ code
 /syncing-docs-and-memory            # Sync project docs and memory systems with current branch state
