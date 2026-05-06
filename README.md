@@ -52,6 +52,7 @@ npx skills add laststance/skills --skill sync-pencil
 npx skills add laststance/skills --skill syncing-docs-and-memory
 npx skills add laststance/skills --skill task
 npx skills add laststance/skills --skill troubleshoot
+npx skills add laststance/skills --skill ts-pattern-refactor
 npx skills add laststance/skills --skill ux-gap-detector
 npx skills add laststance/skills --skill x-agents-cross-review
 ```
@@ -99,6 +100,7 @@ npx skills add laststance/skills --skill x-agents-cross-review
 | [syncing-docs-and-memory](skills/syncing-docs-and-memory/) | Bidirectional sync between project docs (README/AGENTS.md/CLAUDE.md/SPEC.md/etc.) and memory systems. Serena MCP automatic; gstack-learnings, gbrain, Notion/Obsidian/Inkdrop opt-in via speech. Scale-aware (Small/Medium/Large), AskUserQuestion-gated risky edits, and observed-truth memory write-back. | [Serena MCP](https://github.com/oraios/serena) (recommended), [GitHub CLI](https://cli.github.com/) (recommended) |
 | [task](skills/task/) | Standard implementation workflow with systematic 5-phase cycle: Investigate → Plan → Implement → Verify → Complete. Integrates quality gates and introspection markers. | [Serena MCP](https://github.com/oraios/serena) **(required)**, [Context7](https://github.com/upstash/context7) (recommended) |
 | [troubleshoot](skills/troubleshoot/) | Diagnose and fix issues in code, builds, deployments, and system behavior. Hypothesis-driven 6-phase debugging with evidence-based verification and `--frontend-verify` support. | [Serena MCP](https://github.com/oraios/serena) **(required)**, [Context7](https://github.com/upstash/context7) (recommended) |
+| [ts-pattern-refactor](skills/ts-pattern-refactor/) | Detect and refactor conditional code to ts-pattern's `match().with().exhaustive()`. Refactors JSX branching, chained ternaries, and discriminated-union dispatch — but deliberately leaves plain single-condition if-chains alone. Codifies syntactic-form × context judgment criteria. | [ts-pattern](https://github.com/gvergnaud/ts-pattern) **(required)**, [Context7](https://github.com/upstash/context7) (recommended), [Serena MCP](https://github.com/oraios/serena) (recommended) |
 | [ux-gap-detector](skills/ux-gap-detector/) | Detects UI/UX quality gaps in authenticated SaaS web apps via `playwright-cli`. Crawls app interior, captures screenshots, scores across 4 dimensions (Typography & Spacing, Interactive States, Content Hierarchy, Loading & Error UX), and generates an actionable Markdown gap report. Optionally creates GitHub Issues. | `playwright-cli` **(required)**, [Serena MCP](https://github.com/oraios/serena) (recommended) |
 | [x-agents-cross-review](skills/x-agents-cross-review/) | Multi-agent parallel cross-review. Launches X agents in parallel (Opus, full tool access) to independently review the same scope from different perspectives (baseline, devil's advocate, type safety, security, etc.), then consolidates findings into a unified consensus report. | [Serena MCP](https://github.com/oraios/serena) (recommended), [Context7](https://github.com/upstash/context7) (recommended) |
 
@@ -157,6 +159,7 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /syncing-docs-and-memory            # Sync project docs and memory systems with current branch state
 /task fix the login button          # Systematic implementation workflow
 /troubleshoot "build failing"       # Hypothesis-driven debugging
+/ts-pattern-refactor                # Sweep codebase for ts-pattern refactor opportunities
 /ux-gap-detector                    # Detect UX gaps in authenticated SaaS web app
 /x-agents-cross-review              # Multi-agent parallel review of code/specs/PRs
 ```
