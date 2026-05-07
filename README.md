@@ -48,7 +48,6 @@ npx skills add laststance/skills --skill qa-tui
 npx skills add laststance/skills --skill save
 npx skills add laststance/skills --skill search-first
 npx skills add laststance/skills --skill skill-inspect
-npx skills add laststance/skills --skill strip-skill-descriptions
 npx skills add laststance/skills --skill sync-pencil
 npx skills add laststance/skills --skill syncing-docs-and-memory
 npx skills add laststance/skills --skill task
@@ -97,7 +96,6 @@ npx skills add laststance/skills --skill x-agents-cross-review
 | [save](skills/save/) | Save session context to Serena MCP memory for cross-session persistence. Analyzes accomplishments, persists learnings, and creates session checkpoints. | [Serena MCP](https://github.com/oraios/serena) **(required)** |
 | [search-first](skills/search-first/) | Research-before-coding workflow. Search for existing tools, libraries, and patterns (repo, npm/PyPI, MCP servers, skills, GitHub) before writing custom code. Adopt → Extend → Compose → Build decision matrix. | — |
 | [skill-inspect](skills/skill-inspect/) | Read-only diagnostic. Resolves any name across the skill ecosystem (skills, plugins, agents, MCP servers, legacy commands) and displays a structured info card with provenance, metadata, and cross-tool availability across `~/.claude`, `~/.cursor`, `~/.codex`, `~/.gemini`, `~/.vscode`, `~/.antigravity`. | — |
-| [strip-skill-descriptions](skills/strip-skill-descriptions/) | Empties the `description:` field in every `SKILL.md` to reclaim always-loaded preamble context. Resolves symlinks across all skill storage tiers, dedupes by absolute path, and dispatches 4 parallel subagents that handle all 4 YAML format variants (single-line, quoted, literal `\|`, folded `>`). Final `awk` verification pass. | — |
 | [sync-pencil](skills/sync-pencil/) | Bidirectional sync between `.pen` design files and implementation code. Supports Electron, Web, and iOS Simulator. Use when updating designs from code, generating code from designs, or resolving drift. | Pencil MCP **(required)**, `playwright-cli` (Web + Electron via CDP) / [iOS Simulator MCP](https://github.com/nichochar/ios-simulator-mcp) (iOS) |
 | [syncing-docs-and-memory](skills/syncing-docs-and-memory/) | Bidirectional sync between project docs (README/AGENTS.md/CLAUDE.md/SPEC.md/etc.) and memory systems. Serena MCP automatic; gstack-learnings, gbrain, Notion/Obsidian/Inkdrop opt-in via speech. Scale-aware (Small/Medium/Large), AskUserQuestion-gated risky edits, and observed-truth memory write-back. | [Serena MCP](https://github.com/oraios/serena) (recommended), [GitHub CLI](https://cli.github.com/) (recommended) |
 | [task](skills/task/) | Standard implementation workflow with systematic 5-phase cycle: Investigate → Plan → Implement → Verify → Complete. Integrates quality gates and introspection markers. | [Serena MCP](https://github.com/oraios/serena) **(required)**, [Context7](https://github.com/upstash/context7) (recommended) |
@@ -157,7 +155,6 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /save                               # Save session context to Serena MCP
 /search-first add dead link checker # Research existing tools before writing custom code
 /skill-inspect mentor               # Display info card for any skill/agent/MCP server
-/strip-skill-descriptions           # Empty every SKILL.md description to reclaim preamble context
 /sync-pencil                        # Sync .pen design ↔ code
 /syncing-docs-and-memory            # Sync project docs and memory systems with current branch state
 /task fix the login button          # Systematic implementation workflow
