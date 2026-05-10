@@ -21,6 +21,7 @@ npx skills add laststance/skills --skill code-trace
 npx skills add laststance/skills --skill colorful-type
 npx skills add laststance/skills --skill coderabbit-resolver
 npx skills add laststance/skills --skill create-hook
+npx skills add laststance/skills --skill create-worktree
 npx skills add laststance/skills --skill design
 npx skills add laststance/skills --skill deep-trace
 npx skills add laststance/skills --skill dnd
@@ -34,6 +35,7 @@ npx skills add laststance/skills --skill hack-feed
 npx skills add laststance/skills --skill issue
 npx skills add laststance/skills --skill laststance-publish-skill
 npx skills add laststance/skills --skill load
+npx skills add laststance/skills --skill locate-ui-from-code
 npx skills add laststance/skills --skill lunch
 npx skills add laststance/skills --skill mentor
 npx skills add laststance/skills --skill newsletter-digest
@@ -69,6 +71,7 @@ npx skills add laststance/skills --skill x-agents-cross-review
 | [colorful-type](skills/colorful-type/) | Replace colorless primitives (`string`, `number`, `boolean`) with domain-rich types. Adds branded types, JSDoc, and named type aliases to communicate intent. | — |
 | [coderabbit-resolver](skills/coderabbit-resolver/) | Automates the full CodeRabbit PR review cycle — fix comments, resolve threads, pass CI, merge, and clean up. Supports `--bulk` for all open PRs. | — |
 | [create-hook](skills/create-hook/) | Creates, debugs, and extends Claude Code hooks. Builds reliable hooks that survive real-world event firing — covers SessionStart, PostCompact, PreToolUse, PostToolUse, UserPromptSubmit, Stop, and Notification handlers, `additionalContext` injection, and tool gating. | — |
+| [create-worktree](skills/create-worktree/) | Creates a git worktree as a sibling directory to the current project (e.g., `../project-feat-x`), copies `.gitignore`d config files (`.env`, `.env.local`, etc.) while skipping heavy build/dependency directories (`node_modules`, `.next`, `dist`, `build`, `coverage`), then navigates into the new worktree. | — |
 | [design](skills/design/) | Architecture-driven plan creation with 5-phase pipeline: Research → Architecture → 3-reviewer loop (max 5 rounds) → Final Review → Plan Output. "Weakest LLM Proof" principle ensures plans are executable by any AI agent. | [Serena MCP](https://github.com/oraios/serena) (recommended), [Context7](https://github.com/upstash/context7) (recommended), [Perplexity MCP](https://github.com/ppl-ai/modelcontextprotocol) (recommended) |
 | [deep-trace](skills/deep-trace/) | Line-by-line execution path tracer for PR diffs, git diffs, or specified code sections. Maps every line to its screen/URL, data flow, and execution context like a debugger's step-through. | [Serena MCP](https://github.com/oraios/serena) (recommended) |
 | [dnd](skills/dnd/) | Browser drag-and-drop QA via coordinate-based pointer ops. Knowledge-injection skill loaded by browser-using skills (`task`, `troubleshoot`, `qa-team`, `qa-electron`, `ux-gap-detector`, `exhaustive-real-world-scenario-qa`, `sync-pencil`, `bulk-issues`) before any browser interaction — ref-based `drag` returns false success on `dnd-kit` and similar libraries. | `playwright-cli` (recommended) |
@@ -82,6 +85,7 @@ npx skills add laststance/skills --skill x-agents-cross-review
 | [issue](skills/issue/) | Creates issues on the project's tracker (GitHub Issues or Linear) and lists open issues. Auto-detects which tracker the project uses; feature requests follow a strict non-engineer-voice template. | — |
 | [laststance-publish-skill](skills/laststance-publish-skill/) | Publishes a stable skill to the laststance/skills GitHub registry for distribution via `npx skills add`. Updates README install commands, skills table, and usage examples in alphabetical order. | — |
 | [load](skills/load/) | Load project context from Serena MCP memory for session initialization. Discovers memories, reads project overview, and validates context sufficiency. | [Serena MCP](https://github.com/oraios/serena) **(required)** |
+| [locate-ui-from-code](skills/locate-ui-from-code/) | Bridge code → screen by capturing a screenshot + DOM dump (outerHTML / computed styles / bounding box / a11y attributes) of the rendered UI element corresponding to a code component, selector, role, or text. Tool-agnostic — works in Claude Code, Cursor, and Codex via `playwright-cli`; uses chrome-devtools MCP when available. | `playwright-cli` **(required)**, chrome-devtools MCP (recommended) |
 | [lunch](skills/lunch/) | Relaxed mealtime conversation companion. Claude declares a food choice with trivia, then chats about any topic in a casual tone. | — |
 | [mentor](skills/mentor/) | Interactive code mentoring with pseudo-Plan mode. AI analyzes, designs, and presents a visual blueprint — human approves then writes code with AI guidance. | — |
 | [newsletter-digest](skills/newsletter-digest/) | Summarizes tech newsletter emails from Gmail with 5x detail depth, structured analysis, and technical context. Adapts to each newsletter's section structure and enriches main articles with library docs and web context. | Gmail MCP **(required)**, sequential-thinking MCP (recommended), [Context7](https://github.com/upstash/context7) (recommended), [Exa MCP](https://github.com/exa-labs/exa-mcp-server) (recommended) |
@@ -127,6 +131,7 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /colorful-type                       # Replace primitives with domain types
 /coderabbit-resolver 17             # Process PR #17
 /create-hook                        # Build/debug Claude Code hooks
+/create-worktree feat/new-thing     # Create git worktree at ../project-feat-new-thing
 /design user authentication system   # Create detailed implementation plan
 /deep-trace 42                      # Trace PR #42 line-by-line
 /dnd                                # Load drag-and-drop coordinate-based verification protocol
@@ -141,6 +146,7 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /issue <description>                # Create issue on GitHub or Linear (auto-detects)
 /laststance-publish-skill           # Publish a stable skill to laststance/skills
 /load                               # Load session context from Serena MCP
+/locate-ui-from-code FolderHeader   # Bridge code → screen with screenshot + DOM dump
 /lunch                              # Casual mealtime chat companion
 /mentor                             # Interactive code mentoring
 /newsletter-digest JS Weekly        # Summarize tech newsletter from Gmail with 5x detail
