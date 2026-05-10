@@ -14,6 +14,7 @@ Install a specific skill:
 
 ```bash
 npx skills add laststance/skills --skill analyze-app
+npx skills add laststance/skills --skill auto
 npx skills add laststance/skills --skill bulk-issues
 npx skills add laststance/skills --skill claude-code-plugin-hacker
 npx skills add laststance/skills --skill code-trace
@@ -29,7 +30,6 @@ npx skills add laststance/skills --skill exhaustive-real-world-scenario-qa
 npx skills add laststance/skills --skill explain
 npx skills add laststance/skills --skill gif-analyzer
 npx skills add laststance/skills --skill git
-npx skills add laststance/skills --skill goal
 npx skills add laststance/skills --skill hack-feed
 npx skills add laststance/skills --skill issue
 npx skills add laststance/skills --skill laststance-publish-skill
@@ -62,6 +62,7 @@ npx skills add laststance/skills --skill x-agents-cross-review
 | Skill | Description | Dependencies |
 |-------|-------------|--------------|
 | [analyze-app](skills/analyze-app/) | Analyze macOS .app bundles to identify technology stacks (Electron, Flutter, Qt, SwiftUI, native, etc.) by delegating to a specialized subagent. | — |
+| [auto](skills/auto/) | Pursuit-mode autonomy: pursue a single strongly-desired objective to verifiable completion. Auto-derives 3-5 success criteria, suppresses sub-skill interruptions (auto-selects recommended options), logs concerns to GitHub/Linear instead of blocking on the user, and runs an adversarial review gate before declaring achievement. | [GitHub CLI](https://cli.github.com/) (recommended), [Linear MCP](https://linear.app/docs/mcp) (recommended) |
 | [bulk-issues](skills/bulk-issues/) | Resolves all open GitHub Issues in bulk on a single feature branch, then creates a PR and runs a CodeRabbit review loop until merged. Each issue follows the full `/task` 5-phase cycle with mandatory frontend verification, E2E, and unit tests. | [GitHub CLI](https://cli.github.com/) **(required)**, [Serena MCP](https://github.com/oraios/serena) (recommended), [Context7](https://github.com/upstash/context7) (recommended) |
 | [claude-code-plugin-hacker](skills/claude-code-plugin-hacker/) | Debug, audit, and fix Claude Code plugin system issues — hook errors, plugin misbehavior, cache investigation. Knows that `enabledPlugins: false` is not a true kill switch (hooks still execute, skills still accessible). | — |
 | [code-trace](skills/code-trace/) | Interactive code execution path tracer. Explains how code flows from entry point to output with step-by-step navigation. | — |
@@ -77,7 +78,6 @@ npx skills add laststance/skills --skill x-agents-cross-review
 | [explain](skills/explain/) | Deep, systematic explanation of code, concepts, and system behavior. Always operates at advanced level with introspection markers and validation. | [Serena MCP](https://github.com/oraios/serena) (recommended), [Context7](https://github.com/upstash/context7) (recommended) |
 | [gif-analyzer](skills/gif-analyzer/) | Analyze animated GIF files by extracting and viewing frames as sequential video. | — |
 | [git](skills/git/) | Git operations with intelligent commit messages and workflow optimization. Analyzes changes to generate Conventional Commit messages automatically. | — |
-| [goal](skills/goal/) | Pursuit-mode autonomy: pursue a single strongly-desired objective to verifiable completion. Auto-derives 3-5 success criteria, suppresses sub-skill interruptions (auto-selects recommended options), logs concerns to GitHub/Linear instead of blocking on the user, and runs an adversarial review gate before declaring achievement. | [GitHub CLI](https://cli.github.com/) (recommended), [Linear MCP](https://linear.app/docs/mcp) (recommended) |
 | [hack-feed](skills/hack-feed/) | OSS hacker news feed for JavaScript/React/Next.js internals (TC39, V8, fiber/scheduler, transpilation, JIT). Two-phase: ToC display → numbered selection → Explain-skill-level deep dive. Hybrid sourcing from GitHub, HN, RSS, and Exa web search. Output: Japanese (MVP). | [Exa MCP](https://github.com/exa-labs/exa-mcp-server) **(required)**, [GitHub CLI](https://cli.github.com/) (recommended) |
 | [issue](skills/issue/) | Creates issues on the project's tracker (GitHub Issues or Linear) and lists open issues. Auto-detects which tracker the project uses; feature requests follow a strict non-engineer-voice template. | — |
 | [laststance-publish-skill](skills/laststance-publish-skill/) | Publishes a stable skill to the laststance/skills GitHub registry for distribution via `npx skills add`. Updates README install commands, skills table, and usage examples in alphabetical order. | — |
@@ -120,6 +120,7 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 
 ```
 /analyze-app Linear                 # Analyze macOS app technology stack
+/auto <objective>                   # Pursue a single objective autonomously
 /bulk-issues                        # Resolve all open GitHub issues in one PR
 /claude-code-plugin-hacker          # Debug Claude Code plugin issues
 /code-trace                         # Trace code execution paths
@@ -136,7 +137,6 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /explain src/auth/middleware.ts      # Deep code explanation
 /gif-analyzer ./demo.gif            # Analyze a GIF animation
 /git commit                         # Smart git commit with Conventional Commits
-/goal <objective>                   # Pursue a single objective autonomously
 /hack-feed week                     # Browse top OSS hacker news for a period
 /issue <description>                # Create issue on GitHub or Linear (auto-detects)
 /laststance-publish-skill           # Publish a stable skill to laststance/skills

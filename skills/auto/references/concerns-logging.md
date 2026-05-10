@@ -1,6 +1,6 @@
 # Concerns Logging — Format Reference
 
-The `issue_tracker` field of `goal.json` selects one of three destinations.
+The `issue_tracker` field of `auto.json` selects one of three destinations.
 Always log first, then continue work — never pause to discuss concerns
 with the user.
 
@@ -27,9 +27,9 @@ Log to concerns destination when:
 
 ```bash
 gh issue create \
-  --title "[goal-concern] <≤60 chars topic>" \
+  --title "[auto-concern] <≤60 chars topic>" \
   --body "$(cat <<'EOF'
-**Goal:** <objective from goal.json>
+**Goal:** <objective from auto.json>
 
 **Context:** <where in pursuit you are>
 
@@ -57,9 +57,9 @@ Use the MCP tool. Title and body follow the same format as github above.
 
 ```
 mcp__claude_ai_Linear__save_issue
-  title:  "[goal-concern] <≤60 chars topic>"
+  title:  "[auto-concern] <≤60 chars topic>"
   description: <same body template as github>
-  team:   <prompt user once at /goal start IF Linear chosen, else skip>
+  team:   <prompt user once at /auto start IF Linear chosen, else skip>
 ```
 
 If team is unknown and cannot be inferred, fall back to file destination
@@ -67,7 +67,7 @@ for this single concern.
 
 ## Destination 3 — `issue_tracker: "file"`
 
-Append to `<cwd>/.claude/goal-notes.md` (created on first use). Section
+Append to `<cwd>/.claude/auto-notes.md` (created on first use). Section
 header format:
 
 ```markdown

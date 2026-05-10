@@ -5,8 +5,8 @@ done, keep working. Do NOT declare achievement before the gate passes.
 
 ## Step 1 — Evidence collection
 
-For each criterion in `goal.json.criteria`, attach concrete evidence to
-the criterion's `evidence` field. Update `goal.json` accordingly.
+For each criterion in `auto.json.criteria`, attach concrete evidence to
+the criterion's `evidence` field. Update `auto.json` accordingly.
 
 **Required evidence shapes:**
 
@@ -41,7 +41,7 @@ Use the Task tool:
 
 ```
 Task({
-  description: "Adversarial review for goal completion",
+  description: "Adversarial review for pursuit completion",
   subagent_type: "general-purpose",
   prompt: <<<EOF
 You are an adversarial reviewer. Be skeptical. Your job is to find
@@ -49,7 +49,7 @@ ANY criterion that is not actually satisfied, or any way the evidence
 does not actually prove the criterion.
 
 Objective:
-<verbatim from goal.json.objective>
+<verbatim from auto.json.objective>
 
 Criteria with evidence:
 1. check: <criterion 1 check>
@@ -91,7 +91,7 @@ unavailable.
 All criteria have concrete evidence AND adversarial review found no
 violations. Then:
 
-1. Set `goal.json.status = "achieved"` and `goal.json.completed_at = <ISO-8601>`.
+1. Set `auto.json.status = "achieved"` and `auto.json.completed_at = <ISO-8601>`.
 2. Write the final evidence summary to the user as a single message:
    - Objective
    - Each criterion + its evidence (one-line per criterion)
@@ -110,5 +110,5 @@ Any of: missing evidence, weak evidence, reviewer found violations.
 
 Do NOT mark the goal achieved with known violations. Do NOT mark it
 "partially achieved" — the status field is binary active/achieved/abandoned.
-If the criteria turn out to be wrong, abandon (`/goal clear`) and
+If the criteria turn out to be wrong, abandon (`/auto clear`) and
 restart with new criteria.
