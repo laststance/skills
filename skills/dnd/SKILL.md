@@ -49,6 +49,102 @@ playwright-cli snapshot
 playwright-cli console error
 ```
 
+## Video-based visual verification
+
+Use video evidence whenever the bug involves motion that a final snapshot cannot
+prove, especially:
+
+- `dnd-kit` `DragOverlay` returning to the source position after drop
+- Cross-container previews that briefly show the correct target then roll back
+- Auto-scroll, scroll-container clipping, or virtualized-list drag behavior
+- Any report where "the data moved" and "the ghost animation looked correct" are
+  separate success criteria
+
+### Recording protocol (`playwright-cli`)
+
+1. Create a scenario-specific evidence directory before recording.
+2. Start video recording before measuring coordinates.
+3. Add a chapter marker immediately before the pointer sequence.
+4. Use coordinate-based mouse events, not ref-based `drag`.
+5. Stop the video only after the UI settles and the rendered state has been
+   checked.
+6. Save network and console proof next to the video when the move should call an
+   API.
+
+```bash
+EVIDENCE_DIR=".claude/tasks/assets/<task>/qa_evidence/<scenario>"
+VIDEO="$EVIDENCE_DIR/<scenario>.webm"
+mkdir -p "$EVIDENCE_DIR"
+
+playwright-cli video-start "$VIDEO"
+playwright-cli video-chapter "measure fresh boxes"
+playwright-cli --raw eval "el => JSON.stringify(el.getBoundingClientRect())" eSource
+playwright-cli --raw eval "el => JSON.stringify(el.getBoundingClientRect())" eTarget
+
+playwright-cli video-chapter "coordinate dnd"
+playwright-cli mousemove 250 426
+playwright-cli mousedown
+playwright-cli mousemove 360 426
+playwright-cli mousemove 640 426
+playwright-cli mouseup
+
+playwright-cli video-chapter "post-drop verification"
+playwright-cli snapshot
+playwright-cli requests
+playwright-cli console error
+playwright-cli video-stop
+```
+
+### Drop+10 frame extraction
+
+For overlay / ghost regressions, preserve the 10 frames starting at the drop
+moment so the before/after behavior can be reviewed without replaying the whole
+video.
+
+If the exact drop frame is unknown, extract all frames first and identify the
+frame where `mouseup` / drop occurs by visual inspection:
+
+```bash
+VIDEO=".claude/tasks/assets/<task>/qa_evidence/<scenario>.webm"
+ALL_FRAMES=".claude/tasks/assets/<task>/qa_evidence/<scenario>_frames"
+DROP_FRAMES=".claude/tasks/assets/<task>/qa_evidence/<scenario>_drop_plus_10"
+
+mkdir -p "$ALL_FRAMES" "$DROP_FRAMES"
+ffmpeg -y -i "$VIDEO" -vf fps=25 "$ALL_FRAMES/frame_%04d.png"
+
+# Replace 0194..0203 with the 10 frame numbers starting at the observed drop.
+cp "$ALL_FRAMES"/frame_{0194..0203}.png "$DROP_FRAMES"/
+
+ffmpeg -y \
+  -framerate 1 \
+  -pattern_type glob \
+  -i "$DROP_FRAMES/frame_*.png" \
+  -vf "scale=320:-1,tile=5x2" \
+  -frames:v 1 \
+  "$DROP_FRAMES/contact_sheet.png"
+```
+
+If the drop timestamp is easier to identify than the frame number, extract 10
+frames from that timestamp:
+
+```bash
+DROP_AT="00:00:07.760"
+ffmpeg -y -ss "$DROP_AT" -i "$VIDEO" -frames:v 10 "$DROP_FRAMES/frame_%04d.png"
+```
+
+### Visual success criteria
+
+Video verification is not a replacement for state or network verification. A
+valid DnD result with motion-sensitive behavior should record all of these:
+
+- Final rendered state changed: count, group label, index, or file location.
+- Expected request fired when the move is persisted by API.
+- No console error appeared after drop.
+- Drop+10 frames show the dragged item settling in the target, not animating
+  back to the original source position.
+- The QA sheet links the video, optional contact sheet, network proof, and final
+  rendered-state proof for the same scenario.
+
 ## Recalculation rule
 
 Coordinates must come from the **current viewport and current layout**.
