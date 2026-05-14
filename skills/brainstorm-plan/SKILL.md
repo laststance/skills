@@ -6,6 +6,10 @@ argument-hint: "<vague idea or open-ended goal>"
 
 # /brainstorm-plan — Vague → Concrete via Brainstorm + Plan (no search)
 
+## Codex Compatibility
+When running this skill in Codex, translate Claude Code-only primitives before acting: `AskUserQuestion` -> chat/request_user_input, `TodoWrite` -> `update_plan`, `Task`/`TaskCreate`/`TeamCreate`/`SendMessage` -> `spawn_agent`/`send_input`/`wait_agent` when available and allowed, and `EnterPlanMode`/`ExitPlanMode` -> a concise chat plan plus explicit approval.
+Resolve `Read`/`Write`/`Edit`/`Bash`/`WebSearch`/`WebFetch` to Codex file/shell/web tools, and map `~/.claude/...` paths to `~/.agents/...` or `~/.codex/...` unless the task explicitly targets Claude Code.
+
 Converge a fuzzy request into an actionable, approved plan with two phases:
 
 1. **Brainstorm** — clarify intent with `AskUserQuestion`

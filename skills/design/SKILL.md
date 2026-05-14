@@ -6,6 +6,10 @@ argument-hint: "<target feature or system to design>"
 
 # Design — Architecture-Driven Plan Creation
 
+## Codex Compatibility
+When running this skill in Codex, translate Claude Code-only primitives before acting: `AskUserQuestion` -> chat/request_user_input, `TodoWrite` -> `update_plan`, `Task`/`TaskCreate`/`TeamCreate`/`SendMessage` -> `spawn_agent`/`send_input`/`wait_agent` when available and allowed, and `EnterPlanMode`/`ExitPlanMode` -> a concise chat plan plus explicit approval.
+Resolve `Read`/`Write`/`Edit`/`Bash`/`WebSearch`/`WebFetch` to Codex file/shell/web tools, and map `~/.claude/...` paths to `~/.agents/...` or `~/.codex/...` unless the task explicitly targets Claude Code.
+
 Create exhaustively detailed implementation plans by investigating the existing codebase,
 researching web resources for optimal architecture and libraries, then refining through
 multi-agent review loops until the plan is robust enough for any LLM to execute flawlessly.

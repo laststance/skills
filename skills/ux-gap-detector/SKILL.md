@@ -7,6 +7,10 @@ allowed-tools: "Bash,Read,Write,Edit,Glob,Grep,AskUserQuestion,mcp__sequential-t
 
 # UX Gap Detector
 
+## Codex Compatibility
+When running this skill in Codex, translate Claude Code-only primitives before acting: `AskUserQuestion` -> chat/request_user_input, `TodoWrite` -> `update_plan`, `Task`/`TaskCreate`/`TeamCreate`/`SendMessage` -> `spawn_agent`/`send_input`/`wait_agent` when available and allowed, and `EnterPlanMode`/`ExitPlanMode` -> a concise chat plan plus explicit approval.
+Resolve `Read`/`Write`/`Edit`/`Bash`/`WebSearch`/`WebFetch` to Codex file/shell/web tools, and map `~/.claude/...` paths to `~/.agents/...` or `~/.codex/...` unless the task explicitly targets Claude Code.
+
 Detect UI/UX quality gaps in authenticated SaaS web applications through
 live browser interaction using the user's logged-in session via **playwright-cli**.
 

@@ -5,6 +5,10 @@ description: DnD QA helper
 
 # Drag-and-Drop QA — Coordinate-Based Verification
 
+## Codex Compatibility
+When running this skill in Codex, translate Claude Code-only primitives before acting: `AskUserQuestion` -> chat/request_user_input, `TodoWrite` -> `update_plan`, `Task`/`TaskCreate`/`TeamCreate`/`SendMessage` -> `spawn_agent`/`send_input`/`wait_agent` when available and allowed, and `EnterPlanMode`/`ExitPlanMode` -> a concise chat plan plus explicit approval.
+Resolve `Read`/`Write`/`Edit`/`Bash`/`WebSearch`/`WebFetch` to Codex file/shell/web tools, and map `~/.claude/...` paths to `~/.agents/...` or `~/.codex/...` unless the task explicitly targets Claude Code.
+
 Agent browser tools often report ref-based `drag` as successful even when custom
 DnD libraries (`dnd-kit`, `react-dnd`, native HTML5 DnD wrappers) drop on the
 wrong target. Treat any `drag <sourceRef> <targetRef>` success as **unverified**

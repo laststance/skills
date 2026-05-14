@@ -5,6 +5,10 @@ description: Bridge code -> screen by capturing a screenshot + DOM dump (outerHT
 
 # Locate UI from Code
 
+## Codex Compatibility
+When running this skill in Codex, translate Claude Code-only primitives before acting: `AskUserQuestion` -> chat/request_user_input, `TodoWrite` -> `update_plan`, `Task`/`TaskCreate`/`TeamCreate`/`SendMessage` -> `spawn_agent`/`send_input`/`wait_agent` when available and allowed, and `EnterPlanMode`/`ExitPlanMode` -> a concise chat plan plus explicit approval.
+Resolve `Read`/`Write`/`Edit`/`Bash`/`WebSearch`/`WebFetch` to Codex file/shell/web tools, and map `~/.claude/...` paths to `~/.agents/...` or `~/.codex/...` unless the task explicitly targets Claude Code.
+
 Resolve the question: **"this component / selector / class — where does it actually render in the running app?"** by capturing a screenshot of just that element plus the DOM information that DevTools' Elements panel would show.
 
 ## When to invoke

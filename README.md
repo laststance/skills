@@ -1,6 +1,15 @@
 # Laststance Skills
 
+[![Agent Skills](https://img.shields.io/badge/Agent_Skills-open_standard-2F855A?style=flat-square)](https://agentskills.io/)
+[![Claude Code](https://img.shields.io/badge/Claude_Code-compatible-D97757?style=flat-square&logo=claude&logoColor=white)](https://code.claude.com/docs/en/skills)
+[![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-compatible-111827?style=flat-square&logo=openai&logoColor=white)](https://developers.openai.com/codex/skills)
+[![Skills](https://img.shields.io/badge/skills-47-2563EB?style=flat-square)](#available-skills)
+
 Agent skills for AI coding assistants. Install via [skills.sh](https://skills.sh).
+
+## Codex Compatibility
+
+Every `SKILL.md` includes a short **Codex Compatibility** section. When a skill still mentions Claude Code-only primitives, Codex users should translate them in place: `AskUserQuestion` to chat/request_user_input, `TodoWrite` to `update_plan`, `Task`/`TeamCreate`/`SendMessage` to Codex agent tools when available and allowed, `EnterPlanMode`/`ExitPlanMode` to a chat plan plus approval, and `~/.claude/...` paths to `~/.agents/...` or `~/.codex/...` unless the task explicitly targets Claude Code.
 
 ## Installation
 

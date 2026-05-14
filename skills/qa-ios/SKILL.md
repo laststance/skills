@@ -27,6 +27,10 @@ allowed-tools:
 
 # /qa-ios — Systematic iOS Simulator QA
 
+## Codex Compatibility
+When running this skill in Codex, translate Claude Code-only primitives before acting: `AskUserQuestion` -> chat/request_user_input, `TodoWrite` -> `update_plan`, `Task`/`TaskCreate`/`TeamCreate`/`SendMessage` -> `spawn_agent`/`send_input`/`wait_agent` when available and allowed, and `EnterPlanMode`/`ExitPlanMode` -> a concise chat plan plus explicit approval.
+Resolve `Read`/`Write`/`Edit`/`Bash`/`WebSearch`/`WebFetch` to Codex file/shell/web tools, and map `~/.claude/...` paths to `~/.agents/...` or `~/.codex/...` unless the task explicitly targets Claude Code.
+
 Drive an iOS app running in the Simulator, collect evidence (screenshots + AX
 trees + logs), grade issues, and produce a report. Fixing is out of scope —
 this skill reports. If the user wants to fix bugs, hand the report to a
