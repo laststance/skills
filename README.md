@@ -2,14 +2,19 @@
 
 [![Agent Skills](https://img.shields.io/badge/Agent_Skills-open_standard-2F855A?style=flat-square)](https://agentskills.io/)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-compatible-D97757?style=flat-square&logo=claude&logoColor=white)](https://code.claude.com/docs/en/skills)
+[![Cursor](https://img.shields.io/badge/Cursor-compatible-000000?style=flat-square&logo=cursor&logoColor=white)](https://cursor.com/docs/skills)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-compatible-111827?style=flat-square&logo=openai&logoColor=white)](https://developers.openai.com/codex/skills)
 [![Skills](https://img.shields.io/badge/skills-47-2563EB?style=flat-square)](#available-skills)
 
 Agent skills for AI coding assistants. Install via [skills.sh](https://skills.sh).
 
-## Codex Compatibility
+## Codex / Cursor Compatibility
 
-Every `SKILL.md` includes a short **Codex Compatibility** section. When a skill still mentions Claude Code-only primitives, Codex users should translate them in place: `AskUserQuestion` to chat/request_user_input, `TodoWrite` to `update_plan`, `Task`/`TeamCreate`/`SendMessage` to Codex agent tools when available and allowed, `EnterPlanMode`/`ExitPlanMode` to a chat plan plus approval, and `~/.claude/...` paths to `~/.agents/...` or `~/.codex/...` unless the task explicitly targets Claude Code.
+Every `SKILL.md` includes matching **Codex Compatibility** and **Cursor Compatibility** sections right after frontmatter introduction. Skills may still phrase workflows in Claude-oriented terms; other hosts translate those primitives in place.
+
+**Codex:** `AskUserQuestion` → chat/request_user_input, `TodoWrite` → `update_plan`, `Task`/`TeamCreate`/`SendMessage` → Codex agent tools when available and allowed, `EnterPlanMode`/`ExitPlanMode` → a chat plan plus approval, `~/.claude/...` paths → `~/.agents/...` or `~/.codex/...` unless the task explicitly targets Claude Code.
+
+**Cursor:** `AskUserQuestion` → `AskQuestion`, `TodoWrite` → Cursor `TodoWrite` or equivalent checklist, `Task`/multi-agent (`TeamCreate`/`SendMessage`, etc.) → Cursor `Task` subagents plus parallel/`run_in_background` when allowed (`TeamCreate`/`SendMessage` may have no exact match), `EnterPlanMode`/`ExitPlanMode` → Plan mode (`SwitchMode`/`CreatePlan`) plus approval, MCP `mcp__server__tool` spellings → `call_mcp_tool` with configured server ids, `~/.claude/...` references → `~/.cursor/skills/`, `.cursor/skills/`, and `.cursor/rules/` unless targeting Claude internals. Resolve file/shell/search tools through Cursor Composer or Agent equivalents.
 
 ## Installation
 
