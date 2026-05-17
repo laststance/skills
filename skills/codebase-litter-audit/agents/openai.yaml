@@ -1,0 +1,4 @@
+interface:
+  display_name: "Codebase Litter Audit"
+  short_description: "Find unfinished code beyond dead-code tools"
+  default_prompt: "Use $codebase-litter-audit to inspect this repository for half-finished features, stale TODOs, no-op handlers, disabled tests, and other codebase litter."
