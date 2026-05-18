@@ -4,7 +4,7 @@
 [![Claude Code](https://img.shields.io/badge/Claude_Code-compatible-D97757?style=flat-square&logo=claude&logoColor=white)](https://code.claude.com/docs/en/skills)
 [![Cursor](https://img.shields.io/badge/Cursor-compatible-000000?style=flat-square&logo=cursor&logoColor=white)](https://cursor.com/docs/skills)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-compatible-111827?style=flat-square&logo=openai&logoColor=white)](https://developers.openai.com/codex/skills)
-[![Skills](https://img.shields.io/badge/skills-48-2563EB?style=flat-square)](#available-skills)
+[![Skills](https://img.shields.io/badge/skills-47-2563EB?style=flat-square)](#available-skills)
 
 Agent skills for AI coding assistants. Install via [skills.sh](https://skills.sh).
 
@@ -28,7 +28,6 @@ Install a specific skill:
 
 ```bash
 npx skills add laststance/skills --skill analyze-app
-npx skills add laststance/skills --skill auto
 npx skills add laststance/skills --skill brainstorm-plan
 npx skills add laststance/skills --skill brainstorm-search-plan
 npx skills add laststance/skills --skill bulk-issues
@@ -82,7 +81,6 @@ npx skills add laststance/skills --skill x-agents-cross-review
 | Skill | Description | Dependencies |
 |-------|-------------|--------------|
 | [analyze-app](skills/analyze-app/) | Analyze macOS .app bundles to identify technology stacks (Electron, Flutter, Qt, SwiftUI, native, etc.) by delegating to a specialized subagent. | — |
-| [auto](skills/auto/) | Pursuit-mode autonomy: pursue a single strongly-desired objective to verifiable completion. Auto-derives 3-5 success criteria, suppresses sub-skill interruptions (auto-selects recommended options), logs concerns to GitHub/Linear instead of blocking on the user, and runs an adversarial review gate before declaring achievement. | [GitHub CLI](https://cli.github.com/) (recommended), [Linear MCP](https://linear.app/docs/mcp) (recommended) |
 | [brainstorm-plan](skills/brainstorm-plan/) | Converge a vague request into an approved plan via two phases — Brainstorm (clarify intent with `AskUserQuestion`) and Plan (structure inside Claude Code plan mode, exit via `ExitPlanMode`). Search-free; for self-contained tasks where unknowns are preference-based — shell scripts, refactors, internal reorganization, dev tooling. | — |
 | [brainstorm-search-plan](skills/brainstorm-search-plan/) | Converge a vague request into an approved plan via three interleaved phases — Brainstorm (clarify intent with `AskUserQuestion`), Search (gather facts via `/search`), Plan (structure inside Claude Code plan mode, exit via `ExitPlanMode`). Loops between phases until concrete. | — |
 | [bulk-issues](skills/bulk-issues/) | Resolves all open GitHub Issues in bulk on a single feature branch, then creates a PR and runs a CodeRabbit review loop until merged. Each issue follows the full `/task` 5-phase cycle with mandatory frontend verification, E2E, and unit tests. | [GitHub CLI](https://cli.github.com/) **(required)**, [Serena MCP](https://github.com/oraios/serena) (recommended), [Context7](https://github.com/upstash/context7) (recommended) |
@@ -146,7 +144,6 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 
 ```
 /analyze-app Linear                 # Analyze macOS app technology stack
-/auto <objective>                   # Pursue a single objective autonomously
 /brainstorm-plan <fuzzy>            # Vague → concrete via Brainstorm + Plan (no search)
 /brainstorm-search-plan <fuzzy>     # Vague → concrete via Brainstorm + Search + Plan
 /bulk-issues                        # Resolve all open GitHub issues in one PR
