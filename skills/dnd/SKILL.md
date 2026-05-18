@@ -19,6 +19,18 @@ DnD libraries (`dnd-kit`, `react-dnd`, native HTML5 DnD wrappers) drop on the
 wrong target. Treat any `drag <sourceRef> <targetRef>` success as **unverified**
 unless the rendered state proves the move landed.
 
+## Tool requirement (`playwright-cli` only)
+
+This protocol is valid only when the browser operation is driven by
+`playwright-cli`. The coordinate DnD sequence, video recording, chapter markers,
+fresh bounding-box measurement, snapshots, request checks, console checks, and
+Drop+10 frame extraction must all be run through `playwright-cli`.
+
+Do not substitute `chrome-devtools` MCP, `computer-use`, AppleScript, `cliclick`,
+or ref-based browser `drag` for this procedure. If `playwright-cli` cannot run or
+cannot perform the requested interaction, stop and report that blocker; do not
+continue this verification protocol with another browser-control tool.
+
 ## When to apply
 
 Load this protocol whenever browser-driven verification touches drag-and-drop:
