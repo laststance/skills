@@ -4,7 +4,7 @@
 [![Claude Code](https://img.shields.io/badge/Claude_Code-compatible-D97757?style=flat-square&logo=claude&logoColor=white)](https://code.claude.com/docs/en/skills)
 [![Cursor](https://img.shields.io/badge/Cursor-compatible-000000?style=flat-square&logo=cursor&logoColor=white)](https://cursor.com/docs/skills)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-compatible-111827?style=flat-square&logo=openai&logoColor=white)](https://developers.openai.com/codex/skills)
-[![Skills](https://img.shields.io/badge/skills-47-2563EB?style=flat-square)](#available-skills)
+[![Skills](https://img.shields.io/badge/skills-48-2563EB?style=flat-square)](#available-skills)
 
 Agent skills for AI coding assistants. Install via [skills.sh](https://skills.sh).
 
@@ -63,6 +63,7 @@ npx skills add laststance/skills --skill qa-ios
 npx skills add laststance/skills --skill qa-react-native
 npx skills add laststance/skills --skill qa-team
 npx skills add laststance/skills --skill qa-tui
+npx skills add laststance/skills --skill react-query-key-jump
 npx skills add laststance/skills --skill save
 npx skills add laststance/skills --skill search
 npx skills add laststance/skills --skill search-first
@@ -116,6 +117,7 @@ npx skills add laststance/skills --skill x-agents-cross-review
 | [qa-react-native](skills/qa-react-native/) | Systematic black-box QA for React Native (bare RN or Expo) on iOS Simulator and Android Emulator. Bug reports with screenshots, AX evidence, redbox / LogBox findings, native log excerpts, and platform-parity observations. | [iOS Simulator MCP](https://github.com/nichochar/ios-simulator-mcp) **(required)**, Android SDK / `adb` |
 | [qa-team](skills/qa-team/) | Launch comprehensive QA Agent Team for post-implementation verification. Tests 5 perspectives in parallel: Visual Integrity, Functional Correctness, Apple HIG, Edge Cases, and UX Sensibility. | [Serena MCP](https://github.com/oraios/serena) (recommended), platform-dependent MCP (see below) |
 | [qa-tui](skills/qa-tui/) | Systematic black-box QA for TUI apps (htop, vim, lazygit, tmux, k9s, etc.) running in a shellwright PTY session. Bug reports with screenshots, key-sequence repros, and terminal-compatibility findings. Report-only — does not modify the tool. | [Shellwright MCP](https://github.com/aorwall/shellwright) **(required)** |
+| [react-query-key-jump](skills/react-query-key-jump/) | Jump from a TanStack React Query `queryKey` string (e.g. `getDrawing`) to the `useQuery` / `useInfiniteQuery` hook line where that key is defined. Skips `invalidateQueries` usage sites. | [ripgrep](https://github.com/BurntSushi/ripgrep) **(required)** |
 | [save](skills/save/) | Save session context to Serena MCP memory for cross-session persistence. Analyzes accomplishments, persists learnings, and creates session checkpoints. | [Serena MCP](https://github.com/oraios/serena) **(required)** |
 | [search](skills/search/) | Iterative multi-tool research. Picks the best-fit tool (WebSearch, WebFetch, Exa, Perplexity, Tavily, Context7, DeepWiki) for the question type, then switches tool families across up to 3 passes until a citation-backed answer is reached. | [Exa MCP](https://github.com/exa-labs/exa-mcp-server) (recommended), [Perplexity MCP](https://github.com/ppl-ai/modelcontextprotocol) (recommended), [Tavily MCP](https://github.com/tavily-ai/tavily-mcp-server) (recommended), [Context7](https://github.com/upstash/context7) (recommended) |
 | [search-first](skills/search-first/) | Research-before-coding workflow. Search for existing tools, libraries, and patterns (repo, npm/PyPI, MCP servers, skills, GitHub) before writing custom code. Adopt → Extend → Compose → Build decision matrix. | — |
@@ -180,6 +182,7 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /qa-react-native                    # QA test React Native app on iOS + Android
 /qa-team                            # Launch QA verification team
 /qa-tui lazygit                     # QA test a TUI app via shellwright
+/react-query-key-jump getDrawing    # Jump to useQuery queryKey definition line
 /save                               # Save session context to Serena MCP
 /search what changed in React 19    # Iterative multi-tool research (Web + MCPs) until satisfied
 /search-first add dead link checker # Research existing tools before writing custom code
