@@ -1,0 +1,4 @@
+interface:
+  display_name: "Codex Context Details"
+  short_description: "Codex-only context breakdown"
+  default_prompt: "Use $codex-context-details to show the current OpenAI Codex context breakdown table."

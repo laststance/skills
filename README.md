@@ -4,7 +4,7 @@
 [![Claude Code](https://img.shields.io/badge/Claude_Code-compatible-D97757?style=flat-square&logo=claude&logoColor=white)](https://code.claude.com/docs/en/skills)
 [![Cursor](https://img.shields.io/badge/Cursor-compatible-000000?style=flat-square&logo=cursor&logoColor=white)](https://cursor.com/docs/skills)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-compatible-111827?style=flat-square&logo=openai&logoColor=white)](https://developers.openai.com/codex/skills)
-[![Skills](https://img.shields.io/badge/skills-48-2563EB?style=flat-square)](#available-skills)
+[![Skills](https://img.shields.io/badge/skills-49-2563EB?style=flat-square)](#available-skills)
 
 Agent skills for AI coding assistants. Install via [skills.sh](https://skills.sh).
 
@@ -34,6 +34,7 @@ npx skills add laststance/skills --skill bulk-issues
 npx skills add laststance/skills --skill claude-code-plugin-hacker
 npx skills add laststance/skills --skill code-trace
 npx skills add laststance/skills --skill codebase-litter-audit
+npx skills add laststance/skills --skill codex-context-details
 npx skills add laststance/skills --skill colorful-type
 npx skills add laststance/skills --skill coderabbit-resolver
 npx skills add laststance/skills --skill create-hook
@@ -88,6 +89,7 @@ npx skills add laststance/skills --skill x-agents-cross-review
 | [claude-code-plugin-hacker](skills/claude-code-plugin-hacker/) | Debug, audit, and fix Claude Code plugin system issues — hook errors, plugin misbehavior, cache investigation. Knows that `enabledPlugins: false` is not a true kill switch (hooks still execute, skills still accessible). | — |
 | [code-trace](skills/code-trace/) | Interactive code execution path tracer. Explains how code flows from entry point to output with step-by-step navigation. | — |
 | [codebase-litter-audit](skills/codebase-litter-audit/) | Audit repositories for half-finished features, stale TODOs, no-op handlers, visible UI wired to stubs, disabled tests, stale docs, placeholder assets, suppressions, and other codebase litter that dead-code tools miss. | — |
+| [codex-context-details](skills/codex-context-details/) | Codex-only context inspector that summarizes current prompt, tool schema, Skill/MCP/Plugin/Subagent, `AGENTS.md`, memory, and conversation size from local Codex telemetry without printing raw prompt contents. | OpenAI Codex CLI/Desktop **(required; Codex-only)** |
 | [colorful-type](skills/colorful-type/) | Replace colorless primitives (`string`, `number`, `boolean`) with domain-rich types. Adds branded types, JSDoc, and named type aliases to communicate intent. | — |
 | [coderabbit-resolver](skills/coderabbit-resolver/) | Automates the full CodeRabbit PR review cycle — fix comments, resolve threads, pass CI, merge, and clean up. Supports `--bulk` for all open PRs. | — |
 | [create-hook](skills/create-hook/) | Creates, debugs, and extends Claude Code hooks. Builds reliable hooks that survive real-world event firing — covers SessionStart, PostCompact, PreToolUse, PostToolUse, UserPromptSubmit, Stop, and Notification handlers, `additionalContext` injection, and tool gating. | — |
@@ -152,6 +154,7 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /claude-code-plugin-hacker          # Debug Claude Code plugin issues
 /code-trace                         # Trace code execution paths
 /codebase-litter-audit              # Find half-finished codebase litter
+/codex-context-details              # Show Codex-only context usage breakdown
 /colorful-type                       # Replace primitives with domain types
 /coderabbit-resolver 17             # Process PR #17
 /create-hook                        # Build/debug Claude Code hooks
