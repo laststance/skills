@@ -4,7 +4,7 @@
 [![Claude Code](https://img.shields.io/badge/Claude_Code-compatible-D97757?style=flat-square&logo=claude&logoColor=white)](https://code.claude.com/docs/en/skills)
 [![Cursor](https://img.shields.io/badge/Cursor-compatible-000000?style=flat-square&logo=cursor&logoColor=white)](https://cursor.com/docs/skills)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-compatible-111827?style=flat-square&logo=openai&logoColor=white)](https://developers.openai.com/codex/skills)
-[![Skills](https://img.shields.io/badge/skills-48-2563EB?style=flat-square)](#available-skills)
+[![Skills](https://img.shields.io/badge/skills-49-2563EB?style=flat-square)](#available-skills)
 
 Agent skills for AI coding assistants. Install via [skills.sh](https://skills.sh).
 
@@ -67,6 +67,7 @@ npx skills add laststance/skills --skill react-query-key-jump
 npx skills add laststance/skills --skill save
 npx skills add laststance/skills --skill search
 npx skills add laststance/skills --skill search-first
+npx skills add laststance/skills --skill show-system-prompt
 npx skills add laststance/skills --skill skill-inspect
 npx skills add laststance/skills --skill sync-pencil
 npx skills add laststance/skills --skill syncing-docs-and-memory
@@ -121,6 +122,7 @@ npx skills add laststance/skills --skill x-agents-cross-review
 | [save](skills/save/) | Save session context to Serena MCP memory for cross-session persistence. Analyzes accomplishments, persists learnings, and creates session checkpoints. | [Serena MCP](https://github.com/oraios/serena) **(required)** |
 | [search](skills/search/) | Iterative multi-tool research. Picks the best-fit tool (WebSearch, WebFetch, Exa, Perplexity, Tavily, Context7, DeepWiki) for the question type, then switches tool families across up to 3 passes until a citation-backed answer is reached. | [Exa MCP](https://github.com/exa-labs/exa-mcp-server) (recommended), [Perplexity MCP](https://github.com/ppl-ai/modelcontextprotocol) (recommended), [Tavily MCP](https://github.com/tavily-ai/tavily-mcp-server) (recommended), [Context7](https://github.com/upstash/context7) (recommended) |
 | [search-first](skills/search-first/) | Research-before-coding workflow. Search for existing tools, libraries, and patterns (repo, npm/PyPI, MCP servers, skills, GitHub) before writing custom code. Adopt → Extend → Compose → Build decision matrix. | — |
+| [show-system-prompt](skills/show-system-prompt/) | Reveals the actual runtime system prompt of AI coding agent CLIs (currently Claude Code; Codex and others planned) via static binary inspection, official OTEL telemetry, and mitmproxy capture. Compares static (baked-in) vs dynamic (per-session) prompt sections. | — |
 | [skill-inspect](skills/skill-inspect/) | Read-only diagnostic. Resolves any name across the skill ecosystem (skills, plugins, agents, MCP servers, legacy commands) and displays a structured info card with provenance, metadata, and cross-tool availability across `~/.claude`, `~/.cursor`, `~/.codex`, `~/.gemini`, `~/.vscode`, `~/.antigravity`. | — |
 | [sync-pencil](skills/sync-pencil/) | Bidirectional sync between `.pen` design files and implementation code. Supports Electron, Web, and iOS Simulator. Use when updating designs from code, generating code from designs, or resolving drift. | Pencil MCP **(required)**, `playwright-cli` (Web + Electron via CDP) / [iOS Simulator MCP](https://github.com/nichochar/ios-simulator-mcp) (iOS) |
 | [syncing-docs-and-memory](skills/syncing-docs-and-memory/) | Bidirectional sync between project docs (README/AGENTS.md/CLAUDE.md/SPEC.md/etc.) and memory systems. Serena MCP automatic; gstack-learnings, gbrain, Notion/Obsidian/Inkdrop opt-in via speech. Scale-aware (Small/Medium/Large), AskUserQuestion-gated risky edits, and observed-truth memory write-back. | [Serena MCP](https://github.com/oraios/serena) (recommended), [GitHub CLI](https://cli.github.com/) (recommended) |
@@ -186,6 +188,7 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /save                               # Save session context to Serena MCP
 /search what changed in React 19    # Iterative multi-tool research (Web + MCPs) until satisfied
 /search-first add dead link checker # Research existing tools before writing custom code
+/show-system-prompt                 # Reveal the running agent's actual system prompt
 /skill-inspect mentor               # Display info card for any skill/agent/MCP server
 /sync-pencil                        # Sync .pen design ↔ code
 /syncing-docs-and-memory            # Sync project docs and memory systems with current branch state
