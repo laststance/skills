@@ -4,7 +4,7 @@
 [![Claude Code](https://img.shields.io/badge/Claude_Code-compatible-D97757?style=flat-square&logo=claude&logoColor=white)](https://code.claude.com/docs/en/skills)
 [![Cursor](https://img.shields.io/badge/Cursor-compatible-000000?style=flat-square&logo=cursor&logoColor=white)](https://cursor.com/docs/skills)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-compatible-111827?style=flat-square&logo=openai&logoColor=white)](https://developers.openai.com/codex/skills)
-[![Skills](https://img.shields.io/badge/skills-49-2563EB?style=flat-square)](#available-skills)
+[![Skills](https://img.shields.io/badge/skills-48-2563EB?style=flat-square)](#available-skills)
 
 Agent skills for AI coding assistants. Install via [skills.sh](https://skills.sh).
 
@@ -45,7 +45,6 @@ npx skills add laststance/skills --skill electron-release
 npx skills add laststance/skills --skill english-conversation
 npx skills add laststance/skills --skill exhaustive-real-world-scenario-qa
 npx skills add laststance/skills --skill explain
-npx skills add laststance/skills --skill gif-analyzer
 npx skills add laststance/skills --skill git
 npx skills add laststance/skills --skill hack-feed
 npx skills add laststance/skills --skill issue
@@ -100,7 +99,6 @@ npx skills add laststance/skills --skill x-agents-cross-review
 | [english-conversation](skills/english-conversation/) | English conversation practice partner for Japanese learners. Responds naturally in English with implicit recast and session summary with corrections. | macOS `say` command (for TTS) |
 | [exhaustive-real-world-scenario-qa](skills/exhaustive-real-world-scenario-qa/) | Exhaustive Real World Scenario QA via `playwright-cli` (headed mode). Generates 99.9% happy-path coverage + TC3-style edge cases from source + spec, loops 3x to catch state-dependent bugs. Three modes: Main Claude (default), Fresh Agent (`--fresh-agent`), Team (`--team`) with Design Checker + Bug Hunter. | `playwright-cli` **(required)**, [Serena MCP](https://github.com/oraios/serena) (recommended), [Context7](https://github.com/upstash/context7) (recommended) |
 | [explain](skills/explain/) | Deep, systematic explanation of code, concepts, and system behavior. Always operates at advanced level with introspection markers and validation. | [Serena MCP](https://github.com/oraios/serena) (recommended), [Context7](https://github.com/upstash/context7) (recommended) |
-| [gif-analyzer](skills/gif-analyzer/) | Analyze animated GIF files by extracting and viewing frames as sequential video. | — |
 | [git](skills/git/) | Git operations with intelligent commit messages and workflow optimization. Analyzes changes to generate Conventional Commit messages automatically. | — |
 | [hack-feed](skills/hack-feed/) | OSS hacker news feed for JavaScript/React/Next.js internals (TC39, V8, fiber/scheduler, transpilation, JIT). Two-phase: ToC display → numbered selection → Explain-skill-level deep dive. Hybrid sourcing from GitHub, HN, RSS, and Exa web search. Output: Japanese (MVP). | [Exa MCP](https://github.com/exa-labs/exa-mcp-server) **(required)**, [GitHub CLI](https://cli.github.com/) (recommended) |
 | [issue](skills/issue/) | Creates issues on the project's tracker (GitHub Issues or Linear) and lists open issues. Auto-detects which tracker the project uses; feature requests follow a strict non-engineer-voice template. | — |
@@ -166,7 +164,6 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /coderabbit-resolver --bulk         # Process all open PRs
 /electron-release                   # Electron release workflow
 /explain src/auth/middleware.ts      # Deep code explanation
-/gif-analyzer ./demo.gif            # Analyze a GIF animation
 /git commit                         # Smart git commit with Conventional Commits
 /hack-feed week                     # Browse top OSS hacker news for a period
 /issue <description>                # Create issue on GitHub or Linear (auto-detects)
