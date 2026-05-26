@@ -4,7 +4,7 @@
 [![Claude Code](https://img.shields.io/badge/Claude_Code-compatible-D97757?style=flat-square&logo=claude&logoColor=white)](https://code.claude.com/docs/en/skills)
 [![Cursor](https://img.shields.io/badge/Cursor-compatible-000000?style=flat-square&logo=cursor&logoColor=white)](https://cursor.com/docs/skills)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-compatible-111827?style=flat-square&logo=openai&logoColor=white)](https://developers.openai.com/codex/skills)
-[![Skills](https://img.shields.io/badge/skills-50-2563EB?style=flat-square)](#available-skills)
+[![Skills](https://img.shields.io/badge/skills-49-2563EB?style=flat-square)](#available-skills)
 
 Agent skills for AI coding assistants. Install via [skills.sh](https://skills.sh).
 
@@ -43,7 +43,6 @@ npx skills add laststance/skills --skill design
 npx skills add laststance/skills --skill deep-trace
 npx skills add laststance/skills --skill dnd
 npx skills add laststance/skills --skill electron-release
-npx skills add laststance/skills --skill english-conversation
 npx skills add laststance/skills --skill exhaustive-real-world-scenario-qa
 npx skills add laststance/skills --skill explain
 npx skills add laststance/skills --skill git
@@ -99,7 +98,6 @@ npx skills add laststance/skills --skill x-agents-cross-review
 | [deep-trace](skills/deep-trace/) | Line-by-line execution path tracer for PR diffs, git diffs, or specified code sections. Maps every line to its screen/URL, data flow, and execution context like a debugger's step-through. | [Serena MCP](https://github.com/oraios/serena) (recommended) |
 | [dnd](skills/dnd/) | Browser drag-and-drop QA via coordinate-based pointer ops, plus video + drop+10-frame evidence for motion-sensitive bugs (DragOverlay rollback, ghost return). Knowledge-injection skill loaded by browser-using skills (`task`, `troubleshoot`, `qa-team`, `qa-electron`, `ux-gap-detector`, `exhaustive-real-world-scenario-qa`, `sync-pencil`, `bulk-issues`) before any browser interaction — ref-based `drag` returns false success on `dnd-kit` and similar libraries. | `playwright-cli` **(required)**, `ffmpeg` (recommended for frame extraction) |
 | [electron-release](skills/electron-release/) | Guides Electron app release process including build, code signing, notarization, and GitHub Release with auto-update support. | — |
-| [english-conversation](skills/english-conversation/) | English conversation practice partner for Japanese learners. Responds naturally in English with implicit recast and session summary with corrections. | macOS `say` command (for TTS) |
 | [exhaustive-real-world-scenario-qa](skills/exhaustive-real-world-scenario-qa/) | Exhaustive Real World Scenario QA via `playwright-cli` (headed mode). Generates 99.9% happy-path coverage + TC3-style edge cases from source + spec, loops 3x to catch state-dependent bugs. Three modes: Main Claude (default), Fresh Agent (`--fresh-agent`), Team (`--team`) with Design Checker + Bug Hunter. | `playwright-cli` **(required)**, [Serena MCP](https://github.com/oraios/serena) (recommended), [Context7](https://github.com/upstash/context7) (recommended) |
 | [explain](skills/explain/) | Deep, systematic explanation of code, concepts, and system behavior. Always operates at advanced level with introspection markers and validation. | [Serena MCP](https://github.com/oraios/serena) (recommended), [Context7](https://github.com/upstash/context7) (recommended) |
 | [git](skills/git/) | Git operations with intelligent commit messages and workflow optimization. Analyzes changes to generate Conventional Commit messages automatically. | — |
@@ -164,7 +162,6 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /design user authentication system   # Create detailed implementation plan
 /deep-trace 42                      # Trace PR #42 line-by-line
 /dnd                                # Load drag-and-drop coordinate-based verification protocol
-/english-conversation               # Start English conversation practice
 /exhaustive-real-world-scenario-qa  # Exhaustive QA via playwright-cli (3x loop, 3 modes)
 /coderabbit-resolver --bulk         # Process all open PRs
 /electron-release                   # Electron release workflow
