@@ -11,7 +11,6 @@ the `load` skill to discover and prioritize memories automatically.
 
 | Prefix | Cardinality | Purpose | Example |
 |--------|-------------|---------|---------|
-| `project_overview` | Singleton | Project summary, architecture, key decisions | `project_overview` |
 | `CRITICAL_*` | Few | Must-read rules every session must load | `CRITICAL_activation_rule` |
 | `session_YYYY-MM-DD_*` | Many | Session checkpoints with progress and next steps | `session_2026-02-09_auth-flow` |
 | `plan_*` | Few | Active implementation plans | `plan_dark-mode-implementation` |
@@ -44,16 +43,14 @@ the `load` skill to discover and prioritize memories automatically.
 
 The `load` skill reads memories in this order:
 
-1. `project_overview` (always first — the anchor memory)
-2. `CRITICAL_*` (never skip)
-3. Cross-referenced memories (from directives found in loaded memories)
-4. Latest `session_*` (most recent by date in key name)
-5. Active `plan_*` (if relevant to current work)
-6. `pattern_*`, `discovery_*`, `todo_*` — on demand only
+1. `CRITICAL_*` (never skip)
+2. Cross-referenced memories (from directives found in loaded memories)
+3. Latest `session_*` (most recent by date in key name)
+4. Active `plan_*` (if relevant to current work)
+5. `pattern_*`, `discovery_*`, `todo_*` — on demand only
 
 ## Rules
 
-- **Singleton keys** (`project_overview`): Update in place, do not create duplicates
 - **Date-stamped keys** (`session_*`): Create new entry per session, never overwrite old ones
 - **Pattern keys** (`pattern_*`): Update if the pattern evolves, keep topic-specific
 - **TODO keys** (`todo_*`): Delete when completed, or note completion in the body

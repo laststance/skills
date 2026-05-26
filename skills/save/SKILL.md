@@ -22,7 +22,6 @@ Persist session context to Serena MCP memory for cross-session continuity.
 
 - All persistence uses Serena MCP tools exclusively (no agent-specific tools)
 - Always check existing memories before writing to avoid overwriting valuable context
-- Never create `project_overview` when it does not already exist; only update it if present
 - Session checkpoint keys must include date: `session_YYYY-MM-DD_<description>`
 - Pattern and learning memories use: `pattern_<topic>`
 - Report what was saved as a structured summary to the user
@@ -45,12 +44,11 @@ Persist session context to Serena MCP memory for cross-session continuity.
 ## Phase 2: Memory Inventory
 
 3. Call `list_memories` to see existing memories
-4. Check if `project_overview` needs updating (significant new understanding gained?)
-5. Identify which existing memories need updates vs. new memories to create
+4. Identify which existing memories need updates vs. new memories to create
 
 ## Phase 3: Persist Session Checkpoint
 
-6. Call `write_memory` with key `session_YYYY-MM-DD_<summary>`:
+5. Call `write_memory` with key `session_YYYY-MM-DD_<summary>`:
 
 ```
 ## Session: YYYY-MM-DD — <summary>
@@ -73,7 +71,7 @@ Persist session context to Serena MCP memory for cross-session continuity.
 
 ## Phase 4: Persist Learnings (if any)
 
-7. For each reusable pattern discovered, call `write_memory` with key `pattern_<topic>`:
+6. For each reusable pattern discovered, call `write_memory` with key `pattern_<topic>`:
 
 ```
 ## Pattern: <name>
@@ -84,7 +82,7 @@ Persist session context to Serena MCP memory for cross-session continuity.
 **When to Use**: [trigger conditions]
 ```
 
-8. For each persistent TODO, call `write_memory` with key `todo_<description>`:
+7. For each persistent TODO, call `write_memory` with key `todo_<description>`:
 
 ```
 ## TODO: <description>
@@ -94,19 +92,11 @@ Persist session context to Serena MCP memory for cross-session continuity.
 **Acceptance Criteria**: [how to know it's done]
 ```
 
-## Phase 5: Update Project Overview (if needed)
+## Phase 5: Validation
 
-9. If significant new project understanding was gained:
-   - Call `read_memory("project_overview")` to get current content
-   - If `project_overview` does not exist, skip this phase and do not create it
-   - Call `write_memory("project_overview", updated_content)` with additions
-   - Do NOT overwrite existing content — append or update sections
+8. Verify: session checkpoint created, learnings persisted, no critical context lost
 
-## Phase 6: Validation
-
-10. Verify: session checkpoint created, learnings persisted, no critical context lost
-
-## Phase 7: Save Report
+## Phase 6: Save Report
 
 Report to the user:
 
@@ -120,11 +110,6 @@ Report to the user:
 | pattern_xxx | [if any] |
 | todo_xxx | [if any] |
 
-### Memories Updated
-| Key | What Changed |
-|-----|-------------|
-| project_overview | [if updated] |
-
 ### Next Session
 Run `/load` to restore this context.
 ```
@@ -137,7 +122,6 @@ Quick summary:
 
 | Prefix | Purpose | Example |
 |--------|---------|---------|
-| `project_overview` | Project summary (singleton) | `project_overview` |
 | `CRITICAL_*` | Must-read rules | `CRITICAL_activation_rule` |
 | `session_YYYY-MM-DD_*` | Session checkpoints | `session_2026-02-09_auth-flow` |
 | `plan_*` | Active plans | `plan_dark-mode` |
@@ -151,5 +135,4 @@ Quick summary:
 - [ ] Existing memories checked (no accidental overwrites)
 - [ ] Session checkpoint memory written with date-stamped key
 - [ ] Learnings/patterns persisted (if any discovered)
-- [ ] Existing project overview updated only when present and significant new understanding exists
 - [ ] Save report presented to user

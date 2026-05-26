@@ -24,11 +24,9 @@ Load project context from Serena MCP memory.
 
 </essential_principles>
 
-## Step 1: Activate
+## Step 1: Discover Memories
 
-1. Call `check_onboarding_performed`
-2. If not onboarded: call `onboarding`
-3. Call `list_memories` to discover all memory keys
+1. Call `list_memories` to discover all memory keys
 
 ## Step 2: Read Memories
 
