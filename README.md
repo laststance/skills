@@ -8,14 +8,6 @@
 
 Agent skills for AI coding assistants. Install via [skills.sh](https://skills.sh).
 
-## Codex / Cursor Compatibility
-
-Every `SKILL.md` includes matching **Codex Compatibility** and **Cursor Compatibility** sections right after frontmatter introduction. Skills may still phrase workflows in Claude-oriented terms; other hosts translate those primitives in place.
-
-**Codex:** `AskUserQuestion` → chat/request_user_input, `TodoWrite` → `update_plan`, `Task`/`TeamCreate`/`SendMessage` → Codex agent tools when available and allowed, `EnterPlanMode`/`ExitPlanMode` → a chat plan plus approval, `~/.claude/...` paths → `~/.agents/...` or `~/.codex/...` unless the task explicitly targets Claude Code.
-
-**Cursor:** `AskUserQuestion` → `AskQuestion`, `TodoWrite` → Cursor `TodoWrite` or equivalent checklist, `Task`/multi-agent (`TeamCreate`/`SendMessage`, etc.) → Cursor `Task` subagents plus parallel/`run_in_background` when allowed (`TeamCreate`/`SendMessage` may have no exact match), `EnterPlanMode`/`ExitPlanMode` → Plan mode (`SwitchMode`/`CreatePlan`) plus approval, MCP `mcp__server__tool` spellings → `call_mcp_tool` with configured server ids, `~/.claude/...` references → `~/.cursor/skills/`, `.cursor/skills/`, and `.cursor/rules/` unless targeting Claude internals. Resolve file/shell/search tools through Cursor Composer or Agent equivalents.
-
 ## Installation
 
 Install all skills:
