@@ -33,9 +33,9 @@ cp -r ~/.claude/skills/<name>/* ~/laststance/skills/skills/<name>/
 
 Only copy files needed for the skill (SKILL.md + supporting files). Do NOT copy test artifacts or local-only files.
 
-### 2. Update README.md (3 places)
+### 2. Update README.md (4 places)
 
-All three sections maintain **alphabetical order**.
+Sections A–C maintain **alphabetical order**; D is a count.
 
 **A. Install commands** — Add to the specific skill install list:
 
@@ -60,6 +60,14 @@ Dependencies format:
 /<name> <typical-args>              # Short description
 ```
 
+**D. Skills count badge** — bump the skill count in the shields.io badge near the top of the README:
+
+```markdown
+img.shields.io/badge/skills-<N>-2563EB
+```
+
+`<N>` = total skill count after this publish: `ls ~/laststance/skills/skills/*/SKILL.md | wc -l`.
+
 ### 3. Commit and push
 
 ```bash
@@ -78,6 +86,7 @@ git push
 - [ ] README install command added (alphabetical)
 - [ ] README skills table row added (alphabetical)
 - [ ] README usage example added (alphabetical)
+- [ ] README skills count badge bumped (`skills-<N>`)
 - [ ] Committed with `feat: add <name> skill` format
 - [ ] Pushed to remote
 
