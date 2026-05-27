@@ -4,7 +4,7 @@
 [![Claude Code](https://img.shields.io/badge/Claude_Code-compatible-D97757?style=flat-square&logo=claude&logoColor=white)](https://code.claude.com/docs/en/skills)
 [![Cursor](https://img.shields.io/badge/Cursor-compatible-000000?style=flat-square&logo=cursor&logoColor=white)](https://cursor.com/docs/skills)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-compatible-111827?style=flat-square&logo=openai&logoColor=white)](https://developers.openai.com/codex/skills)
-[![Skills](https://img.shields.io/badge/skills-50-2563EB?style=flat-square)](#available-skills)
+[![Skills](https://img.shields.io/badge/skills-51-2563EB?style=flat-square)](#available-skills)
 
 Agent skills for AI coding assistants. Install via [skills.sh](https://skills.sh).
 
@@ -36,6 +36,7 @@ npx skills add laststance/skills --skill codebase-litter-audit
 npx skills add laststance/skills --skill codex-context-details
 npx skills add laststance/skills --skill colorful-type
 npx skills add laststance/skills --skill coderabbit-resolver
+npx skills add laststance/skills --skill cookie
 npx skills add laststance/skills --skill create-hook
 npx skills add laststance/skills --skill create-worktree
 npx skills add laststance/skills --skill design
@@ -92,6 +93,7 @@ npx skills add laststance/skills --skill x-agents-cross-review
 | [codex-context-details](skills/codex-context-details/) | Codex-only context inspector that summarizes current prompt, tool schema, Skill/MCP/Plugin/Subagent, `AGENTS.md`, memory, and conversation size from local Codex telemetry without printing raw prompt contents. | OpenAI Codex CLI/Desktop **(required; Codex-only)** |
 | [colorful-type](skills/colorful-type/) | Replace colorless primitives (`string`, `number`, `boolean`) with domain-rich types. Adds branded types, JSDoc, and named type aliases to communicate intent. | — |
 | [coderabbit-resolver](skills/coderabbit-resolver/) | Automates the full CodeRabbit PR review cycle — fix comments, resolve threads, pass CI, merge, and clean up. Supports `--bulk` for all open PRs. | — |
+| [cookie](skills/cookie/) | Copy Google Chrome's cookies into `playwright-cli` (macOS) so its browser inherits every logged-in session (GitHub, etc.). Decrypts via the macOS Keychain, loads per-cookie, verifies before navigating, and deletes the plaintext token files after. | `playwright-cli` **(required)**, Node.js **(required)** |
 | [create-hook](skills/create-hook/) | Creates, debugs, and extends Claude Code hooks. Builds reliable hooks that survive real-world event firing — covers SessionStart, PostCompact, PreToolUse, PostToolUse, UserPromptSubmit, Stop, and Notification handlers, `additionalContext` injection, and tool gating. | — |
 | [create-worktree](skills/create-worktree/) | Creates a git worktree as a sibling directory to the current project (e.g., `../project-feat-x`), copies `.gitignore`d config files (`.env`, `.env.local`, etc.) while skipping heavy build/dependency directories (`node_modules`, `.next`, `dist`, `build`, `coverage`), then navigates into the new worktree. | — |
 | [design](skills/design/) | Architecture-driven plan creation with 5-phase pipeline: Research → Architecture → 3-reviewer loop (max 5 rounds) → Final Review → Plan Output. "Weakest LLM Proof" principle ensures plans are executable by any AI agent. | [Serena MCP](https://github.com/oraios/serena) (recommended), [Context7](https://github.com/upstash/context7) (recommended), [Perplexity MCP](https://github.com/ppl-ai/modelcontextprotocol) (recommended) |
@@ -158,6 +160,7 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /codex-context-details              # Show Codex-only context usage breakdown
 /colorful-type                       # Replace primitives with domain types
 /coderabbit-resolver 17             # Process PR #17
+/cookie                             # Import Chrome cookies into a playwright-cli session
 /create-hook                        # Build/debug Claude Code hooks
 /create-worktree feat/new-thing     # Create git worktree at ../project-feat-new-thing
 /design user authentication system   # Create detailed implementation plan
