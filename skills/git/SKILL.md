@@ -1,7 +1,7 @@
 ---
 name: git
 description: Smart git ops
-argument-hint: "[operation] [args]"
+argument-hint: "[operation | task description] [args]"
 ---
 
 # Git — Intelligent Git Operations
@@ -31,7 +31,37 @@ Smart git workflow with automatic Conventional Commit message generation.
 
 </essential_principles>
 
+## Argument routing
+
+Inspect the argument before acting:
+
+- **It names a git subcommand** (`status`, `commit`, `push`, `pull`, `branch`, `merge`,
+  `stash`, `log`) — possibly combined (`commit & push`) — run those operations below.
+- **It describes a task in natural language** (any language), e.g. `/git README更新して`
+  or `/git fix the header typo` — run the **task-then-ship** operation: do the work,
+  then commit & push it.
+
+When in doubt (the argument neither matches a subcommand nor reads as a task), ask once
+which the user meant rather than guessing.
+
 ## Operations
+
+### task-then-ship
+
+Perform a described change, then commit and push it in one shot. This is the default for
+any natural-language argument that isn't a git subcommand.
+
+1. Carry out the requested task (edit/create the relevant files). Keep the change scoped
+   to what was asked.
+2. Run the **commit** operation below — stage only the files this task touched (specific
+   names, never `git add -A`/`.`) and generate a Conventional Commit message from the
+   change analysis.
+3. Run the **push** operation below to sync to the remote.
+4. **If the task can't be completed** (ambiguous, blocked, or it produced no file
+   changes), stop and report — do **not** create an empty or speculative commit.
+
+Safety rules still apply: never `--no-verify`, never force-push without confirmation, and
+honor the destructive-operation confirmations in Safety Rules above.
 
 ### status
 
@@ -122,16 +152,20 @@ View commit history with useful formatting.
 /git status
 /git commit
 /git push
+/git commit & push
 /git branch feat/dark-mode
 /git merge main
 /git stash save work in progress
 /git log
+/git README更新して            # task-then-ship: update the README, then commit & push
+/git fix the header typo       # task-then-ship: make the fix, then commit & push
 ```
 
 ## Boundaries
 
 **Will:**
 - Execute git operations with intelligent automation
+- Perform a natural-language task, then commit & push it (task-then-ship)
 - Generate Conventional Commit messages from change analysis
 - Provide workflow guidance and best practice recommendations
 - Handle conflict resolution with step-by-step guidance
