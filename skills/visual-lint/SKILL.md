@@ -196,13 +196,18 @@ report are capture-method-agnostic.
 
 ## Calibration (dev-time, not per-run)
 
-`references/fixtures/opacity-blur-wrap.png` is the worked-example bug, paired with
-`references/fixtures/opacity-blur-wrap.expected.md` (the target finding). When you
-**change this skill's rubric**, run the rubric once against that PNG and confirm it
-still emits the expected `83% / 15px` wrap finding (severity 2, high confidence, citing
-both lines). A rubric edit that stops catching the fixture is a regression — fix it
-before shipping. This is a construction-time anchor; normal `/visual-lint` runs do not
-re-run it.
+Two worked-example bugs anchor the rubric, each paired with an `.expected.md` target:
+- `references/fixtures/opacity-blur-wrap.png` — the **wrapping** anchor: the
+  `83% / 15px` readout wraps onto two lines (severity 2, high confidence, citing both
+  lines; rubric A1/A7, home B).
+- `references/fixtures/symlink-health-clip.png` — the **clipping** anchor: the large
+  `100%` value in the "Symlink Health" card is sliced at the card's top content edge
+  (severity 2–3, high confidence, citing the `100%` value; rubric A3, home B1/B3).
+
+When you **change this skill's rubric**, run it once against **both** PNGs and confirm
+each still emits its expected finding. A rubric edit that stops catching either fixture
+is a regression — fix it before shipping. This is a construction-time anchor; normal
+`/visual-lint` runs do not re-run it.
 
 ## Pre-flight checklist
 - [ ] Driver attached, no stale session, target app responsive.
@@ -218,5 +223,6 @@ re-run it.
 - `references/anti-false-positive.md` — how to judge without hallucinating (read first).
 - `references/ui-state-coverage.md` — which states to capture (default + 5 op paths).
 - `references/design-system-criteria.md` — DESIGN.md tokens as perceptual checks.
-- `references/fixtures/opacity-blur-wrap.{png,expected.md}` — calibration anchor.
+- `references/fixtures/opacity-blur-wrap.{png,expected.md}` — wrapping calibration anchor.
+- `references/fixtures/symlink-health-clip.{png,expected.md}` — clipping calibration anchor.
 - `templates/visual-lint-report.md` — the read-only report skeleton.

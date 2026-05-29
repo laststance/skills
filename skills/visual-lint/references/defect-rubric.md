@@ -45,7 +45,8 @@ measurement" (v2 deterministic layer will measure it).
   grown/wrapped? (Distinguish from *intended* truncation — a long path in a fixed cell
   is fine; a truncated button verb is not.)
 - **A3 — Clipping without ellipsis.** Is text sliced mid-glyph at a container edge with
-  no ellipsis and no scroll — i.e. silently lost?
+  no ellipsis and no scroll — i.e. silently lost? *(The clipping fixture: a `100%` card
+  value with its top sliced off at the card edge.)*
 - **A4 — Orphan / widow.** Does a single word or character drop alone onto its own line,
   or a heading's last word strand awkwardly?
 - **A5 — Text overlap.** Does text overlap other text, an icon, a control, or a border?
