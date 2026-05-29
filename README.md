@@ -4,7 +4,7 @@
 [![Claude Code](https://img.shields.io/badge/Claude_Code-compatible-D97757?style=flat-square&logo=claude&logoColor=white)](https://code.claude.com/docs/en/skills)
 [![Cursor](https://img.shields.io/badge/Cursor-compatible-000000?style=flat-square&logo=cursor&logoColor=white)](https://cursor.com/docs/skills)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-compatible-111827?style=flat-square&logo=openai&logoColor=white)](https://developers.openai.com/codex/skills)
-[![Skills](https://img.shields.io/badge/skills-51-2563EB?style=flat-square)](#available-skills)
+[![Skills](https://img.shields.io/badge/skills-52-2563EB?style=flat-square)](#available-skills)
 
 Agent skills for AI coding assistants. Install via [skills.sh](https://skills.sh).
 
@@ -38,6 +38,7 @@ npx skills add laststance/skills --skill electron-release
 npx skills add laststance/skills --skill exhaustive-real-world-scenario-qa
 npx skills add laststance/skills --skill explain
 npx skills add laststance/skills --skill git
+npx skills add laststance/skills --skill github-actions-pnpm-ci
 npx skills add laststance/skills --skill hack-feed
 npx skills add laststance/skills --skill issue
 npx skills add laststance/skills --skill laststance-publish-skill
@@ -95,6 +96,7 @@ npx skills add laststance/skills --skill x-agents-cross-review
 | [exhaustive-real-world-scenario-qa](skills/exhaustive-real-world-scenario-qa/) | Exhaustive Real World Scenario QA via `playwright-cli` (headed mode). Generates 99.9% happy-path coverage + TC3-style edge cases from source + spec, loops 3x to catch state-dependent bugs. Three modes: Main Claude (default), Fresh Agent (`--fresh-agent`), Team (`--team`) with Design Checker + Bug Hunter. | `playwright-cli` **(required)**, [Serena MCP](https://github.com/oraios/serena) (recommended), [Context7](https://github.com/upstash/context7) (recommended) |
 | [explain](skills/explain/) | Deep, systematic explanation of code, concepts, and system behavior. Always operates at advanced level with introspection markers and validation. | [Serena MCP](https://github.com/oraios/serena) (recommended), [Context7](https://github.com/upstash/context7) (recommended) |
 | [git](skills/git/) | Git operations with intelligent commit messages and workflow optimization. Analyzes changes to generate Conventional Commit messages automatically. | — |
+| [github-actions-pnpm-ci](skills/github-actions-pnpm-ci/) | Creates secure pnpm/Node GitHub Actions CI with SHA-pinned actions, pnpm store caching, frozen installs, lint/test/build/typecheck workflows, and Dependabot updates. | — |
 | [hack-feed](skills/hack-feed/) | OSS hacker news feed for JavaScript/React/Next.js internals (TC39, V8, fiber/scheduler, transpilation, JIT). Two-phase: ToC display → numbered selection → Explain-skill-level deep dive. Hybrid sourcing from GitHub, HN, RSS, and Exa web search. Output: Japanese (MVP). | [Exa MCP](https://github.com/exa-labs/exa-mcp-server) **(required)**, [GitHub CLI](https://cli.github.com/) (recommended) |
 | [issue](skills/issue/) | Creates issues on the project's tracker (GitHub Issues or Linear) and lists open issues. Auto-detects which tracker the project uses; feature requests follow a strict non-engineer-voice template. | — |
 | [laststance-publish-skill](skills/laststance-publish-skill/) | Publishes a stable skill to the laststance/skills GitHub registry for distribution via `npx skills add`. Updates README install commands, skills table, and usage examples in alphabetical order. | — |
@@ -163,6 +165,7 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /electron-release                   # Electron release workflow
 /explain src/auth/middleware.ts      # Deep code explanation
 /git commit                         # Smart git commit with Conventional Commits
+/github-actions-pnpm-ci             # Add secure pnpm GitHub Actions CI
 /hack-feed week                     # Browse top OSS hacker news for a period
 /issue <description>                # Create issue on GitHub or Linear (auto-detects)
 /laststance-publish-skill           # Publish a stable skill to laststance/skills
