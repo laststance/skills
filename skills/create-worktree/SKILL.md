@@ -7,11 +7,11 @@ description: Creates a git worktree as a sibling directory to the current projec
 
 ## Codex Compatibility
 When running this skill in Codex, translate Claude Code-only primitives before acting: `AskUserQuestion` -> chat/request_user_input, `TodoWrite` -> `update_plan`, `Task`/`TaskCreate`/`TeamCreate`/`SendMessage` -> `spawn_agent`/`send_input`/`wait_agent` when available and allowed, and `EnterPlanMode`/`ExitPlanMode` -> a concise chat plan plus explicit approval.
-Resolve `Read`/`Write`/`Edit`/`Bash`/`WebSearch`/`WebFetch` to Codex file/shell/web tools, and map `~/.claude/...` paths to `~/.agents/...` or `~/.codex/...` unless the task explicitly targets Claude Code.
+Resolve `Read`/`Write`/`Edit`/`Bash`/`WebSearch`/`WebFetch` to Codex file/shell/web tools, and map `~/.claude/...` paths to `~/.agents/...` or `~/.codex/...` unless the task explicitly targets Claude Code. `EnterWorktree` is Claude Code–only — on Codex, switch into the worktree with `cd /absolute/path/to/new-worktree` instead (the script already ran `git worktree add`).
 
 ## Cursor Compatibility
 When running this skill in Cursor Agent, translate Claude Code-only primitives before acting: `AskUserQuestion` -> `AskQuestion`; `TodoWrite` -> Cursor `TodoWrite` or an equivalent checklist; `Task`/`TaskCreate`/`TeamCreate`/`SendMessage`/multi-agent flows -> Cursor `Task` (subagents), parallel Tasks, or `run_in_background` when allowed (`TeamCreate`/`SendMessage` may have no exact match); `EnterPlanMode`/`ExitPlanMode` -> Plan mode (`SwitchMode` / `CreatePlan`) plus explicit user approval.
-Resolve `Read`/`Write`/`Edit`/`StrReplace`/`Bash`/web/search/MCP via Cursor Composer or Agent equivalents. MCP names written as `mcp__server__tool` typically map to `call_mcp_tool` with configured server identifiers. Map `~/.claude/...` to `~/.cursor/skills/`, `.cursor/skills/`, and `.cursor/rules/` unless the task explicitly targets Claude Code.
+Resolve `Read`/`Write`/`Edit`/`StrReplace`/`Bash`/web/search/MCP via Cursor Composer or Agent equivalents. MCP names written as `mcp__server__tool` typically map to `call_mcp_tool` with configured server identifiers. Map `~/.claude/...` to `~/.cursor/skills/`, `.cursor/skills/`, and `.cursor/rules/` unless the task explicitly targets Claude Code. `EnterWorktree` is Claude Code–only — on Cursor, switch into the worktree with `cd /absolute/path/to/new-worktree` instead (the script already ran `git worktree add`).
 
 
 Creates a git worktree at `<parent>/<project>-<branch>`, copies `.gitignore`d configuration files (excluding heavy build/dependency dirs), and navigates into it.
@@ -30,13 +30,15 @@ Creates a git worktree at `<parent>/<project>-<branch>`, copies `.gitignore`d co
    Path: /absolute/path/to/new-worktree
    ```
 
-4. **Navigate into the new worktree** in a separate Bash call (the script cannot change the agent's CWD):
-   ```bash
-   cd /absolute/path/to/new-worktree
+4. **Switch the session into the new worktree** using the `EnterWorktree` tool with the printed path. The script already registered the worktree via `git worktree add`, so it appears in `git worktree list` and `EnterWorktree` can enter it directly:
    ```
+   EnterWorktree({ path: "/absolute/path/to/new-worktree" })
+   ```
+   This actually moves the agent's working directory into the worktree (unlike a bare `cd`, whose shell state does not propagate out of a `Bash` call). On non–Claude Code agents that lack `EnterWorktree`, fall back to `cd /absolute/path/to/new-worktree` (see compat notes).
 
 5. **Confirm to the user** in Japanese (per global preference):
    - 新しいworktreeのパス
+   - 現在の作業ディレクトリがその worktree に切り替わったこと
    - `.env` 等の ignored ファイルがコピー済みであること
    - `node_modules` 等の重いディレクトリはスキップしたので `pnpm install` が必要な旨
 
@@ -63,4 +65,4 @@ All entries listed by `git ls-files --others --ignored --exclude-standard --dire
 ## Notes
 
 - Sibling-of-current-worktree placement: works whether invoked from the main checkout or another worktree.
-- `cd` must be issued by the agent after the script returns; shell state does not propagate out of the script.
+- The directory switch must be issued by the agent after the script returns; shell state does not propagate out of the script. Prefer `EnterWorktree({ path })` so the switch persists for the rest of the session; a bare `cd` in a `Bash` call does not.
