@@ -4,7 +4,7 @@
 [![Claude Code](https://img.shields.io/badge/Claude_Code-compatible-D97757?style=flat-square&logo=claude&logoColor=white)](https://code.claude.com/docs/en/skills)
 [![Cursor](https://img.shields.io/badge/Cursor-compatible-000000?style=flat-square&logo=cursor&logoColor=white)](https://cursor.com/docs/skills)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-compatible-111827?style=flat-square&logo=openai&logoColor=white)](https://developers.openai.com/codex/skills)
-[![Skills](https://img.shields.io/badge/skills-52-2563EB?style=flat-square)](#available-skills)
+[![Skills](https://img.shields.io/badge/skills-57-2563EB?style=flat-square)](#available-skills)
 
 Agent skills for AI coding assistants. Install via [skills.sh](https://skills.sh).
 
@@ -27,8 +27,11 @@ npx skills add laststance/skills --skill code-trace
 npx skills add laststance/skills --skill codebase-litter-audit
 npx skills add laststance/skills --skill codex-context-details
 npx skills add laststance/skills --skill colorful-type
+npx skills add laststance/skills --skill component-hierarchy
 npx skills add laststance/skills --skill coderabbit-resolver
 npx skills add laststance/skills --skill cookie
+npx skills add laststance/skills --skill copy
+npx skills add laststance/skills --skill core-topic
 npx skills add laststance/skills --skill create-hook
 npx skills add laststance/skills --skill create-worktree
 npx skills add laststance/skills --skill design
@@ -41,6 +44,7 @@ npx skills add laststance/skills --skill git
 npx skills add laststance/skills --skill github-actions-pnpm-ci
 npx skills add laststance/skills --skill hack-feed
 npx skills add laststance/skills --skill issue
+npx skills add laststance/skills --skill i-write-code
 npx skills add laststance/skills --skill laststance-publish-skill
 npx skills add laststance/skills --skill load
 npx skills add laststance/skills --skill locate-ui-from-code
@@ -61,6 +65,7 @@ npx skills add laststance/skills --skill search
 npx skills add laststance/skills --skill search-first
 npx skills add laststance/skills --skill show-system-prompt
 npx skills add laststance/skills --skill simplify
+npx skills add laststance/skills --skill source-grounded-research
 npx skills add laststance/skills --skill skill-inspect
 npx skills add laststance/skills --skill sync-pencil
 npx skills add laststance/skills --skill syncing-docs-and-memory
@@ -85,8 +90,11 @@ npx skills add laststance/skills --skill x-agents-cross-review
 | [codebase-litter-audit](skills/codebase-litter-audit/) | Audit repositories for half-finished features, stale TODOs, no-op handlers, visible UI wired to stubs, disabled tests, stale docs, placeholder assets, suppressions, and other codebase litter that dead-code tools miss. | — |
 | [codex-context-details](skills/codex-context-details/) | Codex-only context inspector that summarizes current prompt, tool schema, Skill/MCP/Plugin/Subagent, `AGENTS.md`, memory, and conversation size from local Codex telemetry without printing raw prompt contents. | OpenAI Codex CLI/Desktop **(required; Codex-only)** |
 | [colorful-type](skills/colorful-type/) | Replace colorless primitives (`string`, `number`, `boolean`) with domain-rich types. Adds branded types, JSDoc, and named type aliases to communicate intent. | — |
+| [component-hierarchy](skills/component-hierarchy/) | Visualize where a React component sits in the Next.js tree (Page → target) as an ASCII diagram with file paths. Supports App Router and Pages Router. | — |
 | [coderabbit-resolver](skills/coderabbit-resolver/) | Automates the full CodeRabbit PR review cycle — fix comments, resolve threads, pass CI, merge, and clean up. Supports `--bulk` for all open PRs. | — |
 | [cookie](skills/cookie/) | Copy Google Chrome's cookies into `playwright-cli` (macOS) so its browser inherits every logged-in session (GitHub, etc.). Decrypts via the macOS Keychain, loads per-cookie, verifies before navigating, and deletes the plaintext token files after. | `playwright-cli` **(required)**, Node.js **(required)** |
+| [copy](skills/copy/) | Copy the last Cursor agent message as clean markdown to the clipboard by extracting text from the agent transcript JSONL. | Python 3 **(required)**, macOS `pbcopy` **(required)** |
+| [core-topic](skills/core-topic/) | Motivation igniter for lazy days: randomly picks a legendary GitHub PR/Issue/Discussion from the React/JS/TS/Node core ecosystem and delivers an inspiring deep-dive in Japanese. | [GitHub CLI](https://cli.github.com/) **(required)** |
 | [create-hook](skills/create-hook/) | Creates, debugs, and extends Claude Code hooks. Builds reliable hooks that survive real-world event firing — covers SessionStart, PostCompact, PreToolUse, PostToolUse, UserPromptSubmit, Stop, and Notification handlers, `additionalContext` injection, and tool gating. | — |
 | [create-worktree](skills/create-worktree/) | Creates a git worktree as a sibling directory to the current project (e.g., `../project-feat-x`), copies `.gitignore`d config files (`.env`, `.env.local`, etc.) while skipping heavy build/dependency directories (`node_modules`, `.next`, `dist`, `build`, `coverage`), then navigates into the new worktree. | — |
 | [design](skills/design/) | Architecture-driven plan creation with 5-phase pipeline: Research → Architecture → 3-reviewer loop (max 5 rounds) → Final Review → Plan Output. "Weakest LLM Proof" principle ensures plans are executable by any AI agent. | [Serena MCP](https://github.com/oraios/serena) (recommended), [Context7](https://github.com/upstash/context7) (recommended), [Perplexity MCP](https://github.com/ppl-ai/modelcontextprotocol) (recommended) |
@@ -99,6 +107,7 @@ npx skills add laststance/skills --skill x-agents-cross-review
 | [github-actions-pnpm-ci](skills/github-actions-pnpm-ci/) | Creates secure pnpm/Node GitHub Actions CI with SHA-pinned actions, pnpm store caching, frozen installs, lint/test/build/typecheck workflows, and Dependabot updates. | — |
 | [hack-feed](skills/hack-feed/) | OSS hacker news feed for JavaScript/React/Next.js internals (TC39, V8, fiber/scheduler, transpilation, JIT). Two-phase: ToC display → numbered selection → Explain-skill-level deep dive. Hybrid sourcing from GitHub, HN, RSS, and Exa web search. Output: Japanese (MVP). | [Exa MCP](https://github.com/exa-labs/exa-mcp-server) **(required)**, [GitHub CLI](https://cli.github.com/) (recommended) |
 | [issue](skills/issue/) | Creates issues on the project's tracker (GitHub Issues or Linear) and lists open issues. Auto-detects which tracker the project uses; feature requests follow a strict non-engineer-voice template. | — |
+| [i-write-code](skills/i-write-code/) | Daily coding habit assistant inspired by John Resig's "Write Code Every Day". Suggests practice from laststance repos, Web UI exercises, MDN APIs, and library internals. Japanese output. | — |
 | [laststance-publish-skill](skills/laststance-publish-skill/) | Publishes a stable skill to the laststance/skills GitHub registry for distribution via `npx skills add`. Updates README install commands, skills table, and usage examples in alphabetical order. | — |
 | [load](skills/load/) | Load project context from Serena MCP memory for session initialization. Discovers memories, reads project overview, and validates context sufficiency. | [Serena MCP](https://github.com/oraios/serena) **(required)** |
 | [locate-ui-from-code](skills/locate-ui-from-code/) | Bridge code → screen by capturing a screenshot + DOM dump (outerHTML / computed styles / bounding box / a11y attributes) of the rendered UI element corresponding to a code component, selector, role, or text. Tool-agnostic — works in Claude Code, Cursor, and Codex via `playwright-cli`; uses chrome-devtools MCP when available. | `playwright-cli` **(required)**, chrome-devtools MCP (recommended) |
@@ -119,6 +128,7 @@ npx skills add laststance/skills --skill x-agents-cross-review
 | [search-first](skills/search-first/) | Research-before-coding workflow. Search for existing tools, libraries, and patterns (repo, npm/PyPI, MCP servers, skills, GitHub) before writing custom code. Adopt → Extend → Compose → Build decision matrix. | — |
 | [show-system-prompt](skills/show-system-prompt/) | Reveals the actual runtime system prompt of AI coding agent CLIs (currently Claude Code; Codex and others planned) via static binary inspection, official OTEL telemetry, and mitmproxy capture. Compares static (baked-in) vs dynamic (per-session) prompt sections. | — |
 | [simplify](skills/simplify/) | Faithful recreation of Anthropic's removed `/simplify` Claude Code bundled skill. Reviews `git diff` via three parallel agents (Code Reuse, Code Quality, Efficiency) and fixes any issues found. Accepts free-form focus args appended under `## Additional Focus`. | — |
+| [source-grounded-research](skills/source-grounded-research/) | Produces source-grounded research briefs with citations, contradiction handling, and query logs. Research-only — no implementation or speculative answers without sources. | [Context7](https://github.com/upstash/context7) (recommended), web search / MCP (recommended) |
 | [skill-inspect](skills/skill-inspect/) | Read-only diagnostic. Resolves any name across the skill ecosystem (skills, plugins, agents, MCP servers, legacy commands) and displays a structured info card with provenance, metadata, and cross-tool availability across `~/.claude`, `~/.cursor`, `~/.codex`, `~/.gemini`, `~/.vscode`, `~/.antigravity`. | — |
 | [sync-pencil](skills/sync-pencil/) | Bidirectional sync between `.pen` design files and implementation code. Supports Electron, Web, and iOS Simulator. Use when updating designs from code, generating code from designs, or resolving drift. | Pencil MCP **(required)**, `playwright-cli` (Web + Electron via CDP) / [iOS Simulator MCP](https://github.com/nichochar/ios-simulator-mcp) (iOS) |
 | [syncing-docs-and-memory](skills/syncing-docs-and-memory/) | Bidirectional sync between project docs (README/AGENTS.md/CLAUDE.md/SPEC.md/etc.) and memory systems. Serena MCP automatic; gstack-learnings, gbrain, Notion/Obsidian/Inkdrop opt-in via speech. Scale-aware (Small/Medium/Large), AskUserQuestion-gated risky edits, and observed-truth memory write-back. | [Serena MCP](https://github.com/oraios/serena) (recommended), [GitHub CLI](https://cli.github.com/) (recommended) |
@@ -153,8 +163,11 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /codebase-litter-audit              # Find half-finished codebase litter
 /codex-context-details              # Show Codex-only context usage breakdown
 /colorful-type                       # Replace primitives with domain types
+/component-hierarchy Button.tsx      # ASCII tree from Page down to target component
 /coderabbit-resolver 17             # Process PR #17
 /cookie                             # Import Chrome cookies into a playwright-cli session
+/copy                               # Copy last agent message to clipboard (markdown)
+/core-topic                         # Random React/JS core GitHub deep-dive (Japanese)
 /create-hook                        # Build/debug Claude Code hooks
 /create-worktree feat/new-thing     # Create git worktree at ../project-feat-new-thing
 /design user authentication system   # Create detailed implementation plan
@@ -168,6 +181,7 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /github-actions-pnpm-ci             # Add secure pnpm GitHub Actions CI
 /hack-feed week                     # Browse top OSS hacker news for a period
 /issue <description>                # Create issue on GitHub or Linear (auto-detects)
+/i-write-code                       # Daily coding practice menu (Write Code Every Day)
 /laststance-publish-skill           # Publish a stable skill to laststance/skills
 /load                               # Load session context from Serena MCP
 /locate-ui-from-code FolderHeader   # Bridge code → screen with screenshot + DOM dump
@@ -188,6 +202,7 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /search-first add dead link checker # Research existing tools before writing custom code
 /show-system-prompt                 # Reveal the running agent's actual system prompt
 /simplify                           # Review changed code (reuse + quality + efficiency) and fix issues
+/source-grounded-research React 19  # Cited research brief (no code changes)
 /skill-inspect mentor               # Display info card for any skill/agent/MCP server
 /sync-pencil                        # Sync .pen design ↔ code
 /syncing-docs-and-memory            # Sync project docs and memory systems with current branch state
