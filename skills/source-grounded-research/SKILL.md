@@ -1,6 +1,6 @@
 ---
 name: source-grounded-research
-description: Produces source-grounded research briefs with citations, contradiction handling, and query logs. Use when the user asks to research, investigate, compare tools or frameworks, analyze open-source repositories, validate recent changes, or gather auditable documentation from the web or repo docs.
+description: Cited research briefs
 disable-model-invocation: true
 ---
 

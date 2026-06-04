@@ -1,6 +1,6 @@
 ---
 name: i-write-code
-description: "Daily coding habit assistant inspired by John Resig's 'Write Code Every Day'. Suggests projects from laststance repos (next-play, utils), Web UI exercises, MDN JavaScript API practice, popular library internals study, and Python/Rust practice. Use this whenever the user wants a daily coding theme, habit prompt, small practice task, study menu, or a meaningful coding session to log. Outputs in Japanese."
+description: Daily coding habit prompts JP
 disable-model-invocation: true
 ---
 

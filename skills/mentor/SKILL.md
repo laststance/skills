@@ -1,6 +1,6 @@
 ---
 name: mentor
-description: Code mentor
+description: Interactive code mentor
 ---
 
 ## Codex Compatibility

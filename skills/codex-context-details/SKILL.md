@@ -1,6 +1,6 @@
 ---
 name: codex-context-details
-description: Codex-only context inspector for OpenAI Codex CLI/Desktop. Use when the user asks for a table or breakdown of Codex context, token/context details, prompt/tool schema size, Skill/MCP/Plugin/Subagent contribution, AGENTS.md rules size, or wants to know what is consuming the Codex context window.
+description: Codex context breakdown
 ---
 
 # Codex Context Details

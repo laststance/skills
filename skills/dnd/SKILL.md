@@ -1,6 +1,6 @@
 ---
 name: dnd
-description: DnD QA helper
+description: Coordinate drag-drop QA
 ---
 
 # Drag-and-Drop QA — Coordinate-Based Verification

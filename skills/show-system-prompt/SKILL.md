@@ -1,6 +1,6 @@
 ---
 name: show-system-prompt
-description: Inspects and reveals the actual runtime system prompt of AI coding agents (currently Claude Code; Codex and others planned). Use when the user asks to see, dump, leak, observe, capture, or verify the system prompt of an agent CLI, or wants to compare static vs dynamic prompt sections.
+description: Reveal agent system prompt
 ---
 
 # show-system-prompt

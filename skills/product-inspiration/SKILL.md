@@ -1,6 +1,6 @@
 ---
 name: product-inspiration
-description: UI inspiration
+description: Top-app UI inspiration
 allowed-tools: "Read,Write,WebSearch,WebFetch,Task,AskUserQuestion,TodoWrite,Bash,Skill"
 ---
 

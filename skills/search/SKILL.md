@@ -1,6 +1,6 @@
 ---
 name: search
-description: Iteratively research a question by orchestrating WebSearch, WebFetch, and any installed search MCPs (Exa, Perplexity, Tavily, Context7, DeepWiki). Picks the best-fit tool for the question type, then switches to a complementary tool family if results are insufficient — never re-runs the same tool with a slight rewording. Continues until a satisfactory, citation-backed answer is reached or three passes are exhausted. Use when the user invokes `/search <question>`, asks a research question, library/API question, asks about current events, or when one search tool returns insufficient results.
+description: Multi-tool cited research
 argument-hint: "<question or topic to research>"
 ---
 

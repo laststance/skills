@@ -1,6 +1,6 @@
 ---
 name: brainstorm-search-plan
-description: Take a vague or open-ended request and converge it into an approved plan via three interleaved phases — Brainstorm (clarify intent with AskUserQuestion), Search (gather facts via the `/search` skill), Plan (structure the work inside Claude Code plan mode). Loops between phases until the request is concrete enough for `ExitPlanMode` approval. Use when the user invokes `/brainstorm-search-plan <fuzzy request>`, says they have a half-baked idea, asks for help figuring out what they want, or hands over a request with multiple unspecified decisions.
+description: Vague idea via search to plan
 argument-hint: "<vague idea or open-ended goal>"
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: create-hook
-description: Creates, debugs, and extends Claude Code hooks. Use when building a new hook, troubleshooting why a hook "doesn't fire", designing SessionStart/PostCompact/PreToolUse/PostToolUse/UserPromptSubmit/Stop/Notification handlers, or when the user mentions settings.json hooks, additionalContext injection, or hookSpecificOutput.
+description: Build Claude Code hooks
 ---
 
 # Create Hook

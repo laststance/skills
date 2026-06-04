@@ -1,6 +1,6 @@
 ---
 name: design
-description: Plan architect
+description: Architecture plan architect
 argument-hint: "<target feature or system to design>"
 ---
 

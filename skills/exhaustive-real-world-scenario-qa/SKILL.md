@@ -1,6 +1,6 @@
 ---
 name: exhaustive-real-world-scenario-qa
-description: Scenario QA
+description: Exhaustive browser scenario QA
 ---
 
 # Exhaustive Real World Scenario QA

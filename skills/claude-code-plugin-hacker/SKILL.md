@@ -1,6 +1,6 @@
 ---
 name: claude-code-plugin-hacker
-description: Debug, audit, and fix Claude Code plugin hooks, skills, and cache issues. Use when seeing hook errors, plugin misbehavior, or investigating plugin internals.
+description: Debug Claude Code plugins
 ---
 
 # Claude Code Plugin Hacker

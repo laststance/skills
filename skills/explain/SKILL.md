@@ -1,6 +1,6 @@
 ---
 name: explain
-description: Code explainer
+description: Deep code explainer
 argument-hint: "[target: code/file/concept]"
 ---
 

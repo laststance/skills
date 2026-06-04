@@ -1,7 +1,7 @@
 ---
 name: qa-electron
 version: 0.2.0
-description: Electron QA
+description: Electron black-box QA
 allowed-tools:
   - Bash
   - Read

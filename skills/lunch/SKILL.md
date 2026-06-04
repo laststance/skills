@@ -1,6 +1,6 @@
 ---
 name: lunch
-description: Lunch chat
+description: Casual lunch chat
 ---
 
 # Lunch — Mealtime Conversation Partner

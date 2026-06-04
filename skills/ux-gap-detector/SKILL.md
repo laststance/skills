@@ -1,6 +1,6 @@
 ---
 name: ux-gap-detector
-description: SaaS UX audit
+description: SaaS UX gap audit
 argument-hint: "[--category dashboard|data-management|form-workflow|navigation-shell|settings-profile] [target-url]"
 allowed-tools: "Bash,Read,Write,Edit,Glob,Grep,AskUserQuestion,mcp__sequential-thinking__*,mcp__serena__*"
 ---

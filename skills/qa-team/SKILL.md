@@ -1,6 +1,6 @@
 ---
 name: qa-team
-description: QA team runner
+description: Parallel QA agent team
 argument-hint: "[--platform web|electron|ios|macos|auto] [--skip visual|functional|hig|edge|ux] [--quick]"
 allowed-tools: "Bash,Read,Write,Edit,Glob,Grep,Task,TaskCreate,TaskUpdate,TaskList,TaskGet,TeamCreate,TeamDelete,SendMessage,AskUserQuestion,Skill,mcp__ios-simulator__*,mcp__mac-mcp-server__*,mcp__serena__*"
 ---

@@ -1,7 +1,7 @@
 ---
 name: qa-ios
 version: 0.1.0
-description: iOS Sim QA
+description: iOS Simulator QA
 allowed-tools:
   - Bash
   - Read

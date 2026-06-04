@@ -1,6 +1,6 @@
 ---
 name: ts-pattern-refactor
-description: Detect and refactor conditional code to ts-pattern's match().with().exhaustive(). Refactors JSX branching, chained ternaries, and discriminated-union dispatch — but deliberately leaves plain single-condition if-chains alone. Use when sweeping a codebase for readability/exhaustiveness wins or when a new discriminated union has spread across the UI.
+description: Refactor branches to ts-pattern
 ---
 
 # ts-pattern Refactor

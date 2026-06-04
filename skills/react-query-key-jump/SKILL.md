@@ -1,10 +1,6 @@
 ---
 name: react-query-key-jump
-description: >-
-  Jumps from a TanStack React Query queryKey string (e.g. getDrawing) to the
-  useQuery / useInfiniteQuery hook file and line where that queryKey is defined.
-  Use when the user asks to jump, go to, or find a query key, invalidateQueries
-  key, queryKey definition, or mentions react-query-key-jump / queryKey navigation.
+description: Jump to queryKey hook
 argument-hint: "<queryKey>"
 ---
 

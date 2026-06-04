@@ -1,6 +1,6 @@
 ---
 name: coderabbit-resolver
-description: CodeRabbit loop
+description: CodeRabbit PR loop
 argument-hint: "[pr-number|--bulk]"
 ---
 

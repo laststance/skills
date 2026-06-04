@@ -1,6 +1,6 @@
 ---
 name: codebase-litter-audit
-description: "Audit a repository for codebase litter that mechanical dead-code tools often miss: half-finished features, stale TODO/FIXME comments, no-op handlers, visible UI wired to stubs, disabled/skipped tests, stale migrations/docs, placeholder assets, suppressions, and code/docs mismatch. Use when the user asks to find unfinished work, incomplete features, TODO debt, 中途半端, ゴミ, stale comments, or hidden cleanup backlog in a codebase."
+description: Find unfinished code litter
 ---
 
 # Codebase Litter Audit

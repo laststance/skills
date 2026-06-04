@@ -1,7 +1,7 @@
 ---
 name: qa-react-native
 version: 0.1.0
-description: React Native QA
+description: React Native device QA
 allowed-tools:
   - Bash
   - Read

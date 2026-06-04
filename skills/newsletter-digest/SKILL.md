@@ -1,6 +1,6 @@
 ---
 name: newsletter-digest
-description: Email digest
+description: Deep newsletter summary
 argument-hint: [newsletter-subject-or-name]
 ---
 

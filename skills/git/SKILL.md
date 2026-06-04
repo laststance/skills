@@ -1,6 +1,6 @@
 ---
 name: git
-description: Smart git ops
+description: Smart git operations
 argument-hint: "[operation | task description] [args]"
 ---
 
