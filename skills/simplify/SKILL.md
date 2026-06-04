@@ -1,6 +1,6 @@
 ---
 name: simplify
-description: Review changed code for reuse, quality, and efficiency, then fix any issues found.
+description: Review diff for quality
 model: opus
 ---
 

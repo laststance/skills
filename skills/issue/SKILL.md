@@ -1,6 +1,6 @@
 ---
 name: issue
-description: Tracker issues
+description: Create or list tracker issues
 argument-hint: "<description> | list [--assignee me] [--label bug]"
 ---
 

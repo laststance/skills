@@ -1,18 +1,6 @@
 ---
 name: core-topic
-description: |
-  Motivation igniter for lazy days. Randomly picks a legendary GitHub PR/Issue/Discussion
-  from the React/JS/TS/Node core ecosystem (sebmarkbage, gaearon, React WG, etc.)
-  and delivers an inspiring deep-dive explanation in Japanese.
-
-  Use when:
-  - User feels unmotivated and wants coding inspiration
-  - User says "core-topic", "コアトピック", "やる気出したい", "something interesting"
-  - User wants to learn deep JS/TS/React/Node internals from real GitHub history
-  - User wants to become a "wizard" by studying core contributor work
-
-  Keywords: core-topic, motivation, inspire, wizard, deep-dive, react internals,
-  sebmarkbage, dan abramov, github archaeology, legendary PR
+description: React core deep-dive JP
 disable-model-invocation: true
 ---
 

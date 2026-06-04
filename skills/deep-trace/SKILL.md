@@ -1,6 +1,6 @@
 ---
 name: deep-trace
-description: Diff trace tool
+description: Line-by-line diff trace
 argument-hint: "[pr-number-or-file-path]"
 ---
 

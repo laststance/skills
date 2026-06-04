@@ -1,6 +1,6 @@
 ---
 name: task
-description: Task workflow
+description: Five-phase implementation workflow
 argument-hint: "[task description] [--frontend-verify]"
 ---
 

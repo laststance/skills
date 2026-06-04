@@ -1,6 +1,6 @@
 ---
 name: locate-ui-from-code
-description: Bridge code -> screen by capturing a screenshot + DOM dump (outerHTML / computed styles / bounding box / a11y attributes) of the rendered UI element corresponding to a code component, selector, role, or text. Use when the user asks "where is `<Component>` on screen?", "what does X look like?", or needs visual evidence anchored to a code reference. Tool-agnostic — works in Claude Code, Cursor, and Codex via playwright-cli; uses chrome-devtools MCP when available.
+description: Code to screen capture
 ---
 
 # Locate UI from Code

@@ -1,7 +1,7 @@
 ---
 name: qa-cli
 version: 0.1.0
-description: CLI tool QA
+description: CLI black-box QA
 allowed-tools:
   - Bash
   - Read

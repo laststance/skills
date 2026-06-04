@@ -1,6 +1,6 @@
 ---
 name: laststance-publish-skill
-description: Publish skill
+description: Publish skill to registry
 ---
 
 # Publish Skill to laststance/skills

@@ -1,16 +1,7 @@
 ---
 name: visual-lint
 version: 0.1.1
-description: |
-  ESLint for rendered UI. Screenshots a running app and runs a structured defect
-  rubric over the pixels to catch display breakage that code lint/typecheck cannot
-  see — unintended text wrapping, overflow/clipping, element overlap, misalignment,
-  broken layout. Baseline-free: detects first-occurrence bugs with no golden image,
-  using VLM judgment. Read-only — reports findings with cited evidence, never edits
-  source or commits. Use when asked to "visual lint", "check the UI isn't broken",
-  "did my layout break", or after a UI change that should be verified visually.
-  Complements /qa-electron (does it function?) and /design-review (is it pretty?) —
-  this answers "is the render broken?".
+description: Screenshot UI defect lint
 allowed-tools:
   - Bash
   - Read

@@ -1,16 +1,6 @@
 ---
 name: copy
-description: |
-  Copy the last agent message as markdown to the clipboard.
-  Extracts text from the Cursor agent transcript JSONL and pipes to pbcopy.
-
-  Use when:
-  - User says "/copy", "コピー", "copy last message", "クリップボードにコピー"
-  - User wants to copy a previous agent response as clean markdown
-  - User complains about Cursor UI context menu disappearing before they could copy
-  - User wants the raw markdown of an agent response
-
-  Keywords: copy, clipboard, pbcopy, markdown, コピー, last message, agent response
+description: Copy last agent reply
 disable-model-invocation: true
 ---
 

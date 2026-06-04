@@ -1,6 +1,6 @@
 ---
 name: x-agents-cross-review
-description: Cross-review
+description: Multi-agent parallel review
 ---
 
 # X-Agents Cross-Review

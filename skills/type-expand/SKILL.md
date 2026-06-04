@@ -1,6 +1,6 @@
 ---
 name: type-expand
-description: Expands TypeScript type aliases into concrete, primitive-resolved shapes, including unions, intersections, generics, conditional types, infer-based types, and common utility types as far as statically resolvable. Use when type hover only shows alias names or when the user asks to inspect the actual runtime-facing type shape.
+description: Expand TS aliases to shapes
 ---
 
 # Type Expand

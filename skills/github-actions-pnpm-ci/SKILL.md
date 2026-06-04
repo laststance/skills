@@ -1,6 +1,6 @@
 ---
 name: github-actions-pnpm-ci
-description: Use when creating or updating GitHub Actions CI for pnpm/Node TypeScript projects; installs SHA-pinned checkout/setup-node/pnpm setup, default pnpm store caching, frozen installs, lint/test/build/typecheck workflows, and Dependabot updates for actions and npm/pnpm dependencies.
+description: Secure pnpm GitHub Actions CI
 metadata:
   short-description: Secure pnpm GitHub Actions CI
 ---

@@ -1,6 +1,6 @@
 ---
 name: syncing-docs-and-memory
-description: Syncs project documentation files (README, AGENTS.md, CLAUDE.md, SPEC.md, root + docs/) and memory systems (Serena MCP, gstack-learnings, gbrain, Claude auto-memory etc) bidirectionally with current codebase state.
+description: Sync docs and memory
 ---
 
 # syncing-docs-and-memory

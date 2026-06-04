@@ -1,22 +1,6 @@
 ---
 name: component-hierarchy
-description: |
-  Visualize where a React component sits in the Next.js component tree, from the top-level
-  Page down to the target component, as an ASCII tree diagram with file paths.
-  Supports both App Router (app/) and Pages Router (pages/).
-
-  Use this skill whenever you need to understand a component's position in the rendering
-  hierarchy, trace the parent chain from a component up to its Page, or visualize how
-  components are nested. Especially useful for onboarding to unfamiliar codebases, debugging
-  prop drilling, understanding render boundaries, or explaining architecture to teammates.
-
-  Triggers on:
-  - "Where is X component used?" or "Where does X sit in the tree?"
-  - "Show me the component hierarchy for X"
-  - "Which page renders X?"
-  - "Component tree", "component hierarchy", "component position"
-  - "コンポーネント階層", "コンポーネントの位置", "どこで使われている"
-  - Any question about a component's nesting depth or parent chain in Next.js
+description: Next.js component tree
 disable-model-invocation: true
 ---
 

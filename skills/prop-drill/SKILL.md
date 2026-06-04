@@ -1,6 +1,6 @@
 ---
 name: prop-drill
-description: Prop drill map
+description: Trace React prop drilling
 argument-hint: "[prop-name] [component-or-file-path?]"
 ---
 

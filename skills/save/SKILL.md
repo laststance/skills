@@ -1,6 +1,6 @@
 ---
 name: save
-description: Save session
+description: Save session to memory
 ---
 
 # Session Save

@@ -1,6 +1,6 @@
 ---
 name: skill-inspect
-description: Skill inspector
+description: Inspect skill ecosystem
 argument-hint: "[name]"
 ---
 

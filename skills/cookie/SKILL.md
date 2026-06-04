@@ -1,6 +1,6 @@
 ---
 name: cookie
-description: Copy Google Chrome's cookies into playwright-cli (macOS) so its browser inherits every logged-in session. Use when playwright-cli needs to access authenticated pages, when a session shows logged-out, or when asked to import Chrome cookies into Playwright.
+description: Chrome cookies to Playwright
 allowed-tools: Bash(node:*) Bash(playwright-cli:*) Bash(rm:*)
 ---
 

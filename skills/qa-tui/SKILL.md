@@ -1,7 +1,7 @@
 ---
 name: qa-tui
 version: 0.1.0
-description: Terminal UI QA
+description: Terminal UI black-box QA
 allowed-tools:
   - Bash
   - Read

@@ -1,6 +1,6 @@
 ---
 name: load
-description: Load session
+description: Load session from memory
 argument-hint: "[project]"
 ---
 

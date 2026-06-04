@@ -1,6 +1,6 @@
 ---
 name: create-worktree
-description: Creates a git worktree as a sibling directory to the current project (e.g., ../project-feat-x), copies .gitignored config files (.env, .env.local, etc.) while skipping heavy build/dependency directories (node_modules, .next, dist, build, coverage), then navigates into the new worktree. Use when the user asks to "create a worktree", "新しいworktreeを作って", "set up a worktree", "worktree作って", or wants to work on a parallel branch in an isolated checkout that retains local config.
+description: Git worktree with env copy
 ---
 
 # Create Worktree

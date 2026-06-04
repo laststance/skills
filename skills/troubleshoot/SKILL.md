@@ -1,6 +1,6 @@
 ---
 name: troubleshoot
-description: Root-cause fix
+description: Hypothesis-driven root-cause fix
 argument-hint: "[issue/error description] [--frontend-verify]"
 ---
 

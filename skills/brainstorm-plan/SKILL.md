@@ -1,6 +1,6 @@
 ---
 name: brainstorm-plan
-description: Take a vague or open-ended request and converge it into an approved plan via two interleaved phases — Brainstorm (clarify intent with AskUserQuestion) and Plan (structure the work inside Claude Code plan mode). Skips external research; use for self-contained tasks that don't need new knowledge — shell scripts, refactors, internal code reorganization, dev tooling, file ops. Loops Brainstorm until concrete, then enters plan mode for `ExitPlanMode` approval. Use when the user invokes `/brainstorm-plan <fuzzy request>`, when the unknowns are preference-based (only the user can answer), or when `/brainstorm-search-plan` would be overkill.
+description: Vague idea to approved plan
 argument-hint: "<vague idea or open-ended goal>"
 ---
 

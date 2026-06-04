@@ -1,16 +1,6 @@
 ---
 name: hack-feed
-description: |
-  OSS の深いハッカーニュースを収集して一件ずつ丁寧に解説する。
-  JavaScript/React/Next.js の internals、TC39、V8、fiber/scheduler、
-  transpilation、bytecode、memory model、JIT など
-  "Secrets of the JavaScript Ninja" 級の好奇心トピックに特化。
-  ToC 表示 → 番号指定 → Explain スキル級の深堀りの2フェーズ。
-
-  Use when: "hack feed", "今日の hack", "ハッカーニュース",
-  "OSS の深い話題", "React internals 最新", "JavaScript 深堀り",
-  "/hack-feed 3,7" のような番号指定。
-
+description: Deep JS hacker news JP
 argument-hint: "[period: 24h|3d|week|month] or [numbers: 1,2,3] or [all]"
 ---
 
