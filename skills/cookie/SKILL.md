@@ -1,7 +1,6 @@
 ---
 name: cookie
 description: Chrome cookies to Playwright
-allowed-tools: Bash(node:*) Bash(playwright-cli:*) Bash(rm:*)
 ---
 
 # Copy Chrome cookies into playwright-cli
