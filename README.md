@@ -30,7 +30,6 @@ npx skills add laststance/skills --skill colorful-type
 npx skills add laststance/skills --skill component-hierarchy
 npx skills add laststance/skills --skill coderabbit-resolver
 npx skills add laststance/skills --skill cookie
-npx skills add laststance/skills --skill copy
 npx skills add laststance/skills --skill core-topic
 npx skills add laststance/skills --skill create-worktree
 npx skills add laststance/skills --skill deep-trace
@@ -86,7 +85,6 @@ npx skills add laststance/skills --skill x-agents-cross-review
 | [component-hierarchy](skills/component-hierarchy/) | Visualize where a React component sits in the Next.js tree (Page → target) as an ASCII diagram with file paths. Supports App Router and Pages Router. | — |
 | [coderabbit-resolver](skills/coderabbit-resolver/) | Automates the full CodeRabbit PR review cycle — fix comments, resolve threads, pass CI, merge, and clean up. Supports `--bulk` for all open PRs. | — |
 | [cookie](skills/cookie/) | Copy Google Chrome's cookies into `playwright-cli` (macOS) so its browser inherits every logged-in session (GitHub, etc.). Decrypts via the macOS Keychain, loads per-cookie, verifies before navigating, and deletes the plaintext token files after. | `playwright-cli` **(required)**, Node.js **(required)** |
-| [copy](skills/copy/) | Copy the last Cursor agent message as clean markdown to the clipboard by extracting text from the agent transcript JSONL. | Python 3 **(required)**, macOS `pbcopy` **(required)** |
 | [core-topic](skills/core-topic/) | Motivation igniter for lazy days: randomly picks a legendary GitHub PR/Issue/Discussion from the React/JS/TS/Node core ecosystem and delivers an inspiring deep-dive in Japanese. | [GitHub CLI](https://cli.github.com/) **(required)** |
 | [create-worktree](skills/create-worktree/) | Creates a git worktree as a sibling directory to the current project (e.g., `../project-feat-x`), copies `.gitignore`d config files (`.env`, `.env.local`, etc.) while skipping heavy build/dependency directories (`node_modules`, `.next`, `dist`, `build`, `coverage`), then navigates into the new worktree. | — |
 | [deep-trace](skills/deep-trace/) | Line-by-line execution path tracer for PR diffs, git diffs, or specified code sections. Maps every line to its screen/URL, data flow, and execution context like a debugger's step-through. | [Serena MCP](https://github.com/oraios/serena) (recommended) |
@@ -152,7 +150,6 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /component-hierarchy Button.tsx      # ASCII tree from Page down to target component
 /coderabbit-resolver 17             # Process PR #17
 /cookie                             # Import Chrome cookies into a playwright-cli session
-/copy                               # Copy last agent message to clipboard (markdown)
 /core-topic                         # Random React/JS core GitHub deep-dive (Japanese)
 /create-worktree feat/new-thing     # Create git worktree at ../project-feat-new-thing
 /deep-trace 42                      # Trace PR #42 line-by-line
