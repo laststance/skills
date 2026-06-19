@@ -56,7 +56,6 @@ npx skills add laststance/skills --skill qa-tui
 npx skills add laststance/skills --skill react-query-key-jump
 npx skills add laststance/skills --skill save
 npx skills add laststance/skills --skill search
-npx skills add laststance/skills --skill search-first
 npx skills add laststance/skills --skill show-system-prompt
 npx skills add laststance/skills --skill simplify
 npx skills add laststance/skills --skill source-grounded-research
@@ -111,7 +110,6 @@ npx skills add laststance/skills --skill x-agents-cross-review
 | [react-query-key-jump](skills/react-query-key-jump/) | Jump from a TanStack React Query `queryKey` string (e.g. `getDrawing`) to the `useQuery` / `useInfiniteQuery` hook line where that key is defined. Skips `invalidateQueries` usage sites. | [ripgrep](https://github.com/BurntSushi/ripgrep) **(required)** |
 | [save](skills/save/) | Save session context to Serena MCP memory for cross-session persistence. Analyzes accomplishments, persists learnings, and creates session checkpoints. | [Serena MCP](https://github.com/oraios/serena) **(required)** |
 | [search](skills/search/) | Iterative multi-tool research. Picks the best-fit tool (WebSearch, WebFetch, Exa, Perplexity, Tavily, Context7, DeepWiki) for the question type, then switches tool families across up to 3 passes until a citation-backed answer is reached. | [Exa MCP](https://github.com/exa-labs/exa-mcp-server) (recommended), [Perplexity MCP](https://github.com/ppl-ai/modelcontextprotocol) (recommended), [Tavily MCP](https://github.com/tavily-ai/tavily-mcp-server) (recommended), [Context7](https://github.com/upstash/context7) (recommended) |
-| [search-first](skills/search-first/) | Research-before-coding workflow. Search for existing tools, libraries, and patterns (repo, npm/PyPI, MCP servers, skills, GitHub) before writing custom code. Adopt → Extend → Compose → Build decision matrix. | — |
 | [show-system-prompt](skills/show-system-prompt/) | Reveals the actual runtime system prompt of AI coding agent CLIs (currently Claude Code; Codex and others planned) via static binary inspection, official OTEL telemetry, and mitmproxy capture. Compares static (baked-in) vs dynamic (per-session) prompt sections. | — |
 | [simplify](skills/simplify/) | Faithful recreation of Anthropic's removed `/simplify` Claude Code bundled skill. Reviews `git diff` via three parallel agents (Code Reuse, Code Quality, Efficiency) and fixes any issues found. Accepts free-form focus args appended under `## Additional Focus`. | — |
 | [source-grounded-research](skills/source-grounded-research/) | Produces source-grounded research briefs with citations, contradiction handling, and query logs. Research-only — no implementation or speculative answers without sources. | [Context7](https://github.com/upstash/context7) (recommended), web search / MCP (recommended) |
@@ -177,7 +175,6 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /react-query-key-jump getDrawing    # Jump to useQuery queryKey definition line
 /save                               # Save session context to Serena MCP
 /search what changed in React 19    # Iterative multi-tool research (Web + MCPs) until satisfied
-/search-first add dead link checker # Research existing tools before writing custom code
 /show-system-prompt                 # Reveal the running agent's actual system prompt
 /simplify                           # Review changed code (reuse + quality + efficiency) and fix issues
 /source-grounded-research React 19  # Cited research brief (no code changes)
