@@ -156,7 +156,7 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /coderabbit-resolver --bulk         # Process all open PRs
 /electron-release                   # Electron release workflow
 /explain src/auth/middleware.ts      # Deep code explanation
-/git commit                         # Smart git commit with Conventional Commits
+/git                                # Default: commit current changes, then push
 /github-actions-pnpm-ci             # Add secure pnpm GitHub Actions CI
 /hack-feed week                     # Browse top OSS hacker news for a period
 /issue <description>                # Create issue on GitHub or Linear (auto-detects)

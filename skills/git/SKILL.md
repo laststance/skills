@@ -35,6 +35,7 @@ Smart git workflow with automatic Conventional Commit message generation.
 
 Inspect the argument before acting:
 
+- **It is empty or whitespace-only** — run the **commit & push** operation below.
 - **It names a git subcommand** (`status`, `commit`, `push`, `pull`, `branch`, `merge`,
   `stash`, `log`) — possibly combined (`commit & push`) — run those operations below.
 - **It describes a task in natural language** (any language), e.g. `/git README更新して`
@@ -62,6 +63,15 @@ any natural-language argument that isn't a git subcommand.
 
 Safety rules still apply: never `--no-verify`, never force-push without confirmation, and
 honor the destructive-operation confirmations in Safety Rules above.
+
+### commit & push
+
+Commit current changes, then push the resulting commit.
+
+1. Run the **commit** operation below.
+2. If the commit operation stops because there are no changes, no clear staging set, or
+   another blocker, report that blocker and do **not** push.
+3. Run the **push** operation below only after a commit succeeds.
 
 ### status
 
@@ -149,6 +159,7 @@ View commit history with useful formatting.
 ## Examples
 
 ```
+/git                                # Default: commit current changes, then push
 /git status
 /git commit
 /git push
