@@ -4,7 +4,7 @@
 [![Claude Code](https://img.shields.io/badge/Claude_Code-compatible-D97757?style=flat-square&logo=claude&logoColor=white)](https://code.claude.com/docs/en/skills)
 [![Cursor](https://img.shields.io/badge/Cursor-compatible-000000?style=flat-square&logo=cursor&logoColor=white)](https://cursor.com/docs/skills)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-compatible-111827?style=flat-square&logo=openai&logoColor=white)](https://developers.openai.com/codex/skills)
-[![Skills](https://img.shields.io/badge/skills-48-2563EB?style=flat-square)](#available-skills)
+[![Skills](https://img.shields.io/badge/skills-47-2563EB?style=flat-square)](#available-skills)
 
 Agent skills for AI coding assistants. Install via [skills.sh](https://skills.sh).
 
@@ -19,7 +19,6 @@ npx skills add laststance/skills
 Install a specific skill:
 
 ```bash
-npx skills add laststance/skills --skill analyze-app
 npx skills add laststance/skills --skill brainstorm-plan
 npx skills add laststance/skills --skill brainstorm-search-plan
 npx skills add laststance/skills --skill claude-code-plugin-hacker
@@ -73,7 +72,6 @@ npx skills add laststance/skills --skill x-agents-cross-review
 
 | Skill | Description | Dependencies |
 |-------|-------------|--------------|
-| [analyze-app](skills/analyze-app/) | Analyze macOS .app bundles to identify technology stacks (Electron, Flutter, Qt, SwiftUI, native, etc.) by delegating to a specialized subagent. | — |
 | [brainstorm-plan](skills/brainstorm-plan/) | Converge a vague request into an approved plan via two phases — Brainstorm (clarify intent with `AskUserQuestion`) and Plan (structure inside Claude Code plan mode, exit via `ExitPlanMode`). Search-free; for self-contained tasks where unknowns are preference-based — shell scripts, refactors, internal reorganization, dev tooling. | — |
 | [brainstorm-search-plan](skills/brainstorm-search-plan/) | Converge a vague request into an approved plan via three interleaved phases — Brainstorm (clarify intent with `AskUserQuestion`), Search (gather facts via `/search`), Plan (structure inside Claude Code plan mode, exit via `ExitPlanMode`). Loops between phases until concrete. | — |
 | [claude-code-plugin-hacker](skills/claude-code-plugin-hacker/) | Debug, audit, and fix Claude Code plugin system issues — hook errors, plugin misbehavior, cache investigation. Knows that `enabledPlugins: false` is not a true kill switch (hooks still execute, skills still accessible). | — |
@@ -122,6 +120,14 @@ npx skills add laststance/skills --skill x-agents-cross-review
 | [visual-lint](skills/visual-lint/) | ESLint for rendered UI. Screenshots a running app via `playwright-cli` and runs a structured defect rubric over the pixels to catch display breakage that code lint/typecheck can't see — unintended wrapping, overflow/clipping, element overlap, misalignment, broken layout. Baseline-free (no golden image) and read-only — reports findings with cited evidence, never edits source. | `playwright-cli` **(required)** |
 | [x-agents-cross-review](skills/x-agents-cross-review/) | Multi-agent parallel cross-review. Launches X agents in parallel (Opus, full tool access) to independently review the same scope from different perspectives (baseline, devil's advocate, type safety, security, etc.), then consolidates findings into a unified consensus report. | [Serena MCP](https://github.com/oraios/serena) (recommended), [Context7](https://github.com/upstash/context7) (recommended) |
 
+## Deactivated Skills
+
+Skills in `skills/deactive/` are kept in the repository but excluded from `npx skills add` distribution.
+
+| Skill | Description | Path |
+|-------|-------------|------|
+| [analyze-app](skills/deactive/analyze-app/) | Analyze macOS .app bundles to identify technology stacks (Electron, Flutter, Qt, SwiftUI, native, etc.) by delegating to a specialized subagent. | `skills/deactive/analyze-app/` |
+
 ### Platform-dependent MCP for `--frontend-verify` (task) and qa-team
 
 | Platform | MCP Server |
@@ -137,7 +143,6 @@ npx skills add laststance/skills --skill x-agents-cross-review
 After installation, invoke skills as slash commands in your AI coding assistant:
 
 ```
-/analyze-app Linear                 # Analyze macOS app technology stack
 /brainstorm-plan <fuzzy>            # Vague → concrete via Brainstorm + Plan (no search)
 /brainstorm-search-plan <fuzzy>     # Vague → concrete via Brainstorm + Search + Plan
 /claude-code-plugin-hacker          # Debug Claude Code plugin issues
