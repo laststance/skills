@@ -4,26 +4,28 @@ Cross-reference for the same operation in chrome-devtools MCP (Claude Code) vs p
 
 ## Operation table
 
-| Operation | chrome-devtools MCP | playwright-cli |
-|---|---|---|
-| List open pages | `list_pages` | `playwright-cli list` |
-| Open new page | `new_page(url)` | `playwright-cli open <url>` |
-| Navigate current page | `navigate_page(url)` | `playwright-cli goto <url>` |
-| A11y snapshot | `take_snapshot()` | `playwright-cli snapshot` |
-| Element ref format | `uid="2_19"` | `e15` |
-| Screenshot (page) | `take_screenshot()` | `playwright-cli screenshot` |
-| Screenshot (element) | `take_screenshot({ uid })` | `playwright-cli screenshot e15` |
-| Save screenshot to file | `take_screenshot({ filePath })` | `--filename=path.png` |
-| Click | `click({ uid })` | `playwright-cli click e15` |
-| Type text | `fill({ uid, value })` | `playwright-cli fill e15 "text"` |
-| Press key | `press_key({ key })` | `playwright-cli press Enter` |
-| Hover | `hover({ uid })` | `playwright-cli hover e15` |
-| Drag | `drag({ from_uid, to_uid })` | `playwright-cli drag e3 e7` |
-| Eval JS | `evaluate_script({ function, args })` | `playwright-cli eval "fn" e15` |
-| Wait for text | `wait_for({ text })` | `playwright-cli --wait-for "text"` (or use `eval` polling) |
-| Cookies / auth | manual via dedicated tools | `playwright-cli state-save / state-load` |
-| Console messages | `list_console_messages()` | `playwright-cli console` |
-| Network requests | `list_network_requests()` | `playwright-cli network` |
+| Operation | chrome-devtools MCP | cursor-ide-browser (Cursor) | playwright-cli |
+|---|---|---|---|
+| List open pages | `list_pages` | `browser_tabs` (action: list) | `playwright-cli list` |
+| Open new page | `new_page(url)` | `browser_navigate` (position: active) | `playwright-cli open <url> --headed` |
+| Navigate current page | `navigate_page(url)` | `browser_navigate` | `playwright-cli goto <url>` |
+| A11y snapshot | `take_snapshot()` | `browser_snapshot` | `playwright-cli snapshot` |
+| Element ref format | `uid="2_19"` | `e15` (from snapshot) | `e15` |
+| Screenshot (page) | `take_screenshot()` | `browser_take_screenshot` | `playwright-cli screenshot` |
+| Screenshot (element) | `take_screenshot({ uid })` | `browser_take_screenshot` + ref | `playwright-cli screenshot e15` |
+| Save screenshot to file | `take_screenshot({ filePath })` | `filename` param | `--filename=path.png` |
+| Click | `click({ uid })` | `browser_click` | `playwright-cli click e15` |
+| Type text | `fill({ uid, value })` | `browser_fill` / `browser_type` | `playwright-cli fill e15 "text"` |
+| Press key | `press_key({ key })` | `browser_press_key` | `playwright-cli press Enter` |
+| Hover | `hover({ uid })` | (use snapshot + click) | `playwright-cli hover e15` |
+| Drag | `drag({ from_uid, to_uid })` | **coordinate ops** (`browser_get_bounding_box` + mouse) — ref drag unreliable for dnd-kit | `playwright-cli drag e3 e7` |
+| Eval JS | `evaluate_script({ function, args })` | `browser_cdp` → `Runtime.evaluate` | `playwright-cli eval "fn" e15` |
+| Highlight element | — | `browser_highlight` | — |
+| Lock / unlock | — | `browser_lock` / unlock | — |
+| Wait for text | `wait_for({ text })` | CDP poll or re-snapshot | `playwright-cli --wait-for "text"` |
+| Cookies / auth | manual via dedicated tools | project login flow / `.agent_browser` | `playwright-cli state-save / state-load` |
+| Console messages | `list_console_messages()` | `browser_cdp` | `playwright-cli console` |
+| Network requests | `list_network_requests()` | `browser_cdp` | `playwright-cli network` |
 
 ## Eval signature
 
@@ -46,13 +48,12 @@ For zero-arg calls, omit `args` / the trailing ref.
 
 ## Cursor / Codex specifics
 
-Neither IDE exposes a chrome-devtools MCP equivalent in shell. Use playwright-cli:
+**Cursor:** prefer `cursor-ide-browser` MCP (visible browser, snapshot refs). Some repos (e.g. zumen-fe `cursor-specific.mdc`) **forbid** `playwright-cli` unless the user explicitly asks.
+
+**Codex / shell without IDE browser:** use playwright-cli headed:
 
 ```sh
-# install once
 npm install -g @playwright/cli@latest
-
-# verify
 playwright-cli --version
 ```
 
@@ -80,7 +81,7 @@ For the "locate UI" workflow you almost never need named sessions — a single b
 
 ## Picking the tool
 
-- **Claude Code, MCP available** — either works; chrome-devtools MCP avoids shell spawn overhead for many small ops.
-- **Claude Code, no MCP / unfamiliar repo** — playwright-cli (commands paste-able into any environment).
-- **Cursor / Codex / shell agent** — playwright-cli.
-- **Mixed-IDE collaboration** (multiple devs on different tools) — playwright-cli, so command snippets are reproducible.
+- **Claude Code, MCP available** — chrome-devtools MCP or playwright-cli.
+- **Cursor** — `cursor-ide-browser` first; check repo rules before playwright-cli.
+- **Codex / shell agent** — playwright-cli `--headed`.
+- **Mixed-IDE collaboration** — document the reach recipe in tool-agnostic steps (nav labels, guard order); attach playwright-cli commands only when that environment allows them.

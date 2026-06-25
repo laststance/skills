@@ -95,7 +95,7 @@ npx skills add laststance/skills --skill x-agents-cross-review
 | [issue](skills/issue/) | Creates issues on the project's tracker (GitHub Issues or Linear) and lists open issues. Auto-detects which tracker the project uses; feature requests follow a strict non-engineer-voice template. | — |
 | [laststance-publish-skill](skills/laststance-publish-skill/) | Publishes a stable skill to the laststance/skills GitHub registry for distribution via `npx skills add`. Updates README install commands, skills table, and usage examples in alphabetical order. | — |
 | [load](skills/load/) | Load project context from Serena MCP memory for session initialization. Discovers memories, reads project overview, and validates context sufficiency. | [Serena MCP](https://github.com/oraios/serena) **(required)** |
-| [locate-ui-from-code](skills/locate-ui-from-code/) | Bridge code → screen by capturing a screenshot + DOM dump (outerHTML / computed styles / bounding box / a11y attributes) of the rendered UI element corresponding to a code component, selector, role, or text. Tool-agnostic — works in Claude Code, Cursor, and Codex via `playwright-cli`; uses chrome-devtools MCP when available. | `playwright-cli` **(required)**, chrome-devtools MCP (recommended) |
+| [locate-ui-from-code](skills/locate-ui-from-code/) | Code → screen: locate where components render (screenshot + DOM dump) and reach logic branches (`debugger`, `if`, `useEffect`, handlers) by executing the user operations that trigger them. Agent runs the reach recipe itself and leaves the browser open for DevTools. Tool-agnostic — `cursor-ide-browser` MCP (Cursor), `playwright-cli` (Codex/Claude Code), chrome-devtools MCP when available. | `playwright-cli` (Codex/Claude Code), cursor-ide-browser MCP (Cursor), chrome-devtools MCP (recommended) |
 | [lunch](skills/lunch/) | Relaxed mealtime conversation companion. Claude declares a food choice with trivia, then chats about any topic in a casual tone. | — |
 | [newsletter-digest](skills/newsletter-digest/) | Summarizes tech newsletter emails from Gmail with 5x detail depth, structured analysis, and technical context. Adapts to each newsletter's section structure and enriches main articles with library docs and web context. | Gmail MCP **(required)**, sequential-thinking MCP (recommended), [Context7](https://github.com/upstash/context7) (recommended), [Exa MCP](https://github.com/exa-labs/exa-mcp-server) (recommended) |
 | [product-inspiration](skills/product-inspiration/) | Provides UI/feature implementation inspiration by researching top-tier apps. Implements all proposed patterns in _trials/ folder for hands-on evaluation. | [Tavily MCP](https://github.com/tavily-ai/tavily-mcp-server) (recommended) |
@@ -167,7 +167,8 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /issue <description>                # Create issue on GitHub or Linear (auto-detects)
 /laststance-publish-skill           # Publish a stable skill to laststance/skills
 /load                               # Load session context from Serena MCP
-/locate-ui-from-code FolderHeader   # Bridge code → screen with screenshot + DOM dump
+/locate-ui-from-code FolderHeader     # Locate render target with screenshot + DOM dump
+/locate-ui-from-code src/Foo.tsx:139  # Locate UI + reach debugger/effect/handler at pinned line
 /lunch                              # Casual mealtime chat companion
 /newsletter-digest JS Weekly        # Summarize tech newsletter from Gmail with 5x detail
 /product-inspiration                # Get UI/feature inspiration

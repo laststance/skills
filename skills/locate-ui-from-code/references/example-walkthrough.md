@@ -1,6 +1,8 @@
-# End-to-end walkthrough
+# End-to-end walkthrough — render target
 
 Real example: locate the `FolderHeader` component in a Next.js + Chakra UI + dnd-kit app, capture a screenshot + DOM dump, and present the result.
+
+For a **logic target** (`debugger` / `useEffect` branch), see `example-logic-branch-reach.md` — the agent must also **execute** the reach recipe, not only show where the parent component mounts.
 
 ## Setup
 
@@ -25,7 +27,7 @@ Locator candidate: `data-insp-path*="FolderHeader"` (project ships this attribut
 ## Phase 2 — Open + login + navigate via UI
 
 ```sh
-playwright-cli open http://localhost:8080/
+playwright-cli open http://localhost:8080/ --headed
 playwright-cli snapshot                              # find email/password input refs
 playwright-cli fill e7 "dev1@example.com"
 playwright-cli fill e9 "<password>"
