@@ -56,7 +56,7 @@ judgment** can do. v1 uses VLM judgment.
 
 | Skill | Question it answers |
 |-------|---------------------|
-| `/qa-electron` | Does it *function*? (clicks work, IPC fires, state persists) |
+| Functional QA | Does it *function*? (clicks work, IPC fires, state persists) |
 | `/design-review` | Is it *aesthetically good*? (hierarchy, polish, AI-slop) — and it *fixes* |
 | **`/visual-lint`** | **Is the *render broken*?** (wrap, overflow, overlap, misalign) — read-only |
 
@@ -71,7 +71,7 @@ context menu, drag, scroll).
 **Out of scope:**
 - **Fixing.** This skill is read-only (see contract below). It reports.
 - **Aesthetic scoring / "is it beautiful".** That's `/design-review`.
-- **Functional testing / "does it work".** That's `/qa-electron`.
+- **Functional testing / "does it work".** Use browser automation or manual QA separately.
 - **Sub-10px geometric precision** (exact spacing rhythm, 1–3px offsets). VLMs are
   weak at this — it is explicitly deferred to **Hybrid v2** (a deterministic
   `getComputedStyle`/`getBoundingClientRect` + `axe-core` + token-diff pre-pass that
@@ -135,8 +135,7 @@ in practice, flipping the default to inline needs no code change.)
 Derive the list of UI states to capture per `references/ui-state-coverage.md`:
 the always-on default-state full-window pass **plus** the five operation-path states
 (modal / context-menu / drag / scroll / hover) where reachable. Output a short
-per-screen state plan table *before* capturing (qa-electron convention) so the run is
-auditable.
+per-screen state plan table *before* capturing so the run is auditable.
 
 ### Phase 2 — Capture
 For each planned state, capture a full-window screenshot via `playwright-cli`. **Capture

@@ -4,7 +4,7 @@ Display defects hide in **states**, not just the resting view. The `83% / 15px` 
 only shows when the value is wide enough; a modal's edge-clip only shows when the modal
 is open. So `/visual-lint` must reach states, not just screenshot what loads first.
 
-This is the axis where visual-lint is **orthogonal to functional QA**: `/qa-electron`
+This is the axis where visual-lint is **orthogonal to functional QA**: functional
 asks "does opening the modal work?"; visual-lint asks "once open, does it *render*
 correctly?".
 
@@ -39,7 +39,7 @@ guess:
 5. **Drag affordances:** reorderable rows, draggable widgets, sliders, kanban-style
    regions → a drag path.
 6. **Present the plan before capturing.** Emit a short table (below) so the run is
-   auditable, then execute it. *(qa-electron convention.)*
+   auditable, then execute it.
 
 ### Per-screen state plan table (present before Phase 2 capture)
 
