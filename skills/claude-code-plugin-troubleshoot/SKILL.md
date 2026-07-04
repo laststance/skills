@@ -1,9 +1,9 @@
 ---
-name: claude-code-plugin-hacker
+name: claude-code-plugin-troubleshoot
 description: Debug Claude Code plugins
 ---
 
-# Claude Code Plugin Hacker
+# Claude Code Plugin Troubleshoot
 
 ## Codex Compatibility
 When running this skill in Codex, translate Claude Code-only primitives before acting: `AskUserQuestion` -> chat/request_user_input, `TodoWrite` -> `update_plan`, `Task`/`TaskCreate`/`TeamCreate`/`SendMessage` -> `spawn_agent`/`send_input`/`wait_agent` when available and allowed, and `EnterPlanMode`/`ExitPlanMode` -> a concise chat plan plus explicit approval.

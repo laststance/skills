@@ -21,7 +21,7 @@ Install a specific skill:
 ```bash
 npx skills add laststance/skills --skill brainstorm-plan
 npx skills add laststance/skills --skill brainstorm-search-plan
-npx skills add laststance/skills --skill claude-code-plugin-hacker
+npx skills add laststance/skills --skill claude-code-plugin-troubleshoot
 npx skills add laststance/skills --skill chrome-clean-install
 npx skills add laststance/skills --skill code-trace
 npx skills add laststance/skills --skill codebase-litter-audit
@@ -76,7 +76,7 @@ npx skills add laststance/skills --skill x-agents-cross-review
 |-------|-------------|--------------|
 | [brainstorm-plan](skills/brainstorm-plan/) | Converge a vague request into an approved plan via two phases — Brainstorm (clarify intent with `AskUserQuestion`) and Plan (structure inside Claude Code plan mode, exit via `ExitPlanMode`). Search-free; for self-contained tasks where unknowns are preference-based — shell scripts, refactors, internal reorganization, dev tooling. | — |
 | [brainstorm-search-plan](skills/brainstorm-search-plan/) | Converge a vague request into an approved plan via three interleaved phases — Brainstorm (clarify intent with `AskUserQuestion`), Search (gather facts via `/search`), Plan (structure inside Claude Code plan mode, exit via `ExitPlanMode`). Loops between phases until concrete. | — |
-| [claude-code-plugin-hacker](skills/claude-code-plugin-hacker/) | Debug, audit, and fix Claude Code plugin system issues — hook errors, plugin misbehavior, cache investigation. Knows that `enabledPlugins: false` is not a true kill switch (hooks still execute, skills still accessible). | — |
+| [claude-code-plugin-troubleshoot](skills/claude-code-plugin-troubleshoot/) | Debug, audit, and fix Claude Code plugin system issues — hook errors, plugin misbehavior, cache investigation. Knows that `enabledPlugins: false` is not a true kill switch (hooks still execute, skills still accessible). | — |
 | [chrome-clean-install](skills/chrome-clean-install/) | Refresh Chromium-based browsers by backing up profile/cache data, guiding a clean reinstall, and restoring bookmarks only. Handles Chrome, Chrome Canary, Edge, Brave, Arc, Dia, and custom Chromium browser paths. | [Node.js](https://nodejs.org/) **(required)** |
 | [code-trace](skills/code-trace/) | Interactive code execution path tracer. Explains how code flows from entry point to output with step-by-step navigation. | — |
 | [codebase-litter-audit](skills/codebase-litter-audit/) | Audit repositories for half-finished features, stale TODOs, no-op handlers, visible UI wired to stubs, disabled tests, stale docs, placeholder assets, suppressions, and other codebase litter that dead-code tools miss. | — |
@@ -149,7 +149,7 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 ```
 /brainstorm-plan <fuzzy>            # Vague → concrete via Brainstorm + Plan (no search)
 /brainstorm-search-plan <fuzzy>     # Vague → concrete via Brainstorm + Search + Plan
-/claude-code-plugin-hacker          # Debug Claude Code plugin issues
+/claude-code-plugin-troubleshoot    # Debug Claude Code plugin issues
 /chrome-clean-install Chrome Canary # Clean-refresh a Chromium browser profile/cache
 /code-trace                         # Trace code execution paths
 /codebase-litter-audit              # Find half-finished codebase litter
