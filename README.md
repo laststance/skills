@@ -4,7 +4,7 @@
 [![Claude Code](https://img.shields.io/badge/Claude_Code-compatible-D97757?style=flat-square&logo=claude&logoColor=white)](https://code.claude.com/docs/en/skills)
 [![Cursor](https://img.shields.io/badge/Cursor-compatible-000000?style=flat-square&logo=cursor&logoColor=white)](https://cursor.com/docs/skills)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-compatible-111827?style=flat-square&logo=openai&logoColor=white)](https://developers.openai.com/codex/skills)
-[![Skills](https://img.shields.io/badge/skills-34-2563EB?style=flat-square)](#available-skills)
+[![Skills](https://img.shields.io/badge/skills-35-2563EB?style=flat-square)](#available-skills)
 
 Agent skills for AI coding assistants. Install via [skills.sh](https://skills.sh).
 
@@ -19,6 +19,7 @@ npx skills add laststance/skills
 Install a specific skill:
 
 ```bash
+npx skills add laststance/skills --skill apollousa
 npx skills add laststance/skills --skill claude-code-plugin-troubleshoot
 npx skills add laststance/skills --skill chrome-clean-install
 npx skills add laststance/skills --skill code-trace
@@ -59,6 +60,7 @@ npx skills add laststance/skills --skill visual-lint
 
 | Skill | Description | Dependencies |
 |-------|-------------|--------------|
+| [apollousa](skills/apollousa/) | Creates a GitHub PR for completed work, then runs the full CodeRabbit review, CI, merge, and cleanup loop. | [coderabbit-resolver](skills/coderabbit-resolver/) **(required)** |
 | [claude-code-plugin-troubleshoot](skills/claude-code-plugin-troubleshoot/) | Debug, audit, and fix Claude Code plugin system issues — hook errors, plugin misbehavior, cache investigation. Knows that `enabledPlugins: false` is not a true kill switch (hooks still execute, skills still accessible). | — |
 | [chrome-clean-install](skills/chrome-clean-install/) | Refresh Chromium-based browsers by backing up profile/cache data, guiding a clean reinstall, and restoring bookmarks only. Handles Chrome, Chrome Canary, Edge, Brave, Arc, Dia, and custom Chromium browser paths. | [Node.js](https://nodejs.org/) **(required)** |
 | [code-trace](skills/code-trace/) | Interactive code execution path tracer. Explains how code flows from entry point to output with step-by-step navigation. | — |
@@ -99,6 +101,7 @@ npx skills add laststance/skills --skill visual-lint
 After installation, invoke skills as slash commands in your AI coding assistant:
 
 ```
+/apollousa                        # Create PR, resolve CodeRabbit, merge, and clean up
 /claude-code-plugin-troubleshoot    # Debug Claude Code plugin issues
 /chrome-clean-install Chrome Canary # Clean-refresh a Chromium browser profile/cache
 /code-trace                         # Trace code execution paths
