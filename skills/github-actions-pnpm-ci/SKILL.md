@@ -30,7 +30,7 @@ Install the bundled assets as the default CI shape:
 - Install with `pnpm install --frozen-lockfile`.
 - Keep CI token permissions at `contents: read` unless a job truly writes to GitHub.
 - Add `concurrency` to every workflow.
-- Add Dependabot for both `github-actions` and `npm`; pnpm is handled by the `npm` ecosystem.
+- Add Dependabot for `github-actions` only.
 
 ## Adaptation
 
