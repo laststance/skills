@@ -48,10 +48,22 @@ playwright-cli snapshot
 
 Two folder headers on screen. The user wants the first one → `uid=2_19` (chrome-devtools MCP) or `e19` (playwright-cli; refs may differ).
 
-## Phase 4 — Capture (parallel)
+## Phase 4 — Highlight + capture (parallel)
 
 ```sh
-# Screenshot of just this element (not full page)
+# 1) Persistent overlay (ring + file badge) — see highlight-overlay.md
+# Cursor: browser_cdp Runtime.evaluate with TARGET_SELECTOR='[data-insp-path*="FolderHeader"]'
+#         LABEL='FolderHeader.tsx'
+# playwright-cli: same IIFE via eval
+
+# 2) Optional brief pulse (Cursor)
+# browser_highlight on the snapshot ref
+
+# 3) Viewport screenshot WITH overlay
+playwright-cli screenshot \
+  --filename=.claude/tasks/assets/task_0018/spec_reference/folder_header_highlighted.png
+
+# 4) Optional close-up of just this element
 playwright-cli screenshot 2_19 \
   --filename=.claude/tasks/assets/task_0018/spec_reference/folder_header_visual.png
 
@@ -73,7 +85,10 @@ playwright-cli eval "(el) => ({
 
 ## Phase 5 — Result presented to user
 
-> **Visual**
+> **Visual (highlighted)**
+> ![folder_header_highlighted.png](folder_header_highlighted.png) — red ring + `FolderHeader.tsx` badge
+>
+> **Visual (close-up)**
 > ![folder_header_visual.png](folder_header_visual.png) — `📁 フォルダ１ (14)              ▲`
 >
 > **Elements tree** (outerHTML, 600 chars)
@@ -106,7 +121,8 @@ playwright-cli eval "(el) => ({
 ## Lessons
 
 1. **Prefer source-attribution attrs when present.** `data-insp-path` made the locator selector trivial and survives className renames. Look for `data-component-line`, `data-source-loc`, or `__source` in your stack.
-2. **Element-only screenshots are dramatically clearer** than full-page screenshots when the element is small and the surrounding UI is busy.
-3. **Truncate `outerHTML` to ~600 chars in the response.** Full DOM trees on Chakra / styled-components apps blow token budgets fast; route the full dump to a file with `--filename` if needed.
-4. **Project rules trump shortcuts.** If the repo says "no URL direct navigation," follow that even though `goto` is faster — the rule probably encodes a real requirement (auth flow correctness, route guards, etc).
-5. **When duplicates exist, list them first.** Use `--raw eval` to enumerate `[i, text, rect]` for all matches before picking one. Cheaper than guessing wrong and re-screenshotting.
+2. **Highlight on-screen targets before presenting.** Persistent ring + file badge beats a plain screenshot — users should not hunt for which node is which.
+3. **Element-only screenshots are dramatically clearer** than full-page screenshots when the element is small and the surrounding UI is busy (pair with the highlighted viewport shot).
+4. **Truncate `outerHTML` to ~600 chars in the response.** Full DOM trees on Chakra / styled-components apps blow token budgets fast; route the full dump to a file with `--filename` if needed.
+5. **Project rules trump shortcuts.** If the repo says "no URL direct navigation," follow that even though `goto` is faster — the rule probably encodes a real requirement (auth flow correctness, route guards, etc).
+6. **When duplicates exist, list them first.** Use `--raw eval` to enumerate `[i, text, rect]` for all matches before picking one. Cheaper than guessing wrong and re-screenshotting.

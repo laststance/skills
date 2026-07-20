@@ -1,6 +1,6 @@
 ---
 name: locate-ui-from-code
-description: Code to screen — locate UI, reach logic branches, explain how to trigger debugger/effect/handler paths
+description: Code to screen — locate UI, highlight on-screen targets, reach logic branches, explain how to trigger debugger/effect/handler paths
 ---
 
 # Locate UI from Code
@@ -45,8 +45,8 @@ The agent **must execute the reach operations itself** (not only describe them) 
 
 | Kind | Code signals | Skill output focus |
 |------|--------------|-------------------|
-| **Render target** | JSX return, styled component, `className`, visible `t.*` label | DOM locator + screenshot of that element |
-| **Logic target** | `debugger`, `useEffect*`, `if/else`, early `return`, event handler body, mutation `onSuccess` | **Reach recipe** (operations agent ran) + screen state when branch fires + nearest UI anchor |
+| **Render target** | JSX return, styled component, `className`, visible `t.*` label | DOM locator + **on-screen highlight** + screenshot of that element |
+| **Logic target** | `debugger`, `useEffect*`, `if/else`, early `return`, event handler body, mutation `onSuccess` | **Reach recipe** (operations agent ran) + screen state when branch fires + **highlight nearest UI anchor** |
 
 If the pinned line is **logic** (e.g. `debugger` inside `useEffect`), do **not** stop at "this component renders on tab X". You **must** derive and run the operations that satisfy the branch guard.
 
@@ -137,7 +137,7 @@ Snapshot after arrival; confirm URL and key labels match expectations.
 
 **For render targets only:** skip to Phase 5 once the element is visible (tabs expanded, scrolled into view).
 
-### Phase 5 — Locate element + capture evidence
+### Phase 5 — Locate element + highlight + capture evidence
 
 ```sh
 playwright-cli snapshot
@@ -152,19 +152,31 @@ playwright-cli --raw eval "() => Array.from(
 ).map((el, i) => ({ i, text: el.textContent.slice(0, 40), rect: el.getBoundingClientRect().toJSON() }))"
 ```
 
+#### On-screen highlight (mandatory when target is visible)
+
+If the target (or nearest UI anchor for a logic target) is **on screen**, highlight it before / with the screenshot. A brief tool flash alone is not enough — the user must see a clear ring + file-name badge.
+
+1. Resolve the DOM node (prefer `data-insp-path`, then `aria-label` / `role`, then visible text).
+2. Inject the **persistent overlay** from `references/highlight-overlay.md` (red ring + `Foo.tsx` badge + optional locator subtitle + page dim).
+3. Also call `browser_highlight` on the snapshot ref when using Cursor (extra pulse).
+4. Screenshot the viewport **with the overlay visible** as `<name>_highlighted.png`.
+5. Leave the overlay on (do not auto-remove). Tell the user: reload clears it, or ask the agent to remove `#__locate-ui-highlight-root`.
+
+Skip only when the target truly cannot appear (unreachable permission, headless-only failure). Say so explicitly in the report.
+
 Capture in parallel:
 
-- **Screenshot** — element-scoped when possible; full panel acceptable for logic targets where no single node exists.
+- **Highlighted screenshot** — full viewport with overlay (preferred for presentation).
+- **Element screenshot** — optional close-up when useful.
 - **DOM dump** — `outerHTML` (~600 chars), rect, key computed styles, a11y attrs, 1-level children.
-- **Highlight** the nearest UI anchor (`browser_highlight` / playwright element screenshot).
 
 Save path priority:
 
 1. `.claude/tasks/assets/<task>/spec_reference/`
 2. `docs/screenshots/` or `docs/images/`
-3. `<repo-root>/screenshots/<name>_visual.png`
+3. `<repo-root>/screenshots/<name>_visual.png` and `<name>_highlighted.png`
 
-Naming: `<component-or-branch-purpose>_visual.png` — never `screenshot.png`.
+Naming: `<component-or-branch-purpose>_visual.png` / `_highlighted.png` — never `screenshot.png`.
 
 ### Phase 6 — Save & present
 
@@ -177,21 +189,22 @@ Naming: `<component-or-branch-purpose>_visual.png` — never `screenshot.png`.
 
 **Also present when applicable:**
 
-5. Visual — embed screenshot
-6. Elements tree — truncated `outerHTML`
-7. Computed styles — small table
-8. Children map — 1-level preview
-9. A11y attributes
-10. Source mapping — decode `data-insp-path`
+5. Visual — embed **highlighted** screenshot (ring + file badge); plain visual as backup
+6. Highlight note — what was outlined and how to clear the overlay
+7. Elements tree — truncated `outerHTML`
+8. Computed styles — small table
+9. Children map — 1-level preview
+10. A11y attributes
+11. Source mapping — decode `data-insp-path`
 
 ### Keep the browser open (do NOT close it)
 
 End with the browser **on the state where the branch is reachable** (logic) or **on the located element** (render):
 
 - **Never** `playwright-cli close` / `browser_close` as cleanup.
-- Leave highlight on when used.
+- **Leave the highlight overlay on** (`#__locate-ui-highlight-root`) so the user can inspect live.
 - Tell the user the window is open for DevTools / inspection.
-- Close only on explicit user request or session recovery.
+- Close / clear highlight only on explicit user request or session recovery.
 
 ## Pitfalls
 
@@ -201,12 +214,14 @@ End with the browser **on the state where the branch is reachable** (logic) or *
 - **Auth redirect loops** — `state-save` / `state-load` or project login URL (`https://local.zume-n.com`, not raw `localhost:8080` when Auth0 callback requires it).
 - **DnD false success** — verify rendered order/group changed, not just tool exit code.
 - **Lazy / collapsed UI** — expand tabs and scroll before snapshot.
+- **Skipping highlight** — if the target is visible, always draw the overlay + save `_highlighted.png`; do not end with only a plain screenshot.
 - **Token budget** — truncate `outerHTML`; full dumps go to files.
-- **Ref drift** — re-snapshot after every navigation or DOM-changing action.
+- **Ref drift** — re-snapshot after every navigation or DOM-changing action; re-apply overlay after DOM-changing steps if the ring drifts.
 - **Cursor vs playwright** — follow repo browser rules; zumen-fe uses `cursor-ide-browser` by default.
 
 ## See also
 
+- `references/highlight-overlay.md` — mandatory on-screen highlight recipe (ring + file badge)
 - `references/tool-equivalents.md` — MCP / playwright-cli command translation
 - `references/example-walkthrough.md` — render target example (`FolderHeader`)
 - `references/example-logic-branch-reach.md` — logic target example (`debugger` in `useEffect` else branch)

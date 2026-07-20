@@ -20,7 +20,8 @@ Cross-reference for the same operation in chrome-devtools MCP (Claude Code) vs p
 | Hover | `hover({ uid })` | (use snapshot + click) | `playwright-cli hover e15` |
 | Drag | `drag({ from_uid, to_uid })` | **coordinate ops** (`browser_get_bounding_box` + mouse) — ref drag unreliable for dnd-kit | `playwright-cli drag e3 e7` |
 | Eval JS | `evaluate_script({ function, args })` | `browser_cdp` → `Runtime.evaluate` | `playwright-cli eval "fn" e15` |
-| Highlight element | — | `browser_highlight` | — |
+| Highlight element (brief pulse) | — | `browser_highlight` | — |
+| Persistent locate overlay (ring + file badge) | `evaluate_script` + IIFE in `highlight-overlay.md` | `browser_cdp` → `Runtime.evaluate` + same IIFE; then optional `browser_highlight` | `playwright-cli eval` + same IIFE |
 | Lock / unlock | — | `browser_lock` / unlock | — |
 | Wait for text | `wait_for({ text })` | CDP poll or re-snapshot | `playwright-cli --wait-for "text"` |
 | Cookies / auth | manual via dedicated tools | project login flow / `.agent_browser` | `playwright-cli state-save / state-load` |
