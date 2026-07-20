@@ -4,7 +4,7 @@
 [![Claude Code](https://img.shields.io/badge/Claude_Code-compatible-D97757?style=flat-square&logo=claude&logoColor=white)](https://code.claude.com/docs/en/skills)
 [![Cursor](https://img.shields.io/badge/Cursor-compatible-000000?style=flat-square&logo=cursor&logoColor=white)](https://cursor.com/docs/skills)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-compatible-111827?style=flat-square&logo=openai&logoColor=white)](https://developers.openai.com/codex/skills)
-[![Skills](https://img.shields.io/badge/skills-35-2563EB?style=flat-square)](#available-skills)
+[![Skills](https://img.shields.io/badge/skills-32-2563EB?style=flat-square)](#available-skills)
 
 Agent skills for AI coding assistants. Install via [skills.sh](https://skills.sh).
 
@@ -28,7 +28,6 @@ npx skills add laststance/skills --skill colorful-type
 npx skills add laststance/skills --skill component-hierarchy
 npx skills add laststance/skills --skill coderabbit-resolver
 npx skills add laststance/skills --skill cookie
-npx skills add laststance/skills --skill core-topic
 npx skills add laststance/skills --skill create-worktree
 npx skills add laststance/skills --skill deep-trace
 npx skills add laststance/skills --skill dnd
@@ -36,11 +35,9 @@ npx skills add laststance/skills --skill electron-release
 npx skills add laststance/skills --skill explain
 npx skills add laststance/skills --skill feature-tour
 npx skills add laststance/skills --skill github-actions-pnpm-ci
-npx skills add laststance/skills --skill hack-feed
 npx skills add laststance/skills --skill laststance-publish-skill
 npx skills add laststance/skills --skill load
 npx skills add laststance/skills --skill locate-ui-from-code
-npx skills add laststance/skills --skill newsletter-digest
 npx skills add laststance/skills --skill product-inspiration
 npx skills add laststance/skills --skill prop-drill
 npx skills add laststance/skills --skill react-query-key-jump
@@ -69,7 +66,6 @@ npx skills add laststance/skills --skill visual-lint
 | [component-hierarchy](skills/component-hierarchy/) | Visualize where a React component sits in the Next.js tree (Page → target) as an ASCII diagram with file paths. Supports App Router and Pages Router. | — |
 | [coderabbit-resolver](skills/coderabbit-resolver/) | Automates the full CodeRabbit PR review cycle — fix comments, resolve threads, pass CI, merge, and clean up. Supports `--bulk` for all open PRs. | — |
 | [cookie](skills/cookie/) | Copy Google Chrome's cookies into `playwright-cli` (macOS) so its browser inherits every logged-in session (GitHub, etc.). Decrypts via the macOS Keychain, loads per-cookie, verifies before navigating, and deletes the plaintext token files after. | `playwright-cli` **(required)**, Node.js **(required)** |
-| [core-topic](skills/core-topic/) | Motivation igniter for lazy days: randomly picks a legendary GitHub PR/Issue/Discussion from the React/JS/TS/Node core ecosystem and delivers an inspiring deep-dive in Japanese. | [GitHub CLI](https://cli.github.com/) **(required)** |
 | [create-worktree](skills/create-worktree/) | Creates a git worktree as a sibling directory to the current project (e.g., `../project-feat-x`), copies `.gitignore`d config files (`.env`, `.env.local`, etc.) while skipping heavy build/dependency directories (`node_modules`, `.next`, `dist`, `build`, `coverage`), then navigates into the new worktree. | — |
 | [deep-trace](skills/deep-trace/) | Line-by-line execution path tracer for PR diffs, git diffs, or specified code sections. Maps every line to its screen/URL, data flow, and execution context like a debugger's step-through. | [Serena MCP](https://github.com/oraios/serena) (recommended) |
 | [dnd](skills/dnd/) | Browser drag-and-drop QA via coordinate-based pointer ops, plus video + drop+10-frame evidence for motion-sensitive bugs (DragOverlay rollback, ghost return). Knowledge-injection skill loaded by browser-using skills (e.g. `ux-gap-detector`) before any browser interaction — ref-based `drag` returns false success on `dnd-kit` and similar libraries. | `playwright-cli` **(required)**, `ffmpeg` (recommended for frame extraction) |
@@ -77,11 +73,9 @@ npx skills add laststance/skills --skill visual-lint
 | [explain](skills/explain/) | Deep, systematic explanation of code, concepts, and system behavior. Always operates at advanced level with introspection markers and validation. | [Serena MCP](https://github.com/oraios/serena) (recommended), [Context7](https://github.com/upstash/context7) (recommended) |
 | [feature-tour](skills/feature-tour/) | Live onboarding tour of newly implemented code. Runs the target app in a debug session — the vscode-debug-mcp bridge and playwright-cli attach to the same Chrome — pauses at curated breakpoints inside the new code while driving the real UI, narrates each stop in chat mapping UI moments to exact file:line, and writes a replayable tour artifact (before/after screenshots + deep-trace-extension replay table). | `playwright-cli` **(required)**, [Debug MCP Bridge](https://github.com/laststance/vscode-debug-mcp) **(required)**, [Serena MCP](https://github.com/oraios/serena) (recommended) |
 | [github-actions-pnpm-ci](skills/github-actions-pnpm-ci/) | Creates secure pnpm/Node GitHub Actions CI with SHA-pinned actions, pnpm store caching, frozen installs, lint/test/build/typecheck workflows, and Dependabot updates. | — |
-| [hack-feed](skills/hack-feed/) | OSS hacker news feed for JavaScript/React/Next.js internals (TC39, V8, fiber/scheduler, transpilation, JIT). Two-phase: ToC display → numbered selection → Explain-skill-level deep dive. Hybrid sourcing from GitHub, HN, RSS, and Exa web search. Output: Japanese (MVP). | [Exa MCP](https://github.com/exa-labs/exa-mcp-server) **(required)**, [GitHub CLI](https://cli.github.com/) (recommended) |
 | [laststance-publish-skill](skills/laststance-publish-skill/) | Publishes a stable skill to the laststance/skills GitHub registry for distribution via `npx skills add`. Updates README install commands, skills table, and usage examples in alphabetical order. | — |
 | [load](skills/load/) | Load project context from Serena MCP memory for session initialization. Discovers memories, reads project overview, and validates context sufficiency. | [Serena MCP](https://github.com/oraios/serena) **(required)** |
 | [locate-ui-from-code](skills/locate-ui-from-code/) | Code → screen: locate where components render (screenshot + DOM dump) and reach logic branches (`debugger`, `if`, `useEffect`, handlers) by executing the user operations that trigger them. Agent runs the reach recipe itself and leaves the browser open for DevTools. Tool-agnostic — `cursor-ide-browser` MCP (Cursor), `playwright-cli` (Codex/Claude Code), chrome-devtools MCP when available. | `playwright-cli` (Codex/Claude Code), cursor-ide-browser MCP (Cursor), chrome-devtools MCP (recommended) |
-| [newsletter-digest](skills/newsletter-digest/) | Summarizes tech newsletter emails from Gmail with 5x detail depth, structured analysis, and technical context. Adapts to each newsletter's section structure and enriches main articles with library docs and web context. | Gmail MCP **(required)**, sequential-thinking MCP (recommended), [Context7](https://github.com/upstash/context7) (recommended), [Exa MCP](https://github.com/exa-labs/exa-mcp-server) (recommended) |
 | [product-inspiration](skills/product-inspiration/) | Provides UI/feature implementation inspiration by researching top-tier apps. Implements all proposed patterns in _trials/ folder for hands-on evaluation. | [Tavily MCP](https://github.com/tavily-ai/tavily-mcp-server) (recommended) |
 | [prop-drill](skills/prop-drill/) | Trace React prop-drilling paths from origin definition to leaf consumers. Shows the original prop definition as a clickable code block, the full drilling route as a table, and a Mermaid flowchart. | [Serena MCP](https://github.com/oraios/serena) (recommended), [Context7](https://github.com/upstash/context7) (recommended) |
 | [react-query-key-jump](skills/react-query-key-jump/) | Jump from a TanStack React Query `queryKey` string (e.g. `getDrawing`) to the `useQuery` / `useInfiniteQuery` hook line where that key is defined. Skips `invalidateQueries` usage sites. | [ripgrep](https://github.com/BurntSushi/ripgrep) **(required)** |
@@ -110,7 +104,6 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /component-hierarchy Button.tsx      # ASCII tree from Page down to target component
 /coderabbit-resolver 17             # Process PR #17
 /cookie                             # Import Chrome cookies into a playwright-cli session
-/core-topic                         # Random React/JS core GitHub deep-dive (Japanese)
 /create-worktree feat/new-thing     # Create git worktree at ../project-feat-new-thing
 /deep-trace 42                      # Trace PR #42 line-by-line
 /dnd                                # Load drag-and-drop coordinate-based verification protocol
@@ -119,12 +112,10 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /explain src/auth/middleware.ts      # Deep code explanation
 /feature-tour                        # Live debug-session tour of newly written code
 /github-actions-pnpm-ci             # Add secure pnpm GitHub Actions CI
-/hack-feed week                     # Browse top OSS hacker news for a period
 /laststance-publish-skill           # Publish a stable skill to laststance/skills
 /load                               # Load session context from Serena MCP
 /locate-ui-from-code FolderHeader     # Locate render target with screenshot + DOM dump
 /locate-ui-from-code src/Foo.tsx:139  # Locate UI + reach debugger/effect/handler at pinned line
-/newsletter-digest JS Weekly        # Summarize tech newsletter from Gmail with 5x detail
 /product-inspiration                # Get UI/feature inspiration
 /prop-drill orderData OrderTable    # Trace prop-drilling path
 /react-query-key-jump getDrawing    # Jump to useQuery queryKey definition line
