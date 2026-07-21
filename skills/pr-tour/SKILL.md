@@ -1,5 +1,5 @@
 ---
-name: feature-tour
+name: pr-tour
 description: >
   Live onboarding tour of newly implemented code. Combines /deep-trace, the
   vscode-debug-mcp bridge, and playwright-cli to run the target app in a debug
@@ -7,11 +7,11 @@ description: >
   narrate "this modal is the newly created one" — mapping every UI moment to
   the exact file:line. Use when the user wants to understand where and how
   AI-written feature code executes in the running application ("どの UI /
-  どのロジックで動くのか分からない", "オンボーディングして", "/feature-tour").
+  どのロジックで動くのか分からない", "オンボーディングして", "/pr-tour").
 argument-hint: "[pr-number|branch|commit-range|file-path] [--auto]"
 ---
 
-# Feature Tour — Live Code-to-UI Onboarding
+# PR Tour — Live Code-to-UI Onboarding
 
 ## Codex Compatibility
 
@@ -19,7 +19,7 @@ When running this skill in Codex, translate Claude Code-only primitives before a
 
 ## Cursor Compatibility
 
-When running this skill in Cursor Agent, translate: `AskUserQuestion` -> `AskQuestion`, `TodoWrite` -> Cursor `TodoWrite`. Use the Shell tool for playwright-cli and curl. If a project rule forbids playwright-cli by default, a user invocation of `/feature-tour` counts as explicit consent to use it (the skill is built on it), but re-confirm if unsure.
+When running this skill in Cursor Agent, translate: `AskUserQuestion` -> `AskQuestion`, `TodoWrite` -> Cursor `TodoWrite`. Use the Shell tool for playwright-cli and curl. If a project rule forbids playwright-cli by default, a user invocation of `/pr-tour` counts as explicit consent to use it (the skill is built on it), but re-confirm if unsure.
 
 <essential_principles>
 
@@ -105,7 +105,7 @@ For each stop write down: file:line (absolute path), the screen URL where it fir
 #      "debug.focusEditorOnBreak": false,
 #      "debug.focusWindowOnBreak": false
 # Also snapshot the working tree state to detect stray edits later:
-git -C <project root> status --porcelain > /tmp/feature-tour-git-baseline.txt
+git -C <project root> status --porcelain > /tmp/pr-tour-git-baseline.txt
 
 # 1. Dev server (background)
 kill-port <port>; <dev command>   # wait for "Ready"
@@ -118,7 +118,7 @@ kill-port <port>; <dev command>   # wait for "Ready"
 #    agent shell dies together with the shell session (verified twice 2026-07-15).
 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
   --remote-debugging-port=9222 \
-  --user-data-dir=/tmp/feature-tour-chrome-profile \
+  --user-data-dir=/tmp/pr-tour-chrome-profile \
   --no-first-run --no-default-browser-check \
   --disable-backgrounding-occluded-windows \
   --disable-renderer-backgrounding \
@@ -139,7 +139,7 @@ playwright-cli -s=tour goto <browser origin>/
 #    port when the two differ — or breakpoints will never bind.
 curl -s -X POST http://127.0.0.1:7779/debug/launch -H "Content-Type: application/json" -d '{
   "config": {
-    "type": "chrome", "request": "attach", "name": "feature-tour attach",
+    "type": "chrome", "request": "attach", "name": "pr-tour attach",
     "port": 9222, "webRoot": "<abs project root>",
     "urlFilter": "<browser origin>/*", "timeout": 15000
   }
@@ -190,7 +190,7 @@ playwright-cli -s=tour screenshot --filename=tours/<feature>/stopN_after.png
 # i. Stray-edit guard: compare against the baseline from Step 3.
 #    Any unexpected new modification = accidental edit while paused → show the
 #    diff to the user and revert it (git checkout -- <file>) before continuing.
-git -C <project root> status --porcelain | diff /tmp/feature-tour-git-baseline.txt - || true
+git -C <project root> status --porcelain | diff /tmp/pr-tour-git-baseline.txt - || true
 ```
 
 If a breakpoint does not hit within the budget: remove it, note "this stop did not fire with this interaction" honestly in the artifact, and move on. Never fake a hit.
