@@ -16,6 +16,10 @@ Resolve `Read`/`Write`/`Edit`/`StrReplace`/`Bash`/web/search/MCP via Cursor Comp
 
 Complete release workflow for Electron applications with auto-update support.
 
+## Auto-Update Verification Scope
+
+Standard releases stop after verifying the published assets and `latest-mac.yml` metadata. Do not install or launch an older app, trigger its updater, download an update, restart into it, or exercise ShipIt as part of this skill. Perform end-to-end auto-update QA only when the user explicitly requests it or asks to investigate a reported update failure.
+
 ## Supported Configurations
 
 | Stack | Platform | Build Type | Status |
@@ -183,5 +187,3 @@ publish:
 - [ ] Build completes with "notarization successful"
 - [ ] All 5 files uploaded to GitHub Release
 - [ ] ZIP filenames match `latest-mac.yml` URLs exactly
-- [ ] Test: older version detects update
-- [ ] Test: download and install succeeds
