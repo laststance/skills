@@ -4,7 +4,7 @@
 [![Claude Code](https://img.shields.io/badge/Claude_Code-compatible-D97757?style=flat-square&logo=claude&logoColor=white)](https://code.claude.com/docs/en/skills)
 [![Cursor](https://img.shields.io/badge/Cursor-compatible-000000?style=flat-square&logo=cursor&logoColor=white)](https://cursor.com/docs/skills)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-compatible-111827?style=flat-square&logo=openai&logoColor=white)](https://developers.openai.com/codex/skills)
-[![Skills](https://img.shields.io/badge/skills-33-2563EB?style=flat-square)](#available-skills)
+[![Skills](https://img.shields.io/badge/skills-34-2563EB?style=flat-square)](#available-skills)
 
 Agent skills for AI coding assistants. Install via [skills.sh](https://skills.sh).
 
@@ -33,6 +33,7 @@ npx skills add laststance/skills --skill deep-trace
 npx skills add laststance/skills --skill dnd
 npx skills add laststance/skills --skill electron-release
 npx skills add laststance/skills --skill explain
+npx skills add laststance/skills --skill explain-diff-html
 npx skills add laststance/skills --skill github-actions-pnpm-ci
 npx skills add laststance/skills --skill laststance-publish-skill
 npx skills add laststance/skills --skill learn-html
@@ -72,6 +73,7 @@ npx skills add laststance/skills --skill visual-lint
 | [dnd](skills/dnd/) | Browser drag-and-drop QA via coordinate-based pointer ops, plus video + drop+10-frame evidence for motion-sensitive bugs (DragOverlay rollback, ghost return). Knowledge-injection skill loaded by browser-using skills (e.g. `ux-gap-detector`) before any browser interaction — ref-based `drag` returns false success on `dnd-kit` and similar libraries. | `playwright-cli` **(required)**, `ffmpeg` (recommended for frame extraction) |
 | [electron-release](skills/electron-release/) | Guides Electron app release process including build, code signing, notarization, and GitHub Release with auto-update support. | — |
 | [explain](skills/explain/) | Deep, systematic explanation of code, concepts, and system behavior. Always operates at advanced level with introspection markers and validation. | [Serena MCP](https://github.com/oraios/serena) (recommended), [Context7](https://github.com/upstash/context7) (recommended) |
+| [explain-diff-html](skills/explain-diff-html/) | Explains a diff, branch, or PR as one self-contained interactive HTML page — deep background, core intuition with toy-data figures, a grouped code walkthrough, and a five-question multiple-choice quiz that checks the reader actually understood the change. Explores surrounding code for context; diagrams are HTML, never ASCII. | — |
 | [github-actions-pnpm-ci](skills/github-actions-pnpm-ci/) | Creates secure pnpm/Node GitHub Actions CI with SHA-pinned actions, pnpm store caching, frozen installs, lint/test/build/typecheck workflows, and Dependabot updates. | — |
 | [laststance-publish-skill](skills/laststance-publish-skill/) | Publishes a stable skill to the laststance/skills GitHub registry for distribution via `npx skills add`. Updates README install commands, skills table, and usage examples in alphabetical order. | — |
 | [learn-html](skills/learn-html/) | Answers a general "how does X work?" question as one self-contained interactive HTML explainer (background → intuition → mechanics → quiz). Every factual claim must be sourced — docs lookup, a live measurement, or a repo grep — and anything unverified is flagged inline rather than smoothed into confident prose. Output language follows the question's language. | [Context7 MCP](https://github.com/upstash/context7) (recommended) |
@@ -112,6 +114,7 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /coderabbit-resolver --bulk         # Process all open PRs
 /electron-release                   # Electron release workflow
 /explain src/auth/middleware.ts      # Deep code explanation
+/explain-diff-html 42               # Interactive HTML PR walkthrough + quiz
 /github-actions-pnpm-ci             # Add secure pnpm GitHub Actions CI
 /laststance-publish-skill           # Publish a stable skill to laststance/skills
 /learn-html compositionend          # Sourced HTML explainer: background → mechanics → quiz
