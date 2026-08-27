@@ -4,7 +4,7 @@
 [![Claude Code](https://img.shields.io/badge/Claude_Code-compatible-D97757?style=flat-square&logo=claude&logoColor=white)](https://code.claude.com/docs/en/skills)
 [![Cursor](https://img.shields.io/badge/Cursor-compatible-000000?style=flat-square&logo=cursor&logoColor=white)](https://cursor.com/docs/skills)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-compatible-111827?style=flat-square&logo=openai&logoColor=white)](https://developers.openai.com/codex/skills)
-[![Skills](https://img.shields.io/badge/skills-32-2563EB?style=flat-square)](#available-skills)
+[![Skills](https://img.shields.io/badge/skills-33-2563EB?style=flat-square)](#available-skills)
 
 Agent skills for AI coding assistants. Install via [skills.sh](https://skills.sh).
 
@@ -35,6 +35,7 @@ npx skills add laststance/skills --skill electron-release
 npx skills add laststance/skills --skill explain
 npx skills add laststance/skills --skill github-actions-pnpm-ci
 npx skills add laststance/skills --skill laststance-publish-skill
+npx skills add laststance/skills --skill learn-html
 npx skills add laststance/skills --skill load
 npx skills add laststance/skills --skill locate-ui-from-code
 npx skills add laststance/skills --skill pr-tour
@@ -73,6 +74,7 @@ npx skills add laststance/skills --skill visual-lint
 | [explain](skills/explain/) | Deep, systematic explanation of code, concepts, and system behavior. Always operates at advanced level with introspection markers and validation. | [Serena MCP](https://github.com/oraios/serena) (recommended), [Context7](https://github.com/upstash/context7) (recommended) |
 | [github-actions-pnpm-ci](skills/github-actions-pnpm-ci/) | Creates secure pnpm/Node GitHub Actions CI with SHA-pinned actions, pnpm store caching, frozen installs, lint/test/build/typecheck workflows, and Dependabot updates. | — |
 | [laststance-publish-skill](skills/laststance-publish-skill/) | Publishes a stable skill to the laststance/skills GitHub registry for distribution via `npx skills add`. Updates README install commands, skills table, and usage examples in alphabetical order. | — |
+| [learn-html](skills/learn-html/) | Answers a general "how does X work?" question as one self-contained interactive HTML explainer (background → intuition → mechanics → quiz). Every factual claim must be sourced — docs lookup, a live measurement, or a repo grep — and anything unverified is flagged inline rather than smoothed into confident prose. Output language follows the question's language. | [Context7 MCP](https://github.com/upstash/context7) (recommended) |
 | [load](skills/load/) | Load project context from Serena MCP memory for session initialization. Discovers memories, reads project overview, and validates context sufficiency. | [Serena MCP](https://github.com/oraios/serena) **(required)** |
 | [locate-ui-from-code](skills/locate-ui-from-code/) | Code → screen: locate UI with on-screen highlight overlay (ring + file badge), reach logic branches (`debugger`, `if`, `useEffect`, handlers) by executing the user operations that trigger them, and capture DOM dump + highlighted screenshots. Agent runs the reach recipe itself and leaves the browser open for DevTools. Tool-agnostic — `cursor-ide-browser` MCP (Cursor), `playwright-cli` (Codex/Claude Code), chrome-devtools MCP when available. | `playwright-cli` (Codex/Claude Code), cursor-ide-browser MCP (Cursor), chrome-devtools MCP (recommended) |
 | [pr-tour](skills/pr-tour/) | Live onboarding tour of newly implemented code. Runs the target app in a debug session — the vscode-debug-mcp bridge and playwright-cli attach to the same Chrome — pauses at curated breakpoints inside the new code while driving the real UI, narrates each stop in chat mapping UI moments to exact file:line, and writes a replayable tour artifact (before/after screenshots + deep-trace-extension replay table). | `playwright-cli` **(required)**, [Debug MCP Bridge](https://github.com/laststance/vscode-debug-mcp) **(required)**, [Serena MCP](https://github.com/oraios/serena) (recommended) |
@@ -112,6 +114,7 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /explain src/auth/middleware.ts      # Deep code explanation
 /github-actions-pnpm-ci             # Add secure pnpm GitHub Actions CI
 /laststance-publish-skill           # Publish a stable skill to laststance/skills
+/learn-html compositionend          # Sourced HTML explainer: background → mechanics → quiz
 /load                               # Load session context from Serena MCP
 /locate-ui-from-code FolderHeader     # Locate render target with screenshot + DOM dump
 /locate-ui-from-code src/Foo.tsx:139  # Locate UI + reach debugger/effect/handler at pinned line
