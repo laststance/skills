@@ -131,8 +131,14 @@ while [ "$ELAPSED" -lt "$MAX_WAIT" ]; do
     # of any rate-limit text in its footer.
     echo ""
     echo "Verifying CodeRabbit's success is a real review (not a rate-limit response)..."
-    LATEST_CR_COMMENT=$(gh api "repos/$OWNER/$REPO/issues/$PR_NUMBER/comments?per_page=10&sort=created&direction=desc" \
-      --jq '[.[] | select(.user.login == "coderabbitai" or .user.login == "coderabbitai[bot]") | .body] | .[0] // empty' 2>/dev/null || true)
+    # 3. The per-issue comments endpoint ignores `sort`/`direction` (only the
+    #    repo-wide /issues/comments endpoint honours them), so the old
+    #    `per_page=10&sort=created&direction=desc` returned the OLDEST 10 comments
+    #    and `.[0]` picked CodeRabbit's FIRST comment — never the rate-limit notice.
+    #    Paginate ascending and take the LAST match instead. Bodies are multi-line,
+    #    so base64-encode per comment to keep `tail -1` line-oriented.
+    LATEST_CR_COMMENT=$(gh api "repos/$OWNER/$REPO/issues/$PR_NUMBER/comments?per_page=100" --paginate \
+      --jq '.[] | select(.user.login == "coderabbitai" or .user.login == "coderabbitai[bot]") | .body | @base64' 2>/dev/null | tail -1 | base64 -d 2>/dev/null || true)
 
     if [ -n "$LATEST_CR_COMMENT" ]; then
       if echo "$LATEST_CR_COMMENT" | grep -qE '<!-- walkthrough_start -->|^## Walkthrough'; then

@@ -31,8 +31,14 @@ echo "Checking for CodeRabbit rate limit on PR #$PR_NUMBER..."
 #    string took the *first line of the first body* — which is just the HTML
 #    summary marker, never the rate-limit warning that lives further down.
 #    Reduce to a single body inside jq so the entire body lands in the var.
-LATEST_COMMENT=$(gh api "repos/$OWNER/$REPO/issues/$PR_NUMBER/comments?per_page=10&sort=created&direction=desc" \
-  --jq '[.[] | select(.user.login == "coderabbitai" or .user.login == "coderabbitai[bot]") | .body] | .[0] // empty' 2>/dev/null || true)
+# 3. The per-issue comments endpoint ignores `sort`/`direction` (only the
+#    repo-wide /issues/comments endpoint honours them), so the old
+#    `per_page=10&sort=created&direction=desc` returned the OLDEST 10 comments
+#    and `.[0]` picked CodeRabbit's FIRST comment — never the rate-limit notice.
+#    Paginate ascending and take the LAST match instead. Bodies are multi-line,
+#    so base64-encode per comment to keep `tail -1` line-oriented.
+LATEST_COMMENT=$(gh api "repos/$OWNER/$REPO/issues/$PR_NUMBER/comments?per_page=100" --paginate \
+  --jq '.[] | select(.user.login == "coderabbitai" or .user.login == "coderabbitai[bot]") | .body | @base64' 2>/dev/null | tail -1 | base64 -d 2>/dev/null || true)
 
 if [ -z "$LATEST_COMMENT" ]; then
   echo "  No CodeRabbit comments found."

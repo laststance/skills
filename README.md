@@ -20,14 +20,14 @@ Install a specific skill:
 
 ```bash
 npx skills add laststance/skills --skill apollousa
-npx skills add laststance/skills --skill claude-code-plugin-troubleshoot
 npx skills add laststance/skills --skill chrome-clean-install
 npx skills add laststance/skills --skill ci-hardening
+npx skills add laststance/skills --skill claude-code-plugin-troubleshoot
 npx skills add laststance/skills --skill code-trace
 npx skills add laststance/skills --skill codebase-litter-audit
+npx skills add laststance/skills --skill coderabbit-resolver
 npx skills add laststance/skills --skill colorful-type
 npx skills add laststance/skills --skill component-hierarchy
-npx skills add laststance/skills --skill coderabbit-resolver
 npx skills add laststance/skills --skill cookie
 npx skills add laststance/skills --skill create-worktree
 npx skills add laststance/skills --skill deep-trace
@@ -49,8 +49,8 @@ npx skills add laststance/skills --skill save
 npx skills add laststance/skills --skill search
 npx skills add laststance/skills --skill simplify
 npx skills add laststance/skills --skill source-grounded-research
-npx skills add laststance/skills --skill type-expand
 npx skills add laststance/skills --skill ts-pattern-refactor
+npx skills add laststance/skills --skill type-expand
 npx skills add laststance/skills --skill ux-gap-detector
 npx skills add laststance/skills --skill video
 npx skills add laststance/skills --skill visual-lint
@@ -61,14 +61,14 @@ npx skills add laststance/skills --skill visual-lint
 | Skill | Description | Dependencies |
 |-------|-------------|--------------|
 | [apollousa](skills/apollousa/) | Creates a GitHub PR for completed work, then runs the full CodeRabbit review, CI, merge, and cleanup loop. | [coderabbit-resolver](skills/coderabbit-resolver/) **(required)** |
-| [claude-code-plugin-troubleshoot](skills/claude-code-plugin-troubleshoot/) | Debug, audit, and fix Claude Code plugin system issues — hook errors, plugin misbehavior, cache investigation. Knows that `enabledPlugins: false` is not a true kill switch (hooks still execute, skills still accessible). | — |
 | [chrome-clean-install](skills/chrome-clean-install/) | Refresh Chromium-based browsers by backing up profile/cache data, guiding a clean reinstall, and restoring bookmarks only. Handles Chrome, Chrome Canary, Edge, Brave, Arc, Dia, and custom Chromium browser paths. | [Node.js](https://nodejs.org/) **(required)** |
 | [ci-hardening](skills/ci-hardening/) | Port the skills-desktop GitHub Actions hardening baseline — CodeQL, Dependency Review, Scorecard, Dependabot, CODEOWNERS, pinned actions, least-privilege permissions, and branch/security settings. | [Node.js](https://nodejs.org/) **(required)**, [GitHub CLI](https://cli.github.com/) (recommended) |
+| [claude-code-plugin-troubleshoot](skills/claude-code-plugin-troubleshoot/) | Debug, audit, and fix Claude Code plugin system issues — hook errors, plugin misbehavior, cache investigation. Knows that `enabledPlugins: false` is not a true kill switch (hooks still execute, skills still accessible). | — |
 | [code-trace](skills/code-trace/) | Interactive code execution path tracer. Explains how code flows from entry point to output with step-by-step navigation. | — |
 | [codebase-litter-audit](skills/codebase-litter-audit/) | Audit repositories for half-finished features, stale TODOs, no-op handlers, visible UI wired to stubs, disabled tests, stale docs, placeholder assets, suppressions, and other codebase litter that dead-code tools miss. | — |
+| [coderabbit-resolver](skills/coderabbit-resolver/) | Audits inline and outside-diff CodeRabbit findings, validates fixes, rechecks review evidence before merge, and cleans up. Supports `--bulk` for all open PRs. | [GitHub CLI](https://cli.github.com/) **(required)**, [jq](https://jqlang.org/) **(required)** |
 | [colorful-type](skills/colorful-type/) | Replace colorless primitives (`string`, `number`, `boolean`) with domain-rich types. Adds branded types, JSDoc, and named type aliases to communicate intent. | — |
 | [component-hierarchy](skills/component-hierarchy/) | Visualize where a React component sits in the Next.js tree (Page → target) as an ASCII diagram with file paths. Supports App Router and Pages Router. | — |
-| [coderabbit-resolver](skills/coderabbit-resolver/) | Automates the full CodeRabbit PR review cycle — fix comments, resolve threads, pass CI, merge, and clean up. Supports `--bulk` for all open PRs. | — |
 | [cookie](skills/cookie/) | Copy Google Chrome's cookies into `playwright-cli` (macOS) so its browser inherits every logged-in session (GitHub, etc.). Decrypts via the macOS Keychain, loads per-cookie, verifies before navigating, and deletes the plaintext token files after. | `playwright-cli` **(required)**, Node.js **(required)** |
 | [create-worktree](skills/create-worktree/) | Creates a git worktree as a sibling directory to the current project (e.g., `../project-feat-x`), copies `.gitignore`d config files (`.env`, `.env.local`, etc.) while skipping heavy build/dependency directories (`node_modules`, `.next`, `dist`, `build`, `coverage`), then navigates into the new worktree. | — |
 | [deep-trace](skills/deep-trace/) | Line-by-line execution path tracer for PR diffs, git diffs, or specified code sections. Maps every line to its screen/URL, data flow, and execution context like a debugger's step-through. | [Serena MCP](https://github.com/oraios/serena) (recommended) |
@@ -90,8 +90,8 @@ npx skills add laststance/skills --skill visual-lint
 | [search](skills/search/) | Iterative multi-tool research. Picks the best-fit tool (WebSearch, WebFetch, Exa, Perplexity, Tavily, Context7, DeepWiki) for the question type, then switches tool families across up to 3 passes until a citation-backed answer is reached. | [Exa MCP](https://github.com/exa-labs/exa-mcp-server) (recommended), [Perplexity MCP](https://github.com/ppl-ai/modelcontextprotocol) (recommended), [Tavily MCP](https://github.com/tavily-ai/tavily-mcp-server) (recommended), [Context7](https://github.com/upstash/context7) (recommended) |
 | [simplify](skills/simplify/) | Faithful recreation of Anthropic's removed `/simplify` Claude Code bundled skill. Reviews `git diff` via three parallel agents (Code Reuse, Code Quality, Efficiency) and fixes any issues found. Accepts free-form focus args appended under `## Additional Focus`. | — |
 | [source-grounded-research](skills/source-grounded-research/) | Produces source-grounded research briefs with citations, contradiction handling, and query logs. Research-only — no implementation or speculative answers without sources. | [Context7](https://github.com/upstash/context7) (recommended), web search / MCP (recommended) |
-| [type-expand](skills/type-expand/) | Expands TypeScript type aliases into concrete, primitive-resolved shapes — unions, intersections, generics, conditional types, infer-based types, and common utility types as far as statically resolvable. Use when IDE hover only shows alias names. | [tsx](https://github.com/privatenumber/tsx) (recommended), TypeScript project `tsconfig.json` **(required)** |
 | [ts-pattern-refactor](skills/ts-pattern-refactor/) | Detect and refactor conditional code to ts-pattern's `match().with().exhaustive()`. Refactors JSX branching, chained ternaries, and discriminated-union dispatch — but deliberately leaves plain single-condition if-chains alone. Codifies syntactic-form × context judgment criteria. | [ts-pattern](https://github.com/gvergnaud/ts-pattern) **(required)**, [Context7](https://github.com/upstash/context7) (recommended), [Serena MCP](https://github.com/oraios/serena) (recommended) |
+| [type-expand](skills/type-expand/) | Expands TypeScript type aliases into concrete, primitive-resolved shapes — unions, intersections, generics, conditional types, infer-based types, and common utility types as far as statically resolvable. Use when IDE hover only shows alias names. | [tsx](https://github.com/privatenumber/tsx) (recommended), TypeScript project `tsconfig.json` **(required)** |
 | [ux-gap-detector](skills/ux-gap-detector/) | Detects UI/UX quality gaps in authenticated SaaS web apps via `playwright-cli`. Crawls app interior, captures screenshots, scores across 4 dimensions (Typography & Spacing, Interactive States, Content Hierarchy, Loading & Error UX), and generates an actionable Markdown gap report. Optionally creates GitHub Issues. | `playwright-cli` **(required)**, [Serena MCP](https://github.com/oraios/serena) (recommended) |
 | [video](skills/video/) | Inspect video frame-by-frame and capture-then-verify UI motion. Extract frames from any clip with ffmpeg and read them as images; record interactions (Playwright, computer-use, iOS simulator) to verify animations and transitions that static screenshots and `getComputedStyle` cannot reveal. | `ffmpeg` **(required)**, Playwright (recommended for web/Electron renderer capture), [iOS Simulator MCP](https://github.com/nichochar/ios-simulator-mcp) (iOS capture), Computer Use MCP (native macOS chrome capture) |
 | [visual-lint](skills/visual-lint/) | ESLint for rendered UI. Screenshots a running app via `playwright-cli` to detect wrapping, clipping, overlap, misalignment, and unreadable badge text. Checks colored badges against their backgrounds and explicit foreground requirements in light/dark themes. Baseline-free and read-only — reports cited findings without editing source or claiming unmeasured contrast ratios. | `playwright-cli` **(required)** |
@@ -102,19 +102,19 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 
 ```
 /apollousa                        # Create PR, resolve CodeRabbit, merge, and clean up
-/claude-code-plugin-troubleshoot    # Debug Claude Code plugin issues
 /chrome-clean-install Chrome Canary # Clean-refresh a Chromium browser profile/cache
 /ci-hardening                        # Port skills-desktop CI security baseline to this repo
+/claude-code-plugin-troubleshoot    # Debug Claude Code plugin issues
 /code-trace                         # Trace code execution paths
 /codebase-litter-audit              # Find half-finished codebase litter
+/coderabbit-resolver 17             # Process PR #17
+/coderabbit-resolver --bulk         # Process all open PRs
 /colorful-type                       # Replace primitives with domain types
 /component-hierarchy Button.tsx      # ASCII tree from Page down to target component
-/coderabbit-resolver 17             # Process PR #17
 /cookie                             # Import Chrome cookies into a playwright-cli session
 /create-worktree feat/new-thing     # Create git worktree at ../project-feat-new-thing
 /deep-trace 42                      # Trace PR #42 line-by-line
 /dnd                                # Load drag-and-drop coordinate-based verification protocol
-/coderabbit-resolver --bulk         # Process all open PRs
 /electron-release                   # Electron release workflow
 /explain src/auth/middleware.ts      # Deep code explanation
 /explain-diff-html 42               # Interactive HTML PR walkthrough + quiz
@@ -133,8 +133,8 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /search what changed in React 19    # Iterative multi-tool research (Web + MCPs) until satisfied
 /simplify                           # Review changed code (reuse + quality + efficiency) and fix issues
 /source-grounded-research React 19  # Cited research brief (no code changes)
-/type-expand OrderItemSetting       # Expand a TypeScript type alias to its concrete shape
 /ts-pattern-refactor                # Sweep codebase for ts-pattern refactor opportunities
+/type-expand OrderItemSetting       # Expand a TypeScript type alias to its concrete shape
 /ux-gap-detector                    # Detect UX gaps in authenticated SaaS web app
 /video clip.webm                    # Extract frames with ffmpeg and verify UI motion
 /visual-lint                        # Check rendered UI defects and badge readability across themes

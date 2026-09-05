@@ -61,7 +61,7 @@ gh pr comment $PR_NUMBER --body "@coderabbitai full review"
 CodeRabbit comments follow this pattern:
 - **Actionable comments**: Inline threads with specific code suggestions (fixable)
 - **Nitpick comments**: Lower priority suggestions (prefix: `_🔧 Nitpick_`)
-- **Outside diff comments**: Listed in review body, NOT as resolvable inline threads
+- **Outside diff comments**: Listed in `PullRequestReview.body` from the reviews endpoint, with no resolvable inline thread. Audit each finding against current code and retain its source URL and fix/skip evidence; newer clean reviews do not close older body findings automatically.
 - **Summary comment**: Overall review summary posted as issue comment
 
 ## Waiting for CodeRabbit Review

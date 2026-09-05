@@ -38,7 +38,7 @@ query($owner: String!, $repo: String!, $pr: Int!) {
 gh api graphql -f query='...' | jq '
   .data.repository.pullRequest.reviewThreads.nodes
   | map(select(.isResolved == false))
-  | map(select(.comments.nodes[0].author.login == "coderabbitai"))
+  | map(select(.comments.nodes[0].author.login == "coderabbitai" or .comments.nodes[0].author.login == "coderabbitai[bot]"))
 '
 ```
 
@@ -63,12 +63,20 @@ mutation($threadId: ID!) {
 
 ## Query: Get Review Bodies (Outside-Diff Comments)
 
-Review bodies contain "outside diff" comments that aren't inline threads. Extract them:
+Outside-diff findings are embedded in `PullRequestReview.body`, not resolvable inline threads. The `/issues/{pr}/comments` endpoint used for walkthrough/rate-limit comments does not return these review bodies.
+
+Fetch **all pages** and accept both CodeRabbit login forms. REST responses commonly use `coderabbitai[bot]`; matching only `coderabbitai` silently drops those reviews. Keep the source URL and reviewed commit for the audit:
 
 ```bash
-gh api repos/$OWNER/$REPO/pulls/$PR_NUMBER/reviews \
-  --jq '.[] | select(.user.login == "coderabbitai") | {id: .id, body: .body}'
+gh api "repos/$OWNER/$REPO/pulls/$PR_NUMBER/reviews?per_page=100" --paginate \
+  --jq '.[]
+    | select(.user.login == "coderabbitai" or .user.login == "coderabbitai[bot]")
+    | {id, html_url, commit_id, submitted_at, state, body}'
 ```
+
+Read every returned body for outside-diff findings, including collapsed HTML details and repeated AI prompt sections. Do not filter to the latest review, current-HEAD reviews, or a particular review state: older findings remain relevant until checked against current code, even after an approval or a later review with no new comments. Preserve `cr-comment` markers when present to identify duplicate appearances of the same finding.
+
+An API failure is not an empty review history. If no CodeRabbit reviews are returned despite a known review URL or completed review, investigate the repository, pagination, and author filtering before declaring the audit clean.
 
 ## Check CI Status
 

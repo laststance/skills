@@ -22,13 +22,15 @@ Automates the iterative CodeRabbit review loop on a GitHub PR until all review c
 
 GitHub has NO REST API for resolving review threads. You MUST use the GraphQL `resolveReviewThread` mutation with `PRRT_`-prefixed thread IDs. The mutation is idempotent — safe to call on already-resolved threads.
 
+Outside-diff findings live in review bodies and have no resolvable thread ID. Track their disposition and evidence in the audit table; zero unresolved inline threads does not prove these findings are addressed.
+
 ### Principle 2: Iterative Loop Until Clean
 
 The workflow runs in a loop:
-1. Extract unresolved CodeRabbit review comments
-2. Fix code issues OR resolve already-fixed threads
+1. Extract unresolved CodeRabbit inline threads AND all CodeRabbit review bodies, including older outside-diff findings
+2. Verify each finding against current code; fix issues or record why already fixed/skipped, and resolve applicable inline threads
 3. Commit → Push → Wait for CI + CodeRabbit re-review
-4. Repeat until: zero unresolved threads AND all CI checks pass AND CodeRabbit check on current HEAD is `completed` + `success`
+4. Re-fetch both sources after every re-review and before merge. Repeat until: zero unresolved threads AND zero unaudited/unaddressed outside-diff findings AND all CI checks pass AND CodeRabbit check on current HEAD is `completed` + `success`
 
 ### Principle 3: Validation Before Every Push
 
@@ -36,7 +38,7 @@ Run `pnpm validate` (or project-specific validation) before every commit. Never 
 
 ### Principle 4: Safe Merge and Cleanup
 
-Only merge when ALL conditions are met: CI green, no unresolved threads, and CodeRabbit check is `completed` + `success` on the current HEAD commit. After merge, delete remote branch and prune local.
+Only merge when ALL conditions are met: CI green, no unresolved threads, every outside-diff finding has a current-code disposition with evidence, and CodeRabbit check is `completed` + `success` on the current HEAD commit. `check-ci-status.sh` does not audit outside-diff findings; its exit 0 cannot replace that audit. After merge, delete remote branch and prune local.
 
 ### Principle 5: Rate Limit Handling — Comment-First, API-Status Second
 
@@ -116,6 +118,7 @@ All in `workflows/`:
 <success_criteria>
 A successful coderabbit-resolver invocation (single PR):
 - [ ] All CodeRabbit review threads resolved (zero unresolved)
+- [ ] All outside-diff review body findings audited against current HEAD: FIXED with evidence or SKIPPED with a reason; none unaudited or NOT_FIXED
 - [ ] All CI checks passing (green), including fixes for unrelated CI failures
 - [ ] CodeRabbit review status is complete
 - [ ] PR merged successfully
