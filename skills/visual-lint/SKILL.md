@@ -1,6 +1,7 @@
 ---
 name: visual-lint
-version: 0.1.1
+metadata:
+  version: 0.1.2
 description: Screenshot UI defect lint
 allowed-tools:
   - Bash
@@ -204,6 +205,7 @@ is a regression — fix it before shipping. This is a construction-time anchor; 
 - [ ] `./DESIGN.md` detection resolved (project-aware vs generic noted in report).
 - [ ] State plan table presented before capture.
 - [ ] Screenshots full-window; dense/borderline regions have a zoom crop (captures are 1× CSS via playwright-cli, not 2× device px).
+- [ ] Colored badge/chip labels checked against their own backgrounds and any explicit foreground requirement (E7); available light/dark variants captured per `ui-state-coverage.md`.
 - [ ] Every finding cites a visible element (cite-or-drop honored).
 - [ ] Report written under `./visual-lint-reports/`; **no source edits, no commits.**
 - [ ] Driver detached (app left running).

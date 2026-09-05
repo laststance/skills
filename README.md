@@ -94,7 +94,7 @@ npx skills add laststance/skills --skill visual-lint
 | [ts-pattern-refactor](skills/ts-pattern-refactor/) | Detect and refactor conditional code to ts-pattern's `match().with().exhaustive()`. Refactors JSX branching, chained ternaries, and discriminated-union dispatch — but deliberately leaves plain single-condition if-chains alone. Codifies syntactic-form × context judgment criteria. | [ts-pattern](https://github.com/gvergnaud/ts-pattern) **(required)**, [Context7](https://github.com/upstash/context7) (recommended), [Serena MCP](https://github.com/oraios/serena) (recommended) |
 | [ux-gap-detector](skills/ux-gap-detector/) | Detects UI/UX quality gaps in authenticated SaaS web apps via `playwright-cli`. Crawls app interior, captures screenshots, scores across 4 dimensions (Typography & Spacing, Interactive States, Content Hierarchy, Loading & Error UX), and generates an actionable Markdown gap report. Optionally creates GitHub Issues. | `playwright-cli` **(required)**, [Serena MCP](https://github.com/oraios/serena) (recommended) |
 | [video](skills/video/) | Inspect video frame-by-frame and capture-then-verify UI motion. Extract frames from any clip with ffmpeg and read them as images; record interactions (Playwright, computer-use, iOS simulator) to verify animations and transitions that static screenshots and `getComputedStyle` cannot reveal. | `ffmpeg` **(required)**, Playwright (recommended for web/Electron renderer capture), [iOS Simulator MCP](https://github.com/nichochar/ios-simulator-mcp) (iOS capture), Computer Use MCP (native macOS chrome capture) |
-| [visual-lint](skills/visual-lint/) | ESLint for rendered UI. Screenshots a running app via `playwright-cli` and runs a structured defect rubric over the pixels to catch display breakage that code lint/typecheck can't see — unintended wrapping, overflow/clipping, element overlap, misalignment, broken layout. Baseline-free (no golden image) and read-only — reports findings with cited evidence, never edits source. | `playwright-cli` **(required)** |
+| [visual-lint](skills/visual-lint/) | ESLint for rendered UI. Screenshots a running app via `playwright-cli` to detect wrapping, clipping, overlap, misalignment, and unreadable badge text. Checks colored badges against their backgrounds and explicit foreground requirements in light/dark themes. Baseline-free and read-only — reports cited findings without editing source or claiming unmeasured contrast ratios. | `playwright-cli` **(required)** |
 
 ## Usage
 
@@ -137,7 +137,7 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /ts-pattern-refactor                # Sweep codebase for ts-pattern refactor opportunities
 /ux-gap-detector                    # Detect UX gaps in authenticated SaaS web app
 /video clip.webm                    # Extract frames with ffmpeg and verify UI motion
-/visual-lint                        # Screenshot a running app and lint the render for display breakage
+/visual-lint                        # Check rendered UI defects and badge readability across themes
 ```
 
 ## License

@@ -10,7 +10,7 @@ correctly?".
 
 ## v1 (MVP) scope — keep it lean
 
-Capture exactly this, no more:
+Capture these states, plus the targeted badge check below:
 
 1. **Default-state full-window pass** — *always*. The screen as it first renders, at the
    default window size.
@@ -18,6 +18,12 @@ Capture exactly this, no more:
    **modal · context-menu · drag · scroll · hover**. These are the interaction states
    the user explicitly called out as easy to miss because they need a specific action to
    appear.
+
+**Targeted badge check (E7):** when the screen has colored badges/chips and exposes
+light/dark modes, capture the same label region in both modes, including below-fold
+source labels and third-party tags. Use a zoom crop when the text is too small to
+judge. Add these states to the plan; if a mode is unavailable, record it as untested.
+This is a focused foreground/background check, not the full theme/state matrix.
 
 The full six-axis combinatorial matrix (viewport × theme × content-fullness ×
 interaction × async × overlay) is **v2 expansion** — documented in the appendix below

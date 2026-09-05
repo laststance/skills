@@ -17,6 +17,11 @@ pass can apply.
 > *different* project, re-read its DESIGN.md and substitute its tokens — the *structure*
 > of the checks carries over, the *values* don't.
 
+For badge/chip foregrounds (E7), also honor an explicit user requirement and cite it
+as the expected appearance, even when DESIGN.md is silent. Distinguish a foreground
+that violates that requirement from a measured contrast failure; neither a brand
+color nor a raw third-party label color guarantees readability in the current theme.
+
 ## v1 perceptual vs v2 deterministic — the boundary
 
 A rule belongs to **v1 (perceptual, this skill)** if a human can see the violation

@@ -121,6 +121,16 @@ defect.
   backup (a red dot with no label) — fails for color-blind users.
 - **E6 — Surface indistinct.** Two surfaces that should read as distinct layers
   (card vs background, popover vs panel) are indistinguishable; or visible color banding.
+- **E7 — Badge/chip foreground pairing.** Inspect each colored badge/chip's text
+  against its **own background**, including source labels and third-party tags. Does
+  the label remain readable, and does its foreground match an explicit user or project
+  requirement? Cite that requirement for a color-consistency finding; a requested white
+  foreground is not, by itself, proof of better contrast or WCAG compliance. Never
+  prescribe white for every colored background. Check light/dark variants and zoom
+  small labels before judging. If source inspection supports it, identify inherited or
+  global theme text overrides and unadapted third-party colors as causes; pixels alone
+  cannot prove the cause. Route nearly invisible text to E2, uncertain readability to
+  E1 (needs measurement), and avoid counting the same defect twice.
 
 ## F. State-specific *(reached via `ui-state-coverage.md` operation paths)*
 
