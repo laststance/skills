@@ -4,7 +4,7 @@
 [![Claude Code](https://img.shields.io/badge/Claude_Code-compatible-D97757?style=flat-square&logo=claude&logoColor=white)](https://code.claude.com/docs/en/skills)
 [![Cursor](https://img.shields.io/badge/Cursor-compatible-000000?style=flat-square&logo=cursor&logoColor=white)](https://cursor.com/docs/skills)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-compatible-111827?style=flat-square&logo=openai&logoColor=white)](https://developers.openai.com/codex/skills)
-[![Skills](https://img.shields.io/badge/skills-34-2563EB?style=flat-square)](#available-skills)
+[![Skills](https://img.shields.io/badge/skills-31-2563EB?style=flat-square)](#available-skills)
 
 Agent skills for AI coding assistants. Install via [skills.sh](https://skills.sh).
 
@@ -22,7 +22,6 @@ Install a specific skill:
 npx skills add laststance/skills --skill apollousa
 npx skills add laststance/skills --skill chrome-clean-install
 npx skills add laststance/skills --skill ci-hardening
-npx skills add laststance/skills --skill claude-code-plugin-troubleshoot
 npx skills add laststance/skills --skill code-trace
 npx skills add laststance/skills --skill codebase-litter-audit
 npx skills add laststance/skills --skill coderabbit-resolver
@@ -44,14 +43,12 @@ npx skills add laststance/skills --skill pr-tour
 npx skills add laststance/skills --skill product-inspiration
 npx skills add laststance/skills --skill prop-drill
 npx skills add laststance/skills --skill react-query-key-jump
-npx skills add laststance/skills --skill rec
 npx skills add laststance/skills --skill save
 npx skills add laststance/skills --skill search
 npx skills add laststance/skills --skill source-grounded-research
 npx skills add laststance/skills --skill ts-pattern-refactor
 npx skills add laststance/skills --skill type-expand
 npx skills add laststance/skills --skill ux-gap-detector
-npx skills add laststance/skills --skill video
 npx skills add laststance/skills --skill visual-lint
 ```
 
@@ -62,7 +59,6 @@ npx skills add laststance/skills --skill visual-lint
 | [apollousa](skills/apollousa/) | Creates a GitHub PR for completed work, then runs the full CodeRabbit review, CI, merge, and cleanup loop. | [coderabbit-resolver](skills/coderabbit-resolver/) **(required)** |
 | [chrome-clean-install](skills/chrome-clean-install/) | Refresh Chromium-based browsers by backing up profile/cache data, guiding a clean reinstall, and restoring bookmarks only. Handles Chrome, Chrome Canary, Edge, Brave, Arc, Dia, and custom Chromium browser paths. | [Node.js](https://nodejs.org/) **(required)** |
 | [ci-hardening](skills/ci-hardening/) | Port the skills-desktop GitHub Actions hardening baseline — CodeQL, Dependency Review, Scorecard, Dependabot, CODEOWNERS, pinned actions, least-privilege permissions, and branch/security settings. | [Node.js](https://nodejs.org/) **(required)**, [GitHub CLI](https://cli.github.com/) (recommended) |
-| [claude-code-plugin-troubleshoot](skills/claude-code-plugin-troubleshoot/) | Debug, audit, and fix Claude Code plugin system issues — hook errors, plugin misbehavior, cache investigation. Knows that `enabledPlugins: false` is not a true kill switch (hooks still execute, skills still accessible). | — |
 | [code-trace](skills/code-trace/) | Interactive code execution path tracer. Explains how code flows from entry point to output with step-by-step navigation. | — |
 | [codebase-litter-audit](skills/codebase-litter-audit/) | Audit repositories for half-finished features, stale TODOs, no-op handlers, visible UI wired to stubs, disabled tests, stale docs, placeholder assets, suppressions, and other codebase litter that dead-code tools miss. | — |
 | [coderabbit-resolver](skills/coderabbit-resolver/) | Audits inline and outside-diff CodeRabbit findings, validates fixes, rechecks review evidence before merge, and cleans up. Supports `--bulk` for all open PRs. | [GitHub CLI](https://cli.github.com/) **(required)**, [jq](https://jqlang.org/) **(required)** |
@@ -84,14 +80,12 @@ npx skills add laststance/skills --skill visual-lint
 | [product-inspiration](skills/product-inspiration/) | Provides UI/feature implementation inspiration by researching top-tier apps. Implements all proposed patterns in _trials/ folder for hands-on evaluation. | [Tavily MCP](https://github.com/tavily-ai/tavily-mcp-server) (recommended) |
 | [prop-drill](skills/prop-drill/) | Trace React prop-drilling paths from origin definition to leaf consumers. Shows the original prop definition as a clickable code block, the full drilling route as a table, and a Mermaid flowchart. | [Serena MCP](https://github.com/oraios/serena) (recommended), [Context7](https://github.com/upstash/context7) (recommended) |
 | [react-query-key-jump](skills/react-query-key-jump/) | Jump from a TanStack React Query `queryKey` string (e.g. `getDrawing`) to the `useQuery` / `useInfiniteQuery` hook line where that key is defined. Skips `invalidateQueries` usage sites. | [ripgrep](https://github.com/BurntSushi/ripgrep) **(required)** |
-| [rec](skills/rec/) | Record a web or Electron-renderer flow as an annotated video with playwright-cli — action callouts + chapter cards — then extract frames to confirm how it actually looks. For vague "record that part / 動作確認して録画" asks: real-time driver code paced for a human to watch (typing delay, pauses, chapter cards), not an E2E-runner replay. | `playwright-cli` **(required)**, `ffmpeg` **(required)** |
 | [save](skills/save/) | Save session context to Serena MCP memory for cross-session persistence. Analyzes accomplishments, persists learnings, and creates session checkpoints. | [Serena MCP](https://github.com/oraios/serena) **(required)** |
 | [search](skills/search/) | Iterative multi-tool research. Picks the best-fit tool (WebSearch, WebFetch, Exa, Perplexity, Tavily, Context7, DeepWiki) for the question type, then switches tool families across up to 3 passes until a citation-backed answer is reached. | [Exa MCP](https://github.com/exa-labs/exa-mcp-server) (recommended), [Perplexity MCP](https://github.com/ppl-ai/modelcontextprotocol) (recommended), [Tavily MCP](https://github.com/tavily-ai/tavily-mcp-server) (recommended), [Context7](https://github.com/upstash/context7) (recommended) |
 | [source-grounded-research](skills/source-grounded-research/) | Produces source-grounded research briefs with citations, contradiction handling, and query logs. Research-only — no implementation or speculative answers without sources. | [Context7](https://github.com/upstash/context7) (recommended), web search / MCP (recommended) |
 | [ts-pattern-refactor](skills/ts-pattern-refactor/) | Detect and refactor conditional code to ts-pattern's `match().with().exhaustive()`. Refactors JSX branching, chained ternaries, and discriminated-union dispatch — but deliberately leaves plain single-condition if-chains alone. Codifies syntactic-form × context judgment criteria. | [ts-pattern](https://github.com/gvergnaud/ts-pattern) **(required)**, [Context7](https://github.com/upstash/context7) (recommended), [Serena MCP](https://github.com/oraios/serena) (recommended) |
 | [type-expand](skills/type-expand/) | Expands TypeScript type aliases into concrete, primitive-resolved shapes — unions, intersections, generics, conditional types, infer-based types, and common utility types as far as statically resolvable. Use when IDE hover only shows alias names. | [tsx](https://github.com/privatenumber/tsx) (recommended), TypeScript project `tsconfig.json` **(required)** |
 | [ux-gap-detector](skills/ux-gap-detector/) | Detects UI/UX quality gaps in authenticated SaaS web apps via `playwright-cli`. Crawls app interior, captures screenshots, scores across 4 dimensions (Typography & Spacing, Interactive States, Content Hierarchy, Loading & Error UX), and generates an actionable Markdown gap report. Optionally creates GitHub Issues. | `playwright-cli` **(required)**, [Serena MCP](https://github.com/oraios/serena) (recommended) |
-| [video](skills/video/) | Inspect video frame-by-frame and capture-then-verify UI motion. Extract frames from any clip with ffmpeg and read them as images; record interactions (Playwright, computer-use, iOS simulator) to verify animations and transitions that static screenshots and `getComputedStyle` cannot reveal. | `ffmpeg` **(required)**, Playwright (recommended for web/Electron renderer capture), [iOS Simulator MCP](https://github.com/nichochar/ios-simulator-mcp) (iOS capture), Computer Use MCP (native macOS chrome capture) |
 | [visual-lint](skills/visual-lint/) | ESLint for rendered UI. Screenshots a running app via `playwright-cli` to detect wrapping, clipping, overlap, misalignment, and unreadable badge text. Checks colored badges against their backgrounds and explicit foreground requirements in light/dark themes. Baseline-free and read-only — reports cited findings without editing source or claiming unmeasured contrast ratios. | `playwright-cli` **(required)** |
 
 ## Usage
@@ -102,7 +96,6 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /apollousa                        # Create PR, resolve CodeRabbit, merge, and clean up
 /chrome-clean-install Chrome Canary # Clean-refresh a Chromium browser profile/cache
 /ci-hardening                        # Port skills-desktop CI security baseline to this repo
-/claude-code-plugin-troubleshoot    # Debug Claude Code plugin issues
 /code-trace                         # Trace code execution paths
 /codebase-litter-audit              # Find half-finished codebase litter
 /coderabbit-resolver 17             # Process PR #17
@@ -126,14 +119,12 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /product-inspiration                # Get UI/feature inspiration
 /prop-drill orderData OrderTable    # Trace prop-drilling path
 /react-query-key-jump getDrawing    # Jump to useQuery queryKey definition line
-/rec あそこの部分                     # Record a pointed-at flow, annotate, verify on frames
 /save                               # Save session context to Serena MCP
 /search what changed in React 19    # Iterative multi-tool research (Web + MCPs) until satisfied
 /source-grounded-research React 19  # Cited research brief (no code changes)
 /ts-pattern-refactor                # Sweep codebase for ts-pattern refactor opportunities
 /type-expand OrderItemSetting       # Expand a TypeScript type alias to its concrete shape
 /ux-gap-detector                    # Detect UX gaps in authenticated SaaS web app
-/video clip.webm                    # Extract frames with ffmpeg and verify UI motion
 /visual-lint                        # Check rendered UI defects and badge readability across themes
 ```
 
