@@ -1,0 +1,4 @@
+{
+  "name": "Laststance Skills",
+  "install": "set -eu; missing=0; for t in node npm pnpm python3 bash jq rg ffmpeg git gh; do if command -v \"$t\" >/dev/null 2>&1; then printf '  ok   %-8s %s\\n' \"$t\" \"$($t --version 2>&1 | head -1)\"; else printf '  MISS %-8s\\n' \"$t\"; missing=1; fi; done; if [ \"$missing\" -eq 0 ]; then echo 'Toolchain ready.'; else echo 'Missing required tools.'; exit 1; fi"
+}
