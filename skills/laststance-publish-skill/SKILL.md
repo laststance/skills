@@ -1,6 +1,6 @@
 ---
 name: laststance-publish-skill
-description: Publish skill to registry
+description: Publish or update a registry skill
 ---
 
 # Publish Skill to laststance/skills
@@ -14,28 +14,52 @@ When running this skill in Cursor Agent, translate Claude Code-only primitives b
 Resolve `Read`/`Write`/`Edit`/`StrReplace`/`Bash`/web/search/MCP via Cursor Composer or Agent equivalents. MCP names written as `mcp__server__tool` typically map to `call_mcp_tool` with configured server identifiers. Map `~/.claude/...` to `~/.cursor/skills/`, `.cursor/skills/`, and `.cursor/rules/` unless the task explicitly targets Claude Code.
 
 
-Publish a tested skill to the `laststance/skills` repository for distribution via `npx skills add`.
+Publish a tested skill to the `laststance/skills` repository for distribution via `npx skills add`, or ship local changes to a skill that is already published there.
 
 ## Prerequisites
 
 - Skill is stable (passed Phase 2 testing in ~/.codex/skills/ and ~/.vscode/skills/)
-- Repository cloned at `~/laststance/skills`
+- Repository cloned at `~/laststance/skills`, on `main` and level with `origin/main`
 - Skill has a valid `SKILL.md` with frontmatter (`name`, `description`)
 
 ## Publish Steps
 
-### 1. Copy skill to repository
+Unmarked text applies to both branches; **new** / **update** marks text for one branch only.
+
+### 1. Pick the branch
+
+```bash
+test -d ~/laststance/skills/skills/<name> && echo update || echo new
+```
+
+- **new**: `skills/<name>/` is absent, so the skill is not in the registry yet.
+- **update**: `skills/<name>/` exists, so the skill is already published and your edits live in the installed copy. `~/.claude/skills/<name>` is a symlink to `~/.agents/skills/<name>/`, which `npx skills` manages and records in `~/.agents/.skill-lock.json`.
+
+### 2. Copy skill to repository
+
+**new**:
 
 ```bash
 mkdir -p ~/laststance/skills/skills/<name>
 cp -r ~/.claude/skills/<name>/* ~/laststance/skills/skills/<name>/
 ```
 
-Only copy files needed for the skill (SKILL.md + supporting files). Do NOT copy test artifacts or local-only files.
+**update**: read the difference first, then copy:
 
-### 2. Update README.md (4 places)
+```bash
+diff -r ~/laststance/skills/skills/<name> ~/.claude/skills/<name>/
+cp -r ~/.claude/skills/<name>/* ~/laststance/skills/skills/<name>/
+```
 
-Sections A–C maintain **alphabetical order**; D is a count.
+Every line of that diff is an intended change. A file you deleted locally survives `cp`: delete it in the repo too (`git rm skills/<name>/<file>`).
+
+Copy only the skill's own files (SKILL.md + supporting files); test artifacts and local-only files stay behind. The repository is public: rewrite project-specific examples, internal names, and secrets into generic wording before the copy lands.
+
+### 3. Update README.md
+
+**update**: the skill already has its install command (A), usage example (C), and a place in the badge count (D); leave those as they are. Re-read its Available Skills row (B) against the new `SKILL.md` and rewrite the row wherever it describes behavior the skill no longer has, or misses behavior it gained. Touch the usage example only when its arguments or one-line summary no longer fit.
+
+**new**: 4 places. Sections A–C maintain **alphabetical order**; D is a count.
 
 **A. Install commands** — Add to the specific skill install list:
 
@@ -68,7 +92,7 @@ img.shields.io/badge/skills-<N>-2563EB
 
 `<N>` = total skill count after this publish: `ls ~/laststance/skills/skills/*/SKILL.md | wc -l`.
 
-### 3. Commit and push
+### 4. Commit and push
 
 ```bash
 cd ~/laststance/skills
@@ -80,19 +104,11 @@ EOF
 git push
 ```
 
-## Checklist
+**update**: title the commit `feat: update <name> skill — <what changed>` or `feat(<name>): <what changed>`. Skills changed together ship in one commit (`feat: update save/load skills — …`).
 
-- [ ] Skill directory copied to `~/laststance/skills/skills/<name>/`
-- [ ] README install command added (alphabetical)
-- [ ] README skills table row added (alphabetical)
-- [ ] README usage example added (alphabetical)
-- [ ] README skills count badge bumped (`skills-<N>`)
-- [ ] Committed with `feat: add <name> skill` format
-- [ ] Pushed to remote
+### 5. Sync the installed copy
 
-## After Publish (CLI Install)
-
-Once merged, install via CLI to create symlinks across all AI tools:
+**new**: install via CLI to create symlinks across all AI tools:
 
 ```bash
 npx skills add laststance/skills
@@ -101,3 +117,29 @@ npx skills add laststance/skills --skill <name>
 ```
 
 This installs to `~/.agents/skills/<name>/` and creates symlinks in `~/.claude/skills/`, `~/.codex/skills/`, `~/.vscode/skills/`, etc. The hand-created original in `~/.claude/skills/` is replaced by the symlink.
+
+**update**: run once the push has landed:
+
+```bash
+npx skills update <name> [<name>...] -g -y
+```
+
+`update` rebuilds `~/.agents/skills/<name>/` from the published repository, so the push comes first: run earlier, it replaces your unpublished edits with the old published files. Afterwards the lock is level with the push:
+
+```bash
+git -C ~/laststance/skills rev-parse HEAD:skills/<name>   # equals skillFolderHash of <name> in ~/.agents/.skill-lock.json
+```
+
+## Checklist
+
+- [ ] Branch picked (**new** / **update**)
+- [ ] Skill files copied to `~/laststance/skills/skills/<name>/`; diff read for project-specific names and secrets
+- [ ] **new**: README install command added (alphabetical)
+- [ ] **new**: README skills table row added (alphabetical)
+- [ ] **new**: README usage example added (alphabetical)
+- [ ] **new**: README skills count badge bumped (`skills-<N>`)
+- [ ] **update**: README table row matches the new `SKILL.md`; install command and badge unchanged
+- [ ] Committed as `feat: add <name> skill` (**new**) or `feat: update <name> skill — …` / `feat(<name>): …` (**update**)
+- [ ] Pushed to remote
+- [ ] **new**: installed with `npx skills add`
+- [ ] **update**: `npx skills update` run after the push; `skillFolderHash` equals `HEAD:skills/<name>`
