@@ -51,7 +51,11 @@ diff -r ~/laststance/skills/skills/<name> ~/.claude/skills/<name>/
 cp -r ~/.claude/skills/<name>/* ~/laststance/skills/skills/<name>/
 ```
 
-Every line of that diff is an intended change. A file you deleted locally survives `cp`: delete it in the repo too (`git rm skills/<name>/<file>`).
+Every line of that diff is an intended change. `cp` only adds and overwrites: a new file (`Only in …/.claude/skills/<name>: <file>`) lands in the repo, while a file you deleted locally (`Only in …/laststance/skills/skills/<name>: <file>`) stays there until you `git rm skills/<name>/<file>`. The copy is done when the repo status lists every file the diff reported (`M` changed, `??` new, `D` deleted):
+
+```bash
+git -C ~/laststance/skills status --short skills/<name>/
+```
 
 Copy only the skill's own files (SKILL.md + supporting files); test artifacts and local-only files stay behind. The repository is public: rewrite project-specific examples, internal names, and secrets into generic wording before the copy lands.
 
@@ -104,19 +108,17 @@ EOF
 git push
 ```
 
-**update**: title the commit `feat: update <name> skill — <what changed>` or `feat(<name>): <what changed>`. Skills changed together ship in one commit (`feat: update save/load skills — …`).
+**update**: title the commit `feat: update <name> skill — <what changed>` or `<type>(<name>): <what changed>`, where `<type>` is the Conventional Commits type of the change (`feat` added behavior, `fix` a correction, `refactor`, `docs`). Skills changed together ship in one commit (`feat: update save/load skills — …`).
 
 ### 5. Sync the installed copy
 
 **new**: install via CLI to create symlinks across all AI tools:
 
 ```bash
-npx skills add laststance/skills
-# or specific skill:
-npx skills add laststance/skills --skill <name>
+npx skills add laststance/skills --skill <name> -g -y
 ```
 
-This installs to `~/.agents/skills/<name>/` and creates symlinks in `~/.claude/skills/`, `~/.codex/skills/`, `~/.vscode/skills/`, etc. The hand-created original in `~/.claude/skills/` is replaced by the symlink.
+This installs to `~/.agents/skills/<name>/` and creates symlinks in `~/.claude/skills/`, `~/.codex/skills/`, `~/.vscode/skills/`, etc. The hand-created original in `~/.claude/skills/` is replaced by the symlink. `-g` pins the user-level scope: without it a non-interactive run installs into the current directory's `.agents/skills/`, which right after step 4 is the repository. The output line `PromptScript does not support global skill installation` is expected; the command still exits 0.
 
 **update**: run once the push has landed:
 
@@ -134,12 +136,13 @@ git -C ~/laststance/skills rev-parse HEAD:skills/<name>   # equals skillFolderHa
 
 - [ ] Branch picked (**new** / **update**)
 - [ ] Skill files copied to `~/laststance/skills/skills/<name>/`; diff read for project-specific names and secrets
+- [ ] **update**: `git status --short skills/<name>/` lists every file `diff -r` reported, deletions included
 - [ ] **new**: README install command added (alphabetical)
 - [ ] **new**: README skills table row added (alphabetical)
 - [ ] **new**: README usage example added (alphabetical)
 - [ ] **new**: README skills count badge bumped (`skills-<N>`)
 - [ ] **update**: README table row matches the new `SKILL.md`; install command and badge unchanged
-- [ ] Committed as `feat: add <name> skill` (**new**) or `feat: update <name> skill — …` / `feat(<name>): …` (**update**)
+- [ ] Committed as `feat: add <name> skill` (**new**) or `feat: update <name> skill — …` / `<type>(<name>): …` (**update**)
 - [ ] Pushed to remote
-- [ ] **new**: installed with `npx skills add`
+- [ ] **new**: installed with `npx skills add … -g -y`; `~/.claude/skills/<name>` is now a symlink
 - [ ] **update**: `npx skills update` run after the push; `skillFolderHash` equals `HEAD:skills/<name>`
