@@ -35,6 +35,7 @@ Load project context from Serena MCP memory.
 4. Read all `CRITICAL_*` memories
 5. Follow cross-references: if any loaded memory says "MUST read", "also read", or "see also" — read those keys
 6. Read the most recent `session_*` memory (by date in key name)
+7. Compare its `Agent:` line with the agent running now. A decision prefixed with another agent (e.g. `(Cursor) …` read from Claude Code) is that agent's tooling decision: keep it as history and take tooling from the current agent's own project rules (`CLAUDE.md`, `.cursor/rules/`, `AGENTS.md`). A session without an `Agent:` line predates the tag: its tooling decisions may come from another agent, so verify them against those rules before following
 
 **If no memories exist:**
 
@@ -51,5 +52,6 @@ Present to the user:
 - **Memories Loaded**: [count] ([list of keys])
 - **Key Context**: [1-2 sentence summary of project state]
 - **Previous Session**: [summary from session_* memory, or "None"]
+- **Previous Session Agent**: [from its `Agent:` line, or "untagged"] — [if it differs from the current agent: which tooling decisions were left as history]
 - **Status**: Ready
 ```

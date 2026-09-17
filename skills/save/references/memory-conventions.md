@@ -23,11 +23,14 @@ the `load` skill to discover and prioritize memories automatically.
 ```
 ## Session: YYYY-MM-DD — <summary>
 
+Agent: <Claude Code | Cursor | Codex> (<model>, if known)
+
 ### Accomplished
 - [completed work items]
 
 ### Decisions Made
-- [decision]: [rationale]
+- [product decision]: [rationale]
+- (<Agent>) [tooling decision]: [rationale]
 
 ### Files Changed
 - [file path]: [what changed]
@@ -52,5 +55,6 @@ The `load` skill reads memories in this order:
 ## Rules
 
 - **Date-stamped keys** (`session_*`): Create new entry per session, never overwrite old ones
+- **Agent tag** (`session_*`): `Agent:` line under the title; tooling decisions carry `(<Agent>)`, product decisions stay unprefixed (defined in `SKILL.md` Phase 3)
 - **Pattern keys** (`pattern_*`): Update if the pattern evolves, keep topic-specific
 - **TODO keys** (`todo_*`): Delete when completed, or note completion in the body

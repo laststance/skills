@@ -53,11 +53,14 @@ Persist session context to Serena MCP memory for cross-session continuity.
 ```
 ## Session: YYYY-MM-DD — <summary>
 
+Agent: <Claude Code | Cursor | Codex> (<model>, if known)
+
 ### Accomplished
 - [what was done]
 
 ### Decisions Made
-- [decision]: [rationale]
+- [product decision]: [rationale]
+- (<Agent>) [tooling decision]: [rationale]
 
 ### Files Changed
 - [file path]: [what changed]
@@ -68,6 +71,8 @@ Persist session context to Serena MCP memory for cross-session continuity.
 ### Blockers (if any)
 - [blocker description]
 ```
+
+`Agent:` names the agent running this skill; add the model only when the agent reports it. Serena memory belongs to the project, not the agent, so Claude Code, Cursor and Codex all read the same checkpoints. A **tooling decision** (which browser / MCP / IDE tool to use, a model-specific workaround) binds only the agent that made it: prefix it with `(<Agent>)`, e.g. `(Cursor) browser QA runs through Cursor's built-in browser`. A **product decision** (spec, design, API contract, naming) binds every agent: write it without a prefix.
 
 ## Phase 4: Persist Learnings (if any)
 
@@ -134,5 +139,6 @@ Quick summary:
 - [ ] Session accomplishments analyzed
 - [ ] Existing memories checked (no accidental overwrites)
 - [ ] Session checkpoint memory written with date-stamped key
+- [ ] `Agent:` line written; every tooling decision carries its `(<Agent>)` prefix
 - [ ] Learnings/patterns persisted (if any discovered)
 - [ ] Save report presented to user
