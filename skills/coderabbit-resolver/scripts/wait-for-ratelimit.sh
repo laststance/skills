@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # wait-for-ratelimit.sh — Detect CodeRabbit rate limit, wait for expiry, trigger full review
 #
+# Fallback only: review-loop.md Step 6b reviews HEAD with cli-review.sh first,
+# and comes here when the CodeRabbit CLI cannot run (cli-review.sh exit 5 or 6).
+#
 # Usage: bash wait-for-ratelimit.sh <owner> <repo> <pr_number>
 # Example: bash wait-for-ratelimit.sh laststance corelive 17
 #
@@ -21,6 +24,30 @@ BUFFER_SECONDS=30
 
 echo "Checking for CodeRabbit rate limit on PR #$PR_NUMBER..."
 
+# Layer (a) — AUTHORITATIVE, the same per-SHA signal check-ci-status.sh gates on.
+# CodeRabbit can announce a rate limit through the commit status ALONE, posting
+# no comment at all. On PR #184 (2026-09-07) the status on a09904fb read
+# "Review rate limited" at 16:05:55Z while the newest CodeRabbit comment was its
+# walkthrough from 14:15:55Z — edited in place, so it still carried the
+# walkthrough marker. Both comment checks below then misfire: the walkthrough
+# guard reads "a real review ran" and the `rate.?limit` grep finds nothing,
+# each exiting 1 and dead-ending the recovery path that check-ci-status.sh's
+# exit 3 sends the caller here for. When the status says rate limited, trust it
+# and skip both comment short-circuits; the comment is still read below for the
+# wait duration (absent one, the 15-minute fallback applies).
+HEAD_SHA=$(gh pr view "$PR_NUMBER" --repo "$OWNER/$REPO" --json headRefOid -q .headRefOid 2>/dev/null || true)
+CR_DESC=""
+if [ -n "$HEAD_SHA" ]; then
+  CR_DESC=$(gh api "repos/$OWNER/$REPO/commits/$HEAD_SHA/statuses" \
+    --jq '[.[] | select(.context == "CodeRabbit")] | .[0].description' 2>/dev/null || true)
+fi
+STATUS_RATE_LIMITED=0
+case "$CR_DESC" in
+  *"rate limited"*|*"Rate limited"*|*"rate-limited"*)
+    STATUS_RATE_LIMITED=1
+    echo "  CodeRabbit per-SHA status on ${HEAD_SHA:0:7}: \"$CR_DESC\" — rate limited (authoritative)." ;;
+esac
+
 # Fetch the most recent CodeRabbit comment body.
 #
 # Two bug-fixes vs prior versions:
@@ -40,7 +67,7 @@ echo "Checking for CodeRabbit rate limit on PR #$PR_NUMBER..."
 LATEST_COMMENT=$(gh api "repos/$OWNER/$REPO/issues/$PR_NUMBER/comments?per_page=100" --paginate \
   --jq '.[] | select(.user.login == "coderabbitai" or .user.login == "coderabbitai[bot]") | .body | @base64' 2>/dev/null | tail -1 | base64 -d 2>/dev/null || true)
 
-if [ -z "$LATEST_COMMENT" ]; then
+if [ "$STATUS_RATE_LIMITED" -eq 0 ] && [ -z "$LATEST_COMMENT" ]; then
   echo "  No CodeRabbit comments found."
   exit 1
 fi
@@ -52,7 +79,7 @@ fi
 # `@coderabbitai full review` post when CodeRabbit had ALREADY reviewed.
 # Reject those comments first using the walkthrough marker as a positive
 # signal of a real review.
-if echo "$LATEST_COMMENT" | grep -qE '<!-- walkthrough_start -->|^## Walkthrough'; then
+if [ "$STATUS_RATE_LIMITED" -eq 0 ] && echo "$LATEST_COMMENT" | grep -qE '<!-- walkthrough_start -->|^## Walkthrough'; then
   echo "  Latest CodeRabbit comment is a real review (walkthrough), not a rate-limit notice."
   exit 1
 fi
@@ -62,7 +89,7 @@ fi
 #   "rate limit" / "rate-limited" / "rate limited"
 #   "try again in X minutes" / "available in approximately X minutes"
 #   "will be available in X min"
-if ! echo "$LATEST_COMMENT" | grep -qiE 'rate.?limit'; then
+if [ "$STATUS_RATE_LIMITED" -eq 0 ] && ! echo "$LATEST_COMMENT" | grep -qiE 'rate.?limit'; then
   echo "  No rate limit detected in latest CodeRabbit comment."
   exit 1
 fi

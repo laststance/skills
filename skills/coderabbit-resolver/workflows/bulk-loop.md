@@ -97,10 +97,16 @@ If `gh pr checkout` fails (merge conflicts, deleted branch, etc.):
 Max CI fix attempts per PR: **3** (inherited from review-loop.md Step 6c).
 After 3 failed attempts, skip the PR.
 
-### CodeRabbit Rate Limit
-If CodeRabbit is rate-limited (detected by `wait-for-ratelimit.sh`):
-- The script handles waiting and triggering `@coderabbitai full review` automatically
-- Max 3 rate limit retries per PR. After 3 retries, record as `SKIPPED (CodeRabbit rate limit)`
+### CodeRabbit Rate Limit or No Review on HEAD
+If `check-ci-status.sh` exits 3 because CodeRabbit was rate limited or left no review on HEAD:
+- Follow review-loop.md Step 6b: review the PR with the CodeRabbit CLI (`cli-review.sh`) and pass the gate with `CR_CLI_LOG`. Record the PR as `MERGED (CLI review)`.
+- The PR-side limit counts per developer across all repositories, so the next PRs are likely to be rate limited too. Expect the CLI path for them until the window resets. Run CLI reviews one at a time, since they count toward the CLI's own hourly limit.
+- Use `wait-for-ratelimit.sh` only when the CLI cannot run (`cli-review.sh` exit 5 or 6). It waits and triggers `@coderabbitai full review`. Max 3 wait retries per PR; after that, record the PR as `SKIPPED (CodeRabbit rate limit)`.
+
+### Stacked PRs
+review-loop.md Step 9 retargets every open PR based on the merged branch to that PR's base, and closes and reopens it so its CI runs. The list from Step 0 is a snapshot, so before processing each PR, read its current base and state (`gh pr view $PR_NUMBER --json baseRefName,state`):
+- A PR whose base is still another open PR's branch would merge into that branch. Process the parent first; oldest first usually does this.
+- CodeRabbit may skip PRs whose base is not the default branch, so a stacked PR often gets its first review only after the retarget. Wait for that review (review-loop.md Step 6a) instead of reusing an earlier result.
 
 ### Network/API Errors
 If GitHub API is unreachable or rate-limited:

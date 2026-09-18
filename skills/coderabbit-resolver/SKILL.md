@@ -38,17 +38,21 @@ Run `pnpm validate` (or project-specific validation) before every commit. Never 
 
 ### Principle 4: Safe Merge and Cleanup
 
-Only merge when ALL conditions are met: CI green, no unresolved threads, every outside-diff finding has a current-code disposition with evidence, and CodeRabbit check is `completed` + `success` on the current HEAD commit. `check-ci-status.sh` does not audit outside-diff findings; its exit 0 cannot replace that audit. After merge, delete remote branch and prune local.
+Only merge when ALL conditions are met: CI green (no check pending, failed or cancelled), no unresolved threads, every outside-diff finding has a current-code disposition with evidence, and CodeRabbit reviewed the current HEAD commit (its check passed and a CodeRabbit review exists on that commit). When no PR-side review covers HEAD, a CodeRabbit CLI review that passes the `CR_CLI_LOG` gate (Principle 5) meets the last condition instead. `check-ci-status.sh` is the gate for CI and review, because a repository may require no checks and GitHub then lets a red PR merge. It does not audit outside-diff findings; its exit 0 cannot replace that audit. Merge only the verified head (`--match-head-commit`). After merge, retarget the PRs stacked on the branch, then delete the remote branch and prune local (review-loop.md Step 9). Never use `gh pr merge --delete-branch`: GitHub closes the stacked PRs instead of retargeting them.
 
-### Principle 5: Rate Limit Handling — Comment-First, API-Status Second
+### Principle 5: No Review on HEAD, No Merge — Rate Limits Included
 
 CodeRabbit may hit API rate limits and post a rate-limit warning comment **instead of** running a real review. Critically, the GitHub Checks API still reports `completed/success` for that case — there's no API-only signal to distinguish a real review from a rate-limit response. **Trusting the Checks API alone leads to merging unreviewed PRs.**
 
-Therefore: every "CodeRabbit success" must be cross-validated against the latest CodeRabbit issue comment. If the latest comment matches a rate-limit pattern (e.g. "Rate limit exceeded", "wait X minutes before requesting another review"), the run is rate-limited regardless of API status.
+Therefore: every "CodeRabbit success" must be cross-validated against the latest CodeRabbit issue comment. If the latest comment matches a rate-limit pattern (e.g. "Rate limit exceeded", "wait X minutes before requesting another review"), the run is rate-limited regardless of API status. A "success" can also cover a push that CodeRabbit never read: the per-SHA status can read "Review completed" after a run that left no review, or "Reviews paused" / "Review skipped", and a later run can overwrite it. Only a CodeRabbit review whose `commit_id` is HEAD shows that HEAD was reviewed.
 
-`check-ci-status.sh` performs this comment-content check internally and returns **exit 3** when a rate-limit notice is detected. The workflow's Step 6a treats exit 3 as "go to rate-limit handling," and Step 8 (Final Verification) treats exit 3 as "do not merge." This makes the rate-limit gate impossible to skip.
+`check-ci-status.sh` performs these checks internally: the per-SHA status text, the latest comment, and a review on HEAD. It returns **exit 3** when they show that no review covers HEAD. The workflow's Step 6a treats exit 3 as "go to Step 6b," and Step 8 (Final Verification) treats exit 3 as "do not merge." This makes the review gate impossible to skip.
 
-When detected, the workflow waits for the rate-limit window to expire (+ 30s buffer), then posts `@coderabbitai full review` to trigger a complete re-review. Max 3 rate-limit retries per PR to prevent infinite loops.
+When no review covers HEAD, don't wait out a rate-limit window. Review the PR locally with the CodeRabbit CLI (`scripts/cli-review.sh`, review-loop.md Step 6b), audit its findings like review comments, and pass the merge gate by rerunning `check-ci-status.sh` with `CR_CLI_LOG` (plus `CR_CLI_ACCEPT` for findings dispositioned by hand). The script accepts the log only if it is a completed CLI run with exactly that many findings, on HEAD (or, when findings were accepted, on an ancestor of HEAD whose newer commits fix them).
+
+The CLI has its own limits. Every run counts toward the account's CLI reviews (`coderabbit usage`), and the plan caps CLI reviews per hour. So run it once per HEAD, and at most 3 CLI passes per PR, because passes don't converge on zero findings. Never add `--use-credits` (usage-based billing) unless the owner asks.
+
+Fall back to waiting only when the CLI cannot run: it is not installed, not signed in, or rate limited as well (`cli-review.sh` exit 5 or 6). Then `wait-for-ratelimit.sh` waits for the window to expire (+ 30s buffer) and posts `@coderabbitai full review`. Max 3 such retries per PR to prevent infinite loops.
 
 ### Principle 6: Long Waits Use ScheduleWakeup, Not sleep
 
@@ -111,18 +115,21 @@ All in `workflows/`:
 | Script | Purpose |
 |--------|---------|
 | resolve-threads.sh | Resolve all unresolved CodeRabbit threads on a PR |
-| check-ci-status.sh | Check CI and CodeRabbit review status for a PR |
-| wait-for-ratelimit.sh | Detect CodeRabbit rate limit, wait for expiry, trigger full review |
+| check-ci-status.sh | The merge gate: waits for CI and CodeRabbit on the PR head. Any failed, cancelled or pending check blocks (by `gh pr checks` bucket), and so do a PR with no CI besides CodeRabbit and a head with no CodeRabbit review. Accepts a CLI review via `CR_CLI_LOG` when no PR-side review covers HEAD |
+| cli-review.sh | Review the PR locally with the CodeRabbit CLI when no PR-side review covers HEAD (rate limited, or reviews paused); `--verify` checks a saved run for the merge gate |
+| wait-for-ratelimit.sh | Fallback when the CLI cannot run: detect the rate limit, wait for expiry, trigger full review |
+
+`tests/run_tests.py` tests `cli-review.sh` and `check-ci-status.sh` (the `CR_CLI_LOG` branch, the review layers and the CI verdict) against a fake `gh` and a fake CLI (`python3 tests/run_tests.py`; no review is spent). Run it after changing either script.
 </scripts_index>
 
 <success_criteria>
 A successful coderabbit-resolver invocation (single PR):
 - [ ] All CodeRabbit review threads resolved (zero unresolved)
 - [ ] All outside-diff review body findings audited against current HEAD: FIXED with evidence or SKIPPED with a reason; none unaudited or NOT_FIXED
-- [ ] All CI checks passing (green), including fixes for unrelated CI failures
-- [ ] CodeRabbit review status is complete
+- [ ] All CI checks passing (green, none pending, failed or cancelled), including fixes for unrelated CI failures
+- [ ] CodeRabbit reviewed HEAD (a review on that commit), or, when no PR-side review covers HEAD, a CLI review of HEAD passed the `CR_CLI_LOG` gate
 - [ ] PR merged successfully
-- [ ] Remote branch deleted
+- [ ] PRs stacked on the branch retargeted, then the remote branch deleted
 - [ ] Local branch cleaned up (switched to main, pruned)
 
 A successful `--bulk` invocation:

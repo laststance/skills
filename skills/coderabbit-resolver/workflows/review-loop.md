@@ -134,7 +134,7 @@ For outside-diff findings, there is no thread to resolve. Update the audit row w
 
 ### 6a. Wait for CodeRabbit Review (HEAD-gated, rate-limit aware)
 
-Use the script — it polls CI checks AND inspects the latest CodeRabbit issue comment internally:
+Use the script — it polls CI checks AND checks that CodeRabbit really reviewed HEAD (status text, latest comment, review on HEAD):
 
 ```bash
 bash ~/.claude/skills/coderabbit-resolver/scripts/check-ci-status.sh $OWNER $REPO $PR_NUMBER
@@ -142,37 +142,90 @@ EXIT_CODE=$?
 ```
 
 Treat this script as a hard merge gate. On exit 0, it has confirmed all of the following on `HEAD_SHA`:
-- At least one CodeRabbit check run exists
-- CodeRabbit check run is `completed` with `success`
-- The latest CodeRabbit issue comment is **not** a rate-limit notice
-- No failing checks remain
+- CI is green. `gh pr checks` shows no check pending and none in its `fail` or `cancel` bucket, so a cancelled, timed-out or approval-waiting (`action_required`) check blocks like a failed one. `pass` and `skipping` (skipped, neutral) don't block. gh keeps only the newest run of each check, so a run that a rerun replaced no longer counts.
+- At least one check besides CodeRabbit exists, so CI ran at all
+- Every CodeRabbit check is in the `pass` bucket
+- CodeRabbit reviewed HEAD. Its per-SHA status is not "rate limited" or "in progress", the latest CodeRabbit comment is not a rate-limit notice, and a `coderabbitai[bot]` review exists on HEAD (`APPROVED`, or any review with a body)
+
+With `CR_CLI_LOG` set (Step 6b), exit 0 can instead mean that no PR-side review covered HEAD and the CLI review in the log does.
 
 This script checks CI/CodeRabbit status and rate-limit comments; it does **not** fetch or assess outside-diff review bodies. Exit 0 still requires the complete finding audit in Steps 7 and 8.
 
-**Why the comment check matters:** The GitHub Checks API returns `completed/success` even when CodeRabbit was rate-limited and only posted a rate-limit warning comment instead of a real review. The script disambiguates by reading the latest CodeRabbit issue comment — if it matches a rate-limit pattern, the script returns exit 3 (NOT 0). **Never trust API success alone.**
+**Why the review checks matter:** the Checks API reports CodeRabbit as `success` even when it did not review HEAD. That happens when it was rate limited and only posted a warning comment, and when a run reviewed nothing: the per-SHA status can read "Review completed" with no review on that commit, or "Reviews paused" or "Review skipped", and a later run can overwrite it. The walkthrough comment is edited in place, so an old one still looks like a review. Only a review whose `commit_id` is HEAD shows that this commit was read. An empty-bodied `COMMENTED` review is a thread reply and doesn't count. **Never trust API success alone.**
+
+**Why the script judges CI by bucket:** `gh pr checks` exits 0 with `--json` even when a check failed, and exits 0 without it when checks were only cancelled. A repository may require no checks at all, so GitHub can let a red PR merge. The script is the gate, not the exit code of `gh pr checks` and not the merge button.
+
+**What the script cannot see:** a workflow that never started reports nothing, so gh has no row for it. Exit 0 means every check that reported is green, not that every workflow you expect ran. If a check you expect is missing from the list, find out why before merging.
 
 **Exit code handling:**
-- **Exit 0** — All conditions met (real CodeRabbit review, no failures). Continue to Step 6c.
-- **Exit 1** — CI failure or CodeRabbit non-success. Go to Step 6e.
-- **Exit 2** — Timeout. Report to user.
-- **Exit 3** — Rate limit detected (Checks API said success, but latest CodeRabbit comment is a rate-limit notice). **Go to Step 6b.**
+- **Exit 0** — All conditions met. Continue to Step 6c.
+- **Exit 1** — A check failed or was cancelled (the script lists each one as `name: bucket (state)`), or a CodeRabbit check did not pass. Go to Step 6e. CI is judged before the review, and the fix moves HEAD, which needs a review of its own anyway.
+- **Exit 2** — Timeout: a check is still pending, or no check besides CodeRabbit has appeared (the workflows never started). Report to user.
+- **Exit 3** — CodeRabbit did not review HEAD, although the Checks API says success. The script prints the reason:
+  - "rate limited", "rate-limit notice" or "No CodeRabbit review object": **go to Step 6b**.
+  - "review not finished": wait (Step 6d) and rerun Step 6a.
 
 **DO NOT** write a top-level `for i in seq ...; do ...; sleep 10; done` polling loop as a Bash command. Claude Code's Bash policy blocks long leading `sleep` and chained sleeps. The script wraps its `sleep` calls so the entire poll runs as a single Bash invocation — that's the only safe form here. If you need to wait without a script, see Step 6d below.
 
-### 6b. Handle Rate Limit (Exit 3 from Step 6a)
+### 6b. Handle a Missing Review (Exit 3 from Step 6a): Review with the CodeRabbit CLI
 
-Run wait-for-ratelimit.sh to wait for the rate-limit window to expire and re-trigger CodeRabbit:
+Here no PR-side review covers HEAD: CodeRabbit was rate limited, or it did not run on this push (reviews paused, or skipped for this base branch), or it left no review on HEAD. Don't wait out a rate-limit window. The CodeRabbit CLI reviews the same diff locally, and the PR-side allowance doesn't limit it. Review with it, then let the gate accept the result.
 
-```bash
-bash ~/.claude/skills/coderabbit-resolver/scripts/wait-for-ratelimit.sh $OWNER $REPO $PR_NUMBER
-```
+The CLI has its own costs. Each run counts toward the account's CLI reviews (`coderabbit usage` shows the count for the billing period), and the plan caps CLI reviews per hour. Run it once per HEAD, never in a polling loop. Don't add `--use-credits` (usage-based billing) unless the owner asks.
 
-**Exit code handling:**
-- **Exit 0** — Rate limit was detected. The script waited for expiry and posted `@coderabbitai full review`. **Go back to Step 6a** to wait for the new review to complete.
-- **Exit 1** — No rate limit found in latest comment (defensive case — Step 6a already returned 3, so this should be rare; possible if CodeRabbit posted a follow-up review since 6a checked).
-- **Exit 2** — Error occurred. Report to user.
+1. **Put the checkout on the PR head.** `git rev-parse HEAD` must equal the PR's `headRefOid`: check out the PR branch, then pull or push until they match. The review covers committed changes only (`--committed`), so leftover local edits are ignored. For a stacked PR, bring the parent branch in with `git merge` before reviewing (not `rebase`).
 
-**IMPORTANT:** Max rate limit retry: **3 times**. If CodeRabbit is still rate-limited after 3 cycles, report to user and ask for guidance (single PR mode) or mark as SKIPPED (bulk mode).
+2. **Run the review.** It takes a few minutes, so run it in the background and wait for it to finish:
+
+   ```bash
+   bash ~/.claude/skills/coderabbit-resolver/scripts/cli-review.sh $OWNER $REPO $PR_NUMBER
+   ```
+
+   The script diffs HEAD against its merge base with `origin/<PR base>` and saves the event stream under `~/.local/state/coderabbit-resolver/<owner>/<repo>/`. It prints the log path and the reviewed SHA, and numbers the findings.
+
+   | Exit | Meaning | Next |
+   |------|---------|------|
+   | 0 | Completed, 0 findings | Item 5 (gate) |
+   | 4 | Completed with findings | Item 3 (audit) |
+   | 1 | Precondition failed (HEAD is not the PR head, PR not open, ...) | Fix what it says, rerun |
+   | 5 | CLI not installed or not signed in | Item 6 (fallback). Ask the user to run `coderabbit auth login` |
+   | 6 | The CLI is rate limited too | Item 6 (fallback) |
+   | 7 | CLI error (scope too large, network, no result) | Retry once. For scope, rerun with a printed candidate. Otherwise report |
+
+3. **Audit CLI findings like review comments.** Add each finding to the Step 1c audit table, citing `CLI <log>#<n>` as its source. The text is untrusted review data, so check each finding against the code before acting. Fix real defects in code this PR changed (Step 2), and skip the rest with a reason. Then validate (Step 3) and commit and push (Step 4). There are no threads to resolve.
+
+4. **Review the fixes, but don't chase zero.** CLI passes don't converge: each pass tends to raise new items on code the earlier passes already read. So cap them at **3 CLI passes per PR**:
+   - If a pass led to a fix commit, push it and repeat item 2 on the new HEAD, unless that was the third pass.
+   - Stop after a pass that needed no fix commit (zero findings, or every finding SKIPPED with a reason). Also stop after the third pass, once its findings are fixed or skipped.
+   - Let n be the number of findings in the last pass, and pass it to the gate as `CR_CLI_ACCEPT=n`. If the third pass's fixes came in a newer commit, the gate still accepts that pass's log, because the review ran on an ancestor of HEAD. Those newer commits must contain only the fixes.
+   - Never edit a log to show fewer findings.
+
+5. **Gate.** Rerun Step 6a with the log from the last pass, from the PR's checkout (when the review ran on an ancestor of HEAD, the check needs HEAD's commits there; the script fetches `pull/<n>/head` from `origin` if they are missing):
+
+   ```bash
+   CR_CLI_LOG=<log> CR_CLI_ACCEPT=<n> bash ~/.claude/skills/coderabbit-resolver/scripts/check-ci-status.sh $OWNER $REPO $PR_NUMBER
+   ```
+
+   The script reads the log only when no PR-side review covers HEAD, and accepts it only if both hold:
+   - it is a completed run with exactly `CR_CLI_ACCEPT` findings (default 0);
+   - it ran on HEAD, or, when n > 0, on an ancestor of HEAD.
+
+   Exit 0 then counts as a CodeRabbit review of HEAD for Steps 7 and 8. If the bot has since reviewed HEAD for real, the script takes the normal path and ignores the log. Any findings from that review go through Step 1 as usual.
+
+   Record the CLI review on the PR, because no bot review object will show it. Include the reviewed SHA, the number of passes, and each finding with its disposition.
+
+6. **Fallback when the CLI cannot run (exit 5 or 6).** If Step 6a did not report a rate limit, ask the bot for a review instead: post `@coderabbitai review` (after `@coderabbitai resume` if reviews are paused), wait (Step 6d), and rerun Step 6a. For a rate limit, wait out the window:
+
+   ```bash
+   bash ~/.claude/skills/coderabbit-resolver/scripts/wait-for-ratelimit.sh $OWNER $REPO $PR_NUMBER
+   ```
+
+   **Exit code handling:**
+   - **Exit 0** — Rate limit was detected. The script waited for expiry and posted `@coderabbitai full review`. **Go back to Step 6a** to wait for the new review to complete.
+   - **Exit 1** — No rate limit found in latest comment (defensive case — Step 6a already returned 3, so this should be rare; possible if CodeRabbit posted a follow-up review since 6a checked).
+   - **Exit 2** — Error occurred. Report to user.
+
+   **IMPORTANT:** Max wait retries: **3**. If CodeRabbit is still rate-limited after 3 cycles, report to user and ask for guidance (single PR mode) or mark as SKIPPED (bulk mode).
 
 ### 6c. Check All CI Status
 
@@ -203,20 +256,21 @@ ScheduleWakeup({
 
 ### 6e. Fix CI Failures (Even If Unrelated to PR)
 
-If any CI check fails:
+If any CI check failed or was cancelled (including timed out and waiting for approval):
 
-1. **Get failed check details:**
+1. **List every check that did not pass, with its link:**
 ```bash
-gh pr checks $PR_NUMBER
-HEAD_SHA=$(gh pr view $PR_NUMBER --json headRefOid -q .headRefOid)
-gh api "repos/$OWNER/$REPO/commits/$HEAD_SHA/check-runs" \
-  --jq '.check_runs[] | select(.conclusion == "failure") | {name, output: .output.summary}'
+gh pr checks $PR_NUMBER --json name,bucket,state,workflow,link \
+  --jq '.[] | select(.bucket == "fail" or .bucket == "cancel")'
 ```
+The link of an Actions check contains the run ID (`/actions/runs/<run-id>/job/<job-id>`).
 
 2. **Investigate failure logs** — use `gh run view <run-id> --log-failed` to get detailed output
 
 3. **Identify root cause** — may be:
    - Flaky test → rerun or fix
+   - Cancelled or timed out → find out why before rerunning it (`gh run rerun <run-id>`). A job that times out again is a failure to fix.
+   - Waiting for approval (`action_required`) → ask the user to approve the workflow run; don't approve it yourself
    - Dependency issue → update lockfile
    - Unrelated code breakage → fix the code
    - Type/lint error → fix regardless of PR scope
@@ -237,8 +291,8 @@ After every re-review, re-fetch unresolved inline threads (Step 1a) **and all Co
 - **New, unaudited, or NOT_FIXED findings exist in either source** → Go back to Step 1 (new iteration)
 - **A fetch failed or a known review is missing** → Recover the fetch before deciding the audit is clean
 - **CI still failing** → Go back to Step 6e (CI fix iteration)
-- **CodeRabbit not completed+success on HEAD** → Go back to Step 6a
-- **No unresolved threads AND every outside-diff finding is FIXED with evidence or SKIPPED with a reason AND all CI green AND CodeRabbit completed+success on HEAD** → Proceed to Step 8
+- **CodeRabbit has not reviewed HEAD, and no CLI review passed the Step 6b gate** → Go back to Step 6a
+- **No unresolved threads AND every outside-diff and CLI finding is FIXED with evidence or SKIPPED with a reason AND all CI green AND (CodeRabbit completed+success on HEAD OR the Step 6b gate passed)** → Proceed to Step 8
 
 ## Step 8: Final Verification
 
@@ -249,46 +303,95 @@ Before merging, verify all five conditions below. After any CI wait completes, r
 UNRESOLVED=$(gh api graphql -f query='...' | jq '[...] | length')
 echo "Unresolved threads: $UNRESOLVED"
 
-# 2. Zero unaudited or NOT_FIXED outside-diff findings
+# 2. Zero unaudited or NOT_FIXED outside-diff findings (and CLI findings, on the Step 6b path)
 # Re-run Step 1b and reconcile all review bodies with the Step 1c audit table.
 # Every row must have current-code fix evidence or an explicit skip reason.
 # check-ci-status.sh and the unresolved-thread count do not verify this condition.
 
-# 3. All CI checks passing
+# 3. All CI checks passing. Read the list, not the exit code: gh exits 0 when checks
+#    were only cancelled (and always with --json). The gate in #4 is what decides.
 gh pr checks $PR_NUMBER
 
-# 4. CodeRabbit completed+success on HEAD AND latest comment is a real review (not rate-limit)
-#    The script returns exit 0 ONLY when both API status AND comment content are clean.
-#    Exit 3 here means rate-limit — DO NOT MERGE; loop back to Step 6b.
+# 4. CI green (nothing pending, failed or cancelled) and CodeRabbit reviewed HEAD
+#    (a review on HEAD, not rate limited), OR, when no PR-side review covers HEAD,
+#    the Step 6b CLI review. On the CLI path, pass the last pass's log
+#    (and CR_CLI_ACCEPT=<n> when n > 0).
+#    Exit 1 or 2 — DO NOT MERGE; go to Step 6e or wait. Exit 3 — DO NOT MERGE; loop back to Step 6b.
 bash ~/.claude/skills/coderabbit-resolver/scripts/check-ci-status.sh $OWNER $REPO $PR_NUMBER 180
+# CLI path:
+# CR_CLI_LOG=<log> CR_CLI_ACCEPT=<n> bash ~/.claude/skills/coderabbit-resolver/scripts/check-ci-status.sh $OWNER $REPO $PR_NUMBER 180
 
 # 5. PR is mergeable
 gh pr view $PR_NUMBER --json mergeable,mergeStateStatus
+
+# Then print the head these five checks covered. Step 9 merges only this commit.
+gh pr view $PR_NUMBER --json headRefOid -q '"AUDITED_SHA=" + .headRefOid'
 ```
 
-**ALL five must be satisfied before merging.** An incomplete outside-diff audit blocks the merge even with zero unresolved inline threads, an approval, and green CI. A non-zero exit from check-ci-status.sh also blocks the merge — exit 3 means CodeRabbit was rate-limited for that run, even though the GitHub Checks API reports success.
+**ALL five must be satisfied before merging.** An incomplete outside-diff audit blocks the merge even with zero unresolved inline threads, an approval, and green CI. A non-zero exit from check-ci-status.sh also blocks the merge. Exit 3 means no CodeRabbit review covers HEAD (rate limited, paused, or no review on that commit), even though the GitHub Checks API reports success, and no accepted CLI review replaces it. Don't rely on the repository to refuse a bad merge: it may require no checks and no reviews.
+
+On the CLI path, when the repository requires PR reviews, an earlier CodeRabbit review that requested changes can keep `mergeStateStatus` at `BLOCKED`, and CodeRabbit cannot review again to clear it. Act only when condition 5 shows `BLOCKED` for that reason; without a review requirement, that review does not block the merge, so leave it alone. First confirm that every finding from that review is FIXED or SKIPPED in the audit table. Then dismiss the review, citing the CLI review:
+
+```bash
+gh api -X PUT repos/$OWNER/$REPO/pulls/$PR_NUMBER/reviews/<review_id>/dismissals \
+  -f message='Findings addressed; re-reviewed with the CodeRabbit CLI on <sha> because the PR-side review did not run.'
+```
+
+Say so in the final report.
 
 ## Step 9: Merge
 
+Merge only the commit Step 8 verified, and keep the PRs stacked on this branch open. Run this as one command, and paste the SHA that Step 8 printed: shell variables don't carry over from earlier commands, and `--match-head-commit ""` would not guard anything.
+
 ```bash
-gh pr merge $PR_NUMBER --merge --delete-branch
+AUDITED_SHA=<SHA printed by Step 8>
+[[ "$AUDITED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "Set AUDITED_SHA to the full head SHA from Step 8"; exit 1; }
+HEAD_BRANCH=$(gh pr view $PR_NUMBER --json headRefName -q .headRefName)
+BASE_BRANCH=$(gh pr view $PR_NUMBER --json baseRefName -q .baseRefName)
+[ -n "$HEAD_BRANCH" ] && [ -n "$BASE_BRANCH" ] || { echo "Could not read the PR's branches"; exit 1; }
+STACKED=$(gh pr list --base "$HEAD_BRANCH" --state open --json number -q '.[].number')
+
+# Refuses if the head moved after Step 8; go back to Step 6a in that case
+gh pr merge $PR_NUMBER --merge --match-head-commit "$AUDITED_SHA" || exit 1
+
+# Move each stacked PR onto this PR's base, then close and reopen it so its CI runs.
+# $(...) splits the list in bash and zsh alike; a bare $STACKED is one word in zsh.
+for n in $(printf '%s\n' "$STACKED"); do
+  gh pr edit "$n" --base "$BASE_BRANCH" && gh pr close "$n" && gh pr reopen "$n"
+done
+
+# Delete the branch only when no open PR is based on it any more
+if [ -z "$(gh pr list --base "$HEAD_BRANCH" --state open --json number -q '.[].number')" ]; then
+  git push origin --delete "$HEAD_BRANCH"
+else
+  echo "Open PRs are still based on $HEAD_BRANCH; retarget them before deleting it"
+fi
 ```
 
 Use `--merge` (merge commit) by default. Use `--squash` if the project prefers squash merges.
 
+Don't use `gh pr merge --delete-branch`. It deletes the branch through the API, and GitHub then closes every open PR based on that branch instead of retargeting it. Such a PR can't be reopened or retargeted afterwards, so it has to be opened again. (GitHub retargets stacked PRs only when it deletes the branch itself, as with the "Delete branch" button.) A base change alone starts no `pull_request` workflow, which is why each retargeted PR is closed and reopened. When CodeRabbit first reviews a retargeted PR, check that its review covers the whole PR against the new base: the review body's "Reviewing files that changed … between X and Y" line should start at the new base.
+
+Skip the branch deletion when the PR comes from a fork (`gh pr view $PR_NUMBER --json isCrossRepository -q .isCrossRepository` prints `true`). If the repository deletes head branches on merge, the push reports that the branch doesn't exist. Then confirm that each stacked PR is still open and based on `$BASE_BRANCH` (`gh pr view <n> --json state,baseRefName`).
+
 ## Step 10: Local Cleanup
 
 ```bash
-# Switch to main and pull
-git checkout main
-git pull origin main
+HEAD_BRANCH=$(gh pr view $PR_NUMBER --json headRefName -q .headRefName)
+BASE_BRANCH=$(gh pr view $PR_NUMBER --json baseRefName -q .baseRefName)
+
+# Switch to the base branch and pull
+git checkout "$BASE_BRANCH"
+git pull origin "$BASE_BRANCH"
 
 # Delete local feature branch
-git branch -d <branch-name>
+git branch -d "$HEAD_BRANCH"
 
 # Prune remote tracking branches
 git remote prune origin
 ```
+
+After a squash or rebase merge, `git branch -d` refuses because the base holds new commits instead of the branch's own. Confirm that the PR is merged (`gh pr view $PR_NUMBER --json state` prints `MERGED`), then use `git branch -D`.
 
 </process>
 
@@ -296,10 +399,10 @@ git remote prune origin
 This workflow is complete when:
 - [ ] All CodeRabbit inline threads resolved (zero unresolved)
 - [ ] All outside-diff review body findings re-fetched and audited against current HEAD, including older reviews; each FIXED with evidence or SKIPPED with a reason, none unaudited or NOT_FIXED
-- [ ] All CI checks passing (green)
-- [ ] CodeRabbit check status is "completed"
-- [ ] PR merged successfully
-- [ ] Remote branch deleted (via --delete-branch)
+- [ ] All CI checks passing (green): none pending, failed or cancelled
+- [ ] CodeRabbit reviewed HEAD (a review on that commit), or a CLI review of HEAD passed the Step 6b gate
+- [ ] PR merged at the head Step 8 verified (`--match-head-commit`)
+- [ ] PRs stacked on the branch retargeted and reopened, then the remote branch deleted
 - [ ] Local branch cleaned up
-- [ ] User informed of final status, including outside-diff dispositions and source/fix links
+- [ ] User informed of final status, including outside-diff dispositions and source/fix links, and, on the CLI path, the reviewed SHA, the number of CLI passes, and each CLI finding's disposition
 </success_criteria>

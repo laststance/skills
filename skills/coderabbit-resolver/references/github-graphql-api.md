@@ -81,14 +81,15 @@ An API failure is not an empty review history. If no CodeRabbit reviews are retu
 ## Check CI Status
 
 ```bash
-# All checks including CodeRabbit
-gh pr checks $PR_NUMBER
+# All checks including CodeRabbit (check runs and commit statuses alike)
+gh pr checks $PR_NUMBER --json name,bucket,state
 
-# Specifically CodeRabbit check
-HEAD_SHA=$(gh pr view $PR_NUMBER --json headRefOid -q .headRefOid)
-gh api "repos/$OWNER/$REPO/commits/$HEAD_SHA/check-runs" \
-  --jq '.check_runs[] | select(.name | test("coderabbit"; "i")) | {name, status, conclusion}'
+# Specifically CodeRabbit
+gh pr checks $PR_NUMBER --json name,bucket,state \
+  --jq '.[] | select(.name | test("coderabbit"; "i"))'
 ```
+
+Judge each check by `bucket` (`pass`, `fail`, `pending`, `skipping`, `cancel`), never by the exit code: with `--json` it is 0 even when a check failed. gh keeps only the newest run of each check. CodeRabbit may report through a commit status rather than a check run, so the `check-runs` endpoint can miss it. `scripts/check-ci-status.sh` applies these rules.
 
 ## Check Merge Requirements
 
