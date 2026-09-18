@@ -4,7 +4,7 @@
 [![Claude Code](https://img.shields.io/badge/Claude_Code-compatible-D97757?style=flat-square&logo=claude&logoColor=white)](https://code.claude.com/docs/en/skills)
 [![Cursor](https://img.shields.io/badge/Cursor-compatible-000000?style=flat-square&logo=cursor&logoColor=white)](https://cursor.com/docs/skills)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-compatible-111827?style=flat-square&logo=openai&logoColor=white)](https://developers.openai.com/codex/skills)
-[![Skills](https://img.shields.io/badge/skills-31-2563EB?style=flat-square)](#available-skills)
+[![Skills](https://img.shields.io/badge/skills-30-2563EB?style=flat-square)](#available-skills)
 
 Agent skills for AI coding assistants. Install via [skills.sh](https://skills.sh).
 
@@ -28,7 +28,6 @@ npx skills add laststance/skills --skill coderabbit-resolver
 npx skills add laststance/skills --skill colorful-type
 npx skills add laststance/skills --skill component-hierarchy
 npx skills add laststance/skills --skill cookie
-npx skills add laststance/skills --skill create-worktree
 npx skills add laststance/skills --skill deep-trace
 npx skills add laststance/skills --skill dnd
 npx skills add laststance/skills --skill electron-release
@@ -65,7 +64,6 @@ npx skills add laststance/skills --skill visual-lint
 | [colorful-type](skills/colorful-type/) | Replace colorless primitives (`string`, `number`, `boolean`) with domain-rich types. Adds branded types, JSDoc, and named type aliases to communicate intent. | — |
 | [component-hierarchy](skills/component-hierarchy/) | Visualize where a React component sits in the Next.js tree (Page → target) as an ASCII diagram with file paths. Supports App Router and Pages Router. | — |
 | [cookie](skills/cookie/) | Copy Google Chrome's cookies into `playwright-cli` (macOS) so its browser inherits every logged-in session (GitHub, etc.). Decrypts via the macOS Keychain, loads per-cookie, verifies before navigating, and deletes the plaintext token files after. | `playwright-cli` **(required)**, Node.js **(required)** |
-| [create-worktree](skills/create-worktree/) | Creates a git worktree as a sibling directory to the current project (e.g., `../project-feat-x`), copies `.gitignore`d config files (`.env`, `.env.local`, etc.) while skipping heavy build/dependency directories (`node_modules`, `.next`, `dist`, `build`, `coverage`), then navigates into the new worktree. | — |
 | [deep-trace](skills/deep-trace/) | Line-by-line execution path tracer for PR diffs, git diffs, or specified code sections. Maps every line to its screen/URL, data flow, and execution context like a debugger's step-through. | [Serena MCP](https://github.com/oraios/serena) (recommended) |
 | [dnd](skills/dnd/) | Browser drag-and-drop QA via coordinate-based pointer ops, plus video + drop+10-frame evidence for motion-sensitive bugs (DragOverlay rollback, ghost return). Knowledge-injection skill loaded by browser-using skills (e.g. `ux-gap-detector`) before any browser interaction — ref-based `drag` returns false success on `dnd-kit` and similar libraries. | `playwright-cli` **(required)**, `ffmpeg` (recommended for frame extraction) |
 | [electron-release](skills/electron-release/) | Guides Electron app release process including build, code signing, notarization, and GitHub Release with auto-update support. | — |
@@ -103,7 +101,6 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /colorful-type                       # Replace primitives with domain types
 /component-hierarchy Button.tsx      # ASCII tree from Page down to target component
 /cookie                             # Import Chrome cookies into a playwright-cli session
-/create-worktree feat/new-thing     # Create git worktree at ../project-feat-new-thing
 /deep-trace 42                      # Trace PR #42 line-by-line
 /dnd                                # Load drag-and-drop coordinate-based verification protocol
 /electron-release                   # Electron release workflow
