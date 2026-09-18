@@ -227,6 +227,23 @@ The CLI has its own costs. Each run counts toward the account's CLI reviews (`co
 
    **IMPORTANT:** Max wait retries: **3**. If CodeRabbit is still rate-limited after 3 cycles, report to user and ask for guidance (single PR mode) or mark as SKIPPED (bulk mode).
 
+   **While the CLI is rate limited (exit 6), open new PRs with `@coderabbitai ignore`.** Until the CLI can review again, put `@coderabbitai ignore` on its own line in the description of every PR you create. The bot then skips automatic reviews on that PR instead of running into the rate limit there too. Add the line to the body you pass to `gh pr create`:
+
+   ```bash
+   gh pr create --base <base> --title "<title>" --body "<summary and test plan>
+
+   @coderabbitai ignore"
+   ```
+
+   On such a PR the bot sets the head's status to "Review completed" but leaves no review, so Step 6a exits 3 ("No CodeRabbit review object"). Don't ask the bot for a review there. Wait for the CLI instead (Step 6d, `delaySeconds` 1200–1800), then rerun item 2. Max **3** such waits: if the CLI is still rate limited after the third, report to user (single PR mode) or mark as SKIPPED (bulk mode). Once `cli-review.sh` completes (exit 0 or 4), the CLI limit is over:
+   - Remove the line. `gh pr edit` replaces the whole description, so filter the current one, and stop if reading it fails:
+
+     ```bash
+     BODY=$(gh pr view <n> --json body -q .body) && printf '%s\n' "$BODY" | grep -vF '@coderabbitai ignore' | gh pr edit <n> --body-file -
+     ```
+
+   - Continue with items 3–5 on that CLI run. Removing the line doesn't make the bot review the current head (it resumes from the next commit), so the CLI log is what passes the gate.
+
 ### 6c. Check All CI Status
 
 ```bash

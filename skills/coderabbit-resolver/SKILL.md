@@ -54,6 +54,8 @@ The CLI has its own limits. Every run counts toward the account's CLI reviews (`
 
 Fall back to waiting only when the CLI cannot run: it is not installed, not signed in, or rate limited as well (`cli-review.sh` exit 5 or 6). Then `wait-for-ratelimit.sh` waits for the window to expire (+ 30s buffer) and posts `@coderabbitai full review`. Max 3 such retries per PR to prevent infinite loops.
 
+While the CLI is rate limited (exit 6), create new PRs with `@coderabbitai ignore` in the description, so the bot doesn't hit the limit on them as well. When the CLI can review again, remove the line and review those PRs with the CLI (review-loop.md Step 6b item 6).
+
 ### Principle 6: Long Waits Use ScheduleWakeup, Not sleep
 
 Top-level `sleep` is blocked by Claude Code's Bash policy and burns the 5-minute prompt cache. **Internal `sleep` inside `scripts/*.sh` is fine** — Claude sees the script as a single command. But when YOU (the agent) need to wait between steps without a script wrapper (e.g., letting CodeRabbit post comments after a check completes), use `ScheduleWakeup` with a continuation prompt that re-enters the workflow. Never write `sleep 180; gh api ...` as a top-level Bash command.
