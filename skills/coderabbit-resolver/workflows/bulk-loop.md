@@ -29,6 +29,8 @@ Store the PR list. Initialize the results tracker:
 RESULTS=()  # Array of "PR_NUMBER|TITLE|RESULT|REASON"
 ```
 
+If the skill was invoked with `cli` or `--cli`, set `CLI_MODE=1` and run every PR through review-loop.md's CLI-mode rules (`@coderabbitai ignore` + CodeRabbit CLI). Record those merges as `MERGED (CLI review)`.
+
 ## Step 1: Process Each PR (Oldest First)
 
 For each PR in the sorted list:
@@ -46,7 +48,7 @@ gh pr checkout $PR_NUMBER
 
 ### 1b. Execute review-loop.md
 
-Run the **full** `review-loop.md` workflow for this PR. This includes:
+Run the **full** `review-loop.md` workflow for this PR (CLI mode if `CLI_MODE=1`). This includes:
 - Extracting and fixing CodeRabbit review comments
 - Running validation
 - Committing and pushing fixes
@@ -101,7 +103,8 @@ After 3 failed attempts, skip the PR.
 If `check-ci-status.sh` exits 3 because CodeRabbit was rate limited or left no review on HEAD:
 - Follow review-loop.md Step 6b: review the PR with the CodeRabbit CLI (`cli-review.sh`) and pass the gate with `CR_CLI_LOG`. Record the PR as `MERGED (CLI review)`.
 - The PR-side limit counts per developer across all repositories, so the next PRs are likely to be rate limited too. Expect the CLI path for them until the window resets. Run CLI reviews one at a time, since they count toward the CLI's own hourly limit.
-- Use `wait-for-ratelimit.sh` only when the CLI cannot run (`cli-review.sh` exit 5 or 6). It waits and triggers `@coderabbitai full review`. Max 3 wait retries per PR; after that, record the PR as `SKIPPED (CodeRabbit rate limit)`.
+- Use `wait-for-ratelimit.sh` only when the CLI cannot run (`cli-review.sh` exit 5 or 6) **and this is not CLI mode**. It waits and triggers `@coderabbitai full review`. Max 3 wait retries per PR; after that, record the PR as `SKIPPED (CodeRabbit rate limit)`.
+- **CLI mode:** never run `wait-for-ratelimit.sh`. Exit 5 → `SKIPPED (CodeRabbit CLI not available)`. Exit 6 after 3 waits → `SKIPPED (CodeRabbit CLI rate limit)`.
 
 ### Stacked PRs
 review-loop.md Step 9 retargets every open PR based on the merged branch to that PR's base, and closes and reopens it so its CI runs. The list from Step 0 is a snapshot, so before processing each PR, read its current base and state (`gh pr view $PR_NUMBER --json baseRefName,state`):

@@ -56,12 +56,12 @@ npx skills add laststance/skills --skill visual-lint
 
 | Skill | Description | Dependencies |
 |-------|-------------|--------------|
-| [apollousa](skills/apollousa/) | Creates a GitHub PR for completed work, then runs the full CodeRabbit review, CI, merge, and cleanup loop. | [coderabbit-resolver](skills/coderabbit-resolver/) **(required)** |
+| [apollousa](skills/apollousa/) | Creates a GitHub PR for completed work, then runs the full CodeRabbit review, CI, merge, and cleanup loop. Pass `cli` to put `@coderabbitai ignore` in the PR body and review with the CodeRabbit CLI. | [coderabbit-resolver](skills/coderabbit-resolver/) **(required)**, [CodeRabbit CLI](https://docs.coderabbit.ai/cli) (required for `cli`) |
 | [chrome-clean-install](skills/chrome-clean-install/) | Refresh Chromium-based browsers by backing up profile/cache data, guiding a clean reinstall, and restoring bookmarks only. Handles Chrome, Chrome Canary, Edge, Brave, Arc, Dia, and custom Chromium browser paths. | [Node.js](https://nodejs.org/) **(required)** |
 | [ci-hardening](skills/ci-hardening/) | Port the skills-desktop GitHub Actions hardening baseline — CodeQL, Dependency Review, Scorecard, Dependabot, CODEOWNERS, pinned actions, least-privilege permissions, and branch/security settings. | [Node.js](https://nodejs.org/) **(required)**, [GitHub CLI](https://cli.github.com/) (recommended) |
 | [code-trace](skills/code-trace/) | Interactive code execution path tracer. Explains how code flows from entry point to output with step-by-step navigation. | — |
 | [codebase-litter-audit](skills/codebase-litter-audit/) | Audit repositories for half-finished features, stale TODOs, no-op handlers, visible UI wired to stubs, disabled tests, stale docs, placeholder assets, suppressions, and other codebase litter that dead-code tools miss. | — |
-| [coderabbit-resolver](skills/coderabbit-resolver/) | Audits inline and outside-diff CodeRabbit findings, validates fixes, rechecks review evidence before merge, and cleans up. Supports `--bulk` for all open PRs. | [GitHub CLI](https://cli.github.com/) **(required)**, [jq](https://jqlang.org/) **(required)** |
+| [coderabbit-resolver](skills/coderabbit-resolver/) | Audits inline and outside-diff CodeRabbit findings, validates fixes, rechecks review evidence before merge, and cleans up. Supports `--bulk` for all open PRs. Pass `cli` to disable the GitHub bot (`@coderabbitai ignore`) and review with the CodeRabbit CLI. | [GitHub CLI](https://cli.github.com/) **(required)**, [jq](https://jqlang.org/) **(required)**, [CodeRabbit CLI](https://docs.coderabbit.ai/cli) (required for `cli`) |
 | [colorful-type](skills/colorful-type/) | Replace colorless primitives (`string`, `number`, `boolean`) with domain-rich types. Adds branded types, JSDoc, and named type aliases to communicate intent. | — |
 | [component-hierarchy](skills/component-hierarchy/) | Visualize where a React component sits in the Next.js tree (Page → target) as an ASCII diagram with file paths. Supports App Router and Pages Router. | — |
 | [cookie](skills/cookie/) | Copy Google Chrome's cookies into `playwright-cli` (macOS) so its browser inherits every logged-in session (GitHub, etc.). Decrypts via the macOS Keychain, loads per-cookie, verifies before navigating, and deletes the plaintext token files after. | `playwright-cli` **(required)**, Node.js **(required)** |
@@ -94,12 +94,15 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 
 ```
 /apollousa                        # Create PR, resolve CodeRabbit, merge, and clean up
+/apollousa cli                    # Create PR, review with CodeRabbit CLI (bot ignored), merge
 /chrome-clean-install Chrome Canary # Clean-refresh a Chromium browser profile/cache
 /ci-hardening                        # Port skills-desktop CI security baseline to this repo
 /code-trace                         # Trace code execution paths
 /codebase-litter-audit              # Find half-finished codebase litter
 /coderabbit-resolver 17             # Process PR #17
+/coderabbit-resolver 17 cli         # Process PR #17 via CodeRabbit CLI (bot ignored)
 /coderabbit-resolver --bulk         # Process all open PRs
+/coderabbit-resolver --bulk cli     # All open PRs via CodeRabbit CLI
 /colorful-type                       # Replace primitives with domain types
 /component-hierarchy Button.tsx      # ASCII tree from Page down to target component
 /cookie                             # Import Chrome cookies into a playwright-cli session

@@ -1,7 +1,13 @@
 ---
 name: coderabbit-resolver
-description: CodeRabbit PR loop
-argument-hint: "[pr-number|--bulk]"
+description: |
+  CodeRabbit PR loop: audit findings, fix, wait for CI, merge. Pass `cli` to put
+  `@coderabbitai ignore` in the PR description (disables the GitHub bot) and
+  review with the CodeRabbit CLI instead.
+  Use when: resolving CodeRabbit comments, merging a reviewed PR, or reviewing
+  via CLI to skip the PR-side bot.
+  Keywords: CodeRabbit, PR review, merge, CLI, @coderabbitai ignore, --bulk
+argument-hint: "[pr-number|--bulk] [cli]"
 ---
 
 ## Codex Compatibility
@@ -29,8 +35,8 @@ Outside-diff findings live in review bodies and have no resolvable thread ID. Tr
 The workflow runs in a loop:
 1. Extract unresolved CodeRabbit inline threads AND all CodeRabbit review bodies, including older outside-diff findings
 2. Verify each finding against current code; fix issues or record why already fixed/skipped, and resolve applicable inline threads
-3. Commit → Push → Wait for CI + CodeRabbit re-review
-4. Re-fetch both sources after every re-review and before merge. Repeat until: zero unresolved threads AND zero unaudited/unaddressed outside-diff findings AND all CI checks pass AND CodeRabbit check on current HEAD is `completed` + `success`
+3. Commit → Push → Wait for CI + CodeRabbit re-review (or, in `cli` mode, CI + CodeRabbit CLI re-review)
+4. Re-fetch both sources after every re-review and before merge. Repeat until: zero unresolved threads AND zero unaudited/unaddressed outside-diff findings AND all CI checks pass AND (CodeRabbit reviewed current HEAD OR a CLI review passed the `CR_CLI_LOG` gate)
 
 ### Principle 3: Validation Before Every Push
 
@@ -54,29 +60,37 @@ The CLI has its own limits. Every run counts toward the account's CLI reviews (`
 
 Fall back to waiting only when the CLI cannot run: it is not installed, not signed in, or rate limited as well (`cli-review.sh` exit 5 or 6). Then `wait-for-ratelimit.sh` waits for the window to expire (+ 30s buffer) and posts `@coderabbitai full review`. Max 3 such retries per PR to prevent infinite loops.
 
-While the CLI is rate limited (exit 6), create new PRs with `@coderabbitai ignore` in the description, so the bot doesn't hit the limit on them as well. When the CLI can review again, remove the line and review those PRs with the CLI (review-loop.md Step 6b item 6).
+While the CLI is rate limited (exit 6), create new PRs with `@coderabbitai ignore` in the description, so the bot doesn't hit the limit on them as well. When the CLI can review again, remove the line and review those PRs with the CLI (review-loop.md Step 6b item 6). That temporary ignore is not `cli` mode.
 
 ### Principle 6: Long Waits Use ScheduleWakeup, Not sleep
 
 Top-level `sleep` is blocked by Claude Code's Bash policy and burns the 5-minute prompt cache. **Internal `sleep` inside `scripts/*.sh` is fine** — Claude sees the script as a single command. But when YOU (the agent) need to wait between steps without a script wrapper (e.g., letting CodeRabbit post comments after a check completes), use `ScheduleWakeup` with a continuation prompt that re-enters the workflow. Never write `sleep 180; gh api ...` as a top-level Bash command.
+
+### Principle 7: `cli` Mode Disables the GitHub Bot
+
+When the invocation includes `cli` or `--cli`, the GitHub bot must not review this PR. Put `@coderabbitai ignore` on its own line in the **PR description** (`scripts/ensure-cli-ignore.sh`) and keep it there — a comment with the same text does nothing. Review every HEAD with `cli-review.sh` and pass the gate with `CR_CLI_MODE=1` plus `CR_CLI_LOG`. Do not post `@coderabbitai review` / `full review` / `resume`, and do not run `wait-for-ratelimit.sh` (it posts `full review`). If the CLI cannot run, stop and ask the user.
 </essential_principles>
 
 <intake>
-This skill accepts a PR number or `--bulk` flag as argument. Usage:
+This skill accepts a PR number, `--bulk`, and an optional `cli` flag. `cli` and `--cli` are the same flag. Usage:
 
 ```
-/coderabbit-resolver <PR_NUMBER>       # Process single PR
+/coderabbit-resolver <PR_NUMBER>       # Process single PR (GitHub bot)
 /coderabbit-resolver 17                # Process PR #17
+/coderabbit-resolver 17 cli            # PR #17 via CodeRabbit CLI; bot ignored
+/coderabbit-resolver cli               # Current-branch PR via CodeRabbit CLI
 /coderabbit-resolver --bulk            # Process ALL open PRs (oldest first)
+/coderabbit-resolver --bulk cli        # All open PRs via CodeRabbit CLI
 ```
 
-If no PR number provided (and no `--bulk`), detect from current branch:
+Parse every argument: `cli` / `--cli` sets CLI mode; `--bulk` selects the bulk workflow; the first all-digit token is the PR number. If no PR number (and no `--bulk`), detect from current branch:
 ```bash
 gh pr view --json number -q .number
 ```
 
 **After obtaining the PR number, read and follow `workflows/review-loop.md`.**
 **If `--bulk` is specified, read and follow `workflows/bulk-loop.md`.**
+**If `cli` is set, follow that workflow's CLI-mode rules (Principle 7).**
 </intake>
 
 <routing>
@@ -85,6 +99,7 @@ gh pr view --json number -q .number
 | PR number provided | Read `workflows/review-loop.md` and execute with that PR |
 | No PR number | Auto-detect from current branch, then read `workflows/review-loop.md` |
 | `--bulk` flag | Read `workflows/bulk-loop.md` and process all open PRs |
+| `cli` / `--cli` (with any of the above) | Same workflow, CLI mode: `@coderabbitai ignore` + CodeRabbit CLI |
 
 **After reading the workflow, follow it exactly.**
 </routing>
@@ -117,11 +132,12 @@ All in `workflows/`:
 | Script | Purpose |
 |--------|---------|
 | resolve-threads.sh | Resolve all unresolved CodeRabbit threads on a PR |
-| check-ci-status.sh | The merge gate: waits for CI and CodeRabbit on the PR head. Any failed, cancelled or pending check blocks (by `gh pr checks` bucket), and so do a PR with no CI besides CodeRabbit and a head with no CodeRabbit review. Accepts a CLI review via `CR_CLI_LOG` when no PR-side review covers HEAD |
-| cli-review.sh | Review the PR locally with the CodeRabbit CLI when no PR-side review covers HEAD (rate limited, or reviews paused); `--verify` checks a saved run for the merge gate |
-| wait-for-ratelimit.sh | Fallback when the CLI cannot run: detect the rate limit, wait for expiry, trigger full review |
+| check-ci-status.sh | The merge gate: waits for CI and CodeRabbit on the PR head. Any failed, cancelled or pending check blocks (by `gh pr checks` bucket), and so do a PR with no CI besides CodeRabbit and a head with no CodeRabbit review. Accepts a CLI review via `CR_CLI_LOG` when no PR-side review covers HEAD. `CR_CLI_MODE=1` skips the GitHub bot check and requires that log |
+| cli-review.sh | Review the PR locally with the CodeRabbit CLI when no PR-side review covers HEAD (rate limited, reviews paused, or `cli` mode); `--verify` checks a saved run for the merge gate |
+| ensure-cli-ignore.sh | Put `@coderabbitai ignore` in the PR description so the GitHub bot does not auto-review (`cli` mode). Idempotent |
+| wait-for-ratelimit.sh | Fallback when the CLI cannot run: detect the rate limit, wait for expiry, trigger full review. Do not use this in `cli` mode |
 
-`tests/run_tests.py` tests `cli-review.sh` and `check-ci-status.sh` (the `CR_CLI_LOG` branch, the review layers and the CI verdict) against a fake `gh` and a fake CLI (`python3 tests/run_tests.py`; no review is spent). Run it after changing either script.
+`tests/run_tests.py` tests `cli-review.sh`, `check-ci-status.sh` (the `CR_CLI_LOG` / `CR_CLI_MODE` branches, the review layers and the CI verdict), and `ensure-cli-ignore.sh` against a fake `gh` and a fake CLI (`python3 tests/run_tests.py`; no review is spent). Run it after changing those scripts.
 </scripts_index>
 
 <success_criteria>
@@ -138,4 +154,9 @@ A successful `--bulk` invocation:
 - [ ] All open PRs processed (oldest first)
 - [ ] Each PR either MERGED or SKIPPED (with reason)
 - [ ] Summary report generated with results table
+
+A successful `cli` invocation (single PR or `--bulk cli`) also:
+- [ ] PR description contains `@coderabbitai ignore` for the whole run
+- [ ] Review evidence is a CodeRabbit CLI log that passed the `CR_CLI_MODE=1` + `CR_CLI_LOG` gate
+- [ ] No `@coderabbitai review` / `full review` / `resume` comment was posted
 </success_criteria>

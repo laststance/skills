@@ -15,6 +15,21 @@ Post these as **issue comments** on the PR (not inline review comments):
 | `@coderabbitai pause` | Pause automatic reviews |
 | `@coderabbitai resume` | Resume reviews |
 
+## PR Description Commands
+
+These belong in the **pull request description**, not a comment. A comment with the same text does nothing.
+
+| Command | Purpose |
+|---------|---------|
+| `@coderabbitai ignore` | Permanently disable automatic reviews for this PR. Remove the text to re-enable (resumes from the next commit). `cli` mode keeps this line; the rate-limit fallback removes it once the CLI can run again. |
+
+```bash
+# cli mode and new PRs while the CLI is rate limited:
+bash ~/.claude/skills/coderabbit-resolver/scripts/ensure-cli-ignore.sh $OWNER $REPO $PR_NUMBER
+```
+
+Do not post `@coderabbitai review` / `full review` / `resume` on a PR whose description still has `@coderabbitai ignore` while in `cli` mode — that would spend a PR-side review the user asked to skip.
+
 ## Behavior on New Push
 
 - CodeRabbit auto-performs **incremental review** on each push

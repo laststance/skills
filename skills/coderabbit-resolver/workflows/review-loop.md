@@ -6,6 +6,16 @@
 2. references/coderabbit-commands.md
 </required_reading>
 
+## CLI mode (`cli` / `--cli`)
+
+When the skill was invoked with `cli` or `--cli` (alone, with a PR number, or with `--bulk`):
+
+1. Set `CLI_MODE=1` for this run.
+2. After Step 0 knows `OWNER` / `REPO` / `PR_NUMBER`, run `scripts/ensure-cli-ignore.sh` so the PR **description** contains `@coderabbitai ignore` (a comment does not count). Keep the line until merge. Do not strip it after a CLI pass.
+3. Export `CR_CLI_MODE=1` on every `check-ci-status.sh` call. The gate then waits for CI only and requires a `CR_CLI_LOG` — it does not wait for a CodeRabbit GitHub check or accept a leftover bot review.
+4. After CI is green, Step 6a exits 3 until a log exists. That is expected. Review with `cli-review.sh` (Step 6b items 1–5).
+5. Never post `@coderabbitai review`, `@coderabbitai full review`, or `@coderabbitai resume`, and never run `wait-for-ratelimit.sh`. If `cli-review.sh` exits 5, ask the user to install or run `coderabbit auth login`. If it exits 6, wait (Step 6d, `delaySeconds` 1200–1800) and retry the CLI; max 3 waits, then stop.
+
 <process>
 
 ## Step 0: Setup
@@ -18,11 +28,27 @@ REMOTE_URL=$(git remote get-url origin)
 OWNER=$(echo "$REMOTE_URL" | sed -n 's/.*github.com[:/]\([^/]*\)\/.*/\1/p')
 REPO=$(echo "$REMOTE_URL" | sed -n 's/.*github.com[:/][^/]*\/\([^.]*\).*/\1/p')
 
-# PR number from argument or auto-detect
-PR_NUMBER=${1:-$(gh pr view --json number -q .number)}
+# PR number and optional cli / --cli / --bulk from the skill arguments
+CLI_MODE=0
+PR_NUMBER=""
+for arg in "$@"; do
+  case "$arg" in
+    cli|--cli) CLI_MODE=1 ;;
+    --bulk) ;; # bulk-loop.md already selected this workflow
+    ''|*[!0-9]*) ;; # ignore unknown tokens
+    *) PR_NUMBER="$arg" ;;
+  esac
+done
+PR_NUMBER=${PR_NUMBER:-$(gh pr view --json number -q .number)}
 ```
 
 Store these as session variables. Use them in all subsequent commands.
+
+If `CLI_MODE=1`, pin `@coderabbitai ignore` on the PR now and keep it:
+
+```bash
+bash ~/.claude/skills/coderabbit-resolver/scripts/ensure-cli-ignore.sh $OWNER $REPO $PR_NUMBER
+```
 
 ## Step 1: Extract All CodeRabbit Review Comments
 
@@ -137,7 +163,11 @@ For outside-diff findings, there is no thread to resolve. Update the audit row w
 Use the script — it polls CI checks AND checks that CodeRabbit really reviewed HEAD (status text, latest comment, review on HEAD):
 
 ```bash
-bash ~/.claude/skills/coderabbit-resolver/scripts/check-ci-status.sh $OWNER $REPO $PR_NUMBER
+if [ "${CLI_MODE:-0}" = 1 ]; then
+  CR_CLI_MODE=1 bash ~/.claude/skills/coderabbit-resolver/scripts/check-ci-status.sh $OWNER $REPO $PR_NUMBER
+else
+  bash ~/.claude/skills/coderabbit-resolver/scripts/check-ci-status.sh $OWNER $REPO $PR_NUMBER
+fi
 EXIT_CODE=$?
 ```
 
@@ -147,7 +177,7 @@ Treat this script as a hard merge gate. On exit 0, it has confirmed all of the f
 - Every CodeRabbit check is in the `pass` bucket
 - CodeRabbit reviewed HEAD. Its per-SHA status is not "rate limited" or "in progress", the latest CodeRabbit comment is not a rate-limit notice, and a `coderabbitai[bot]` review exists on HEAD (`APPROVED`, or any review with a body)
 
-With `CR_CLI_LOG` set (Step 6b), exit 0 can instead mean that no PR-side review covered HEAD and the CLI review in the log does.
+With `CR_CLI_LOG` set (Step 6b), exit 0 can instead mean that no PR-side review covered HEAD and the CLI review in the log does. In CLI mode, pass `CR_CLI_MODE=1` as well: exit 0 then means CI is green and that log covers HEAD, even if the bot never posted a check.
 
 This script checks CI/CodeRabbit status and rate-limit comments; it does **not** fetch or assess outside-diff review bodies. Exit 0 still requires the complete finding audit in Steps 7 and 8.
 
@@ -161,15 +191,15 @@ This script checks CI/CodeRabbit status and rate-limit comments; it does **not**
 - **Exit 0** — All conditions met. Continue to Step 6c.
 - **Exit 1** — A check failed or was cancelled (the script lists each one as `name: bucket (state)`), or a CodeRabbit check did not pass. Go to Step 6e. CI is judged before the review, and the fix moves HEAD, which needs a review of its own anyway.
 - **Exit 2** — Timeout: a check is still pending, or no check besides CodeRabbit has appeared (the workflows never started). Report to user.
-- **Exit 3** — CodeRabbit did not review HEAD, although the Checks API says success. The script prints the reason:
-  - "rate limited", "rate-limit notice" or "No CodeRabbit review object": **go to Step 6b**.
-  - "review not finished": wait (Step 6d) and rerun Step 6a.
+- **Exit 3** — CodeRabbit did not review HEAD, although the Checks API says success — or, in CLI mode, CI is green and no `CR_CLI_LOG` has been accepted yet. The script prints the reason:
+  - "rate limited", "rate-limit notice", "No CodeRabbit review object", or "CLI mode": **go to Step 6b**.
+  - "review not finished": wait (Step 6d) and rerun Step 6a. In CLI mode this reason does not appear (the bot check is ignored).
 
 **DO NOT** write a top-level `for i in seq ...; do ...; sleep 10; done` polling loop as a Bash command. Claude Code's Bash policy blocks long leading `sleep` and chained sleeps. The script wraps its `sleep` calls so the entire poll runs as a single Bash invocation — that's the only safe form here. If you need to wait without a script, see Step 6d below.
 
 ### 6b. Handle a Missing Review (Exit 3 from Step 6a): Review with the CodeRabbit CLI
 
-Here no PR-side review covers HEAD: CodeRabbit was rate limited, or it did not run on this push (reviews paused, or skipped for this base branch), or it left no review on HEAD. Don't wait out a rate-limit window. The CodeRabbit CLI reviews the same diff locally, and the PR-side allowance doesn't limit it. Review with it, then let the gate accept the result.
+Here no PR-side review covers HEAD: CodeRabbit was rate limited, or it did not run on this push (reviews paused, skipped for this base branch, or the PR description has `@coderabbitai ignore`), or it left no review on HEAD, or this run is CLI mode. Don't wait out a rate-limit window. The CodeRabbit CLI reviews the same diff locally, and the PR-side allowance doesn't limit it. Review with it, then let the gate accept the result.
 
 The CLI has its own costs. Each run counts toward the account's CLI reviews (`coderabbit usage` shows the count for the billing period), and the plan caps CLI reviews per hour. Run it once per HEAD, never in a polling loop. Don't add `--use-credits` (usage-based billing) unless the owner asks.
 
@@ -203,18 +233,24 @@ The CLI has its own costs. Each run counts toward the account's CLI reviews (`co
 5. **Gate.** Rerun Step 6a with the log from the last pass, from the PR's checkout (when the review ran on an ancestor of HEAD, the check needs HEAD's commits there; the script fetches `pull/<n>/head` from `origin` if they are missing):
 
    ```bash
-   CR_CLI_LOG=<log> CR_CLI_ACCEPT=<n> bash ~/.claude/skills/coderabbit-resolver/scripts/check-ci-status.sh $OWNER $REPO $PR_NUMBER
+   if [ "${CLI_MODE:-0}" = 1 ]; then
+     CR_CLI_MODE=1 CR_CLI_LOG=<log> CR_CLI_ACCEPT=<n> bash ~/.claude/skills/coderabbit-resolver/scripts/check-ci-status.sh $OWNER $REPO $PR_NUMBER
+   else
+     CR_CLI_LOG=<log> CR_CLI_ACCEPT=<n> bash ~/.claude/skills/coderabbit-resolver/scripts/check-ci-status.sh $OWNER $REPO $PR_NUMBER
+   fi
    ```
 
    The script reads the log only when no PR-side review covers HEAD, and accepts it only if both hold:
    - it is a completed run with exactly `CR_CLI_ACCEPT` findings (default 0);
    - it ran on HEAD, or, when n > 0, on an ancestor of HEAD.
 
-   Exit 0 then counts as a CodeRabbit review of HEAD for Steps 7 and 8. If the bot has since reviewed HEAD for real, the script takes the normal path and ignores the log. Any findings from that review go through Step 1 as usual.
+   Exit 0 then counts as a CodeRabbit review of HEAD for Steps 7 and 8. If the bot has since reviewed HEAD for real, the default path takes that review and ignores the log; CLI mode still requires the log (`CR_CLI_MODE=1`). Any bot findings on the default path go through Step 1 as usual.
 
    Record the CLI review on the PR, because no bot review object will show it. Include the reviewed SHA, the number of passes, and each finding with its disposition.
 
-6. **Fallback when the CLI cannot run (exit 5 or 6).** If Step 6a did not report a rate limit, ask the bot for a review instead: post `@coderabbitai review` (after `@coderabbitai resume` if reviews are paused), wait (Step 6d), and rerun Step 6a. For a rate limit, wait out the window:
+6. **Fallback when the CLI cannot run (exit 5 or 6).** **CLI mode: do not take this fallback.** Exit 5 → ask the user to install the CLI or run `coderabbit auth login`. Exit 6 → wait (Step 6d, `delaySeconds` 1200–1800) and rerun item 2. Max **3** such waits; then stop and ask the user. Never post `@coderabbitai review` / `full review` / `resume`, and never run `wait-for-ratelimit.sh`.
+
+   Default mode only: if Step 6a did not report a rate limit, ask the bot for a review instead: post `@coderabbitai review` (after `@coderabbitai resume` if reviews are paused), wait (Step 6d), and rerun Step 6a. For a rate limit, wait out the window:
 
    ```bash
    bash ~/.claude/skills/coderabbit-resolver/scripts/wait-for-ratelimit.sh $OWNER $REPO $PR_NUMBER
@@ -236,12 +272,13 @@ The CLI has its own costs. Each run counts toward the account's CLI reviews (`co
    ```
 
    On such a PR the bot sets the head's status to "Review completed" but leaves no review, so Step 6a exits 3 ("No CodeRabbit review object"). Don't ask the bot for a review there. Wait for the CLI instead (Step 6d, `delaySeconds` 1200–1800), then rerun item 2. Max **3** such waits: if the CLI is still rate limited after the third, report to user (single PR mode) or mark as SKIPPED (bulk mode). Once `cli-review.sh` completes (exit 0 or 4), the CLI limit is over:
-   - Remove the line. `gh pr edit` replaces the whole description, so filter the current one, and stop if reading it fails:
+   - **Not CLI mode:** remove the line. `gh pr edit` replaces the whole description, so filter the current one, and stop if reading it fails:
 
      ```bash
      BODY=$(gh pr view <n> --json body -q .body) && printf '%s\n' "$BODY" | grep -vF '@coderabbitai ignore' | gh pr edit <n> --body-file -
      ```
 
+   - **CLI mode:** keep `@coderabbitai ignore`. The user asked the bot to stay off.
    - Continue with items 3–5 on that CLI run. Removing the line doesn't make the bot review the current head (it resumes from the next commit), so the CLI log is what passes the gate.
 
 ### 6c. Check All CI Status
@@ -308,7 +345,7 @@ After every re-review, re-fetch unresolved inline threads (Step 1a) **and all Co
 - **New, unaudited, or NOT_FIXED findings exist in either source** → Go back to Step 1 (new iteration)
 - **A fetch failed or a known review is missing** → Recover the fetch before deciding the audit is clean
 - **CI still failing** → Go back to Step 6e (CI fix iteration)
-- **CodeRabbit has not reviewed HEAD, and no CLI review passed the Step 6b gate** → Go back to Step 6a
+- **CodeRabbit has not reviewed HEAD, and no CLI review passed the Step 6b gate** → Go back to Step 6a (CLI mode: Step 6a with `CR_CLI_MODE=1`, then 6b)
 - **No unresolved threads AND every outside-diff and CLI finding is FIXED with evidence or SKIPPED with a reason AND all CI green AND (CodeRabbit completed+success on HEAD OR the Step 6b gate passed)** → Proceed to Step 8
 
 ## Step 8: Final Verification
@@ -334,9 +371,13 @@ gh pr checks $PR_NUMBER
 #    the Step 6b CLI review. On the CLI path, pass the last pass's log
 #    (and CR_CLI_ACCEPT=<n> when n > 0).
 #    Exit 1 or 2 — DO NOT MERGE; go to Step 6e or wait. Exit 3 — DO NOT MERGE; loop back to Step 6b.
-bash ~/.claude/skills/coderabbit-resolver/scripts/check-ci-status.sh $OWNER $REPO $PR_NUMBER 180
-# CLI path:
-# CR_CLI_LOG=<log> CR_CLI_ACCEPT=<n> bash ~/.claude/skills/coderabbit-resolver/scripts/check-ci-status.sh $OWNER $REPO $PR_NUMBER 180
+if [ "${CLI_MODE:-0}" = 1 ]; then
+  CR_CLI_MODE=1 CR_CLI_LOG=<log> CR_CLI_ACCEPT=<n> bash ~/.claude/skills/coderabbit-resolver/scripts/check-ci-status.sh $OWNER $REPO $PR_NUMBER 180
+else
+  bash ~/.claude/skills/coderabbit-resolver/scripts/check-ci-status.sh $OWNER $REPO $PR_NUMBER 180
+  # CLI fallback (no PR-side review on HEAD):
+  # CR_CLI_LOG=<log> CR_CLI_ACCEPT=<n> bash ~/.claude/skills/coderabbit-resolver/scripts/check-ci-status.sh $OWNER $REPO $PR_NUMBER 180
+fi
 
 # 5. PR is mergeable
 gh pr view $PR_NUMBER --json mergeable,mergeStateStatus
@@ -422,4 +463,5 @@ This workflow is complete when:
 - [ ] PRs stacked on the branch retargeted and reopened, then the remote branch deleted
 - [ ] Local branch cleaned up
 - [ ] User informed of final status, including outside-diff dispositions and source/fix links, and, on the CLI path, the reviewed SHA, the number of CLI passes, and each CLI finding's disposition
+- [ ] CLI mode: `@coderabbitai ignore` stayed in the PR description; no bot review command was posted
 </success_criteria>

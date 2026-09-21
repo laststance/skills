@@ -45,11 +45,17 @@
 #                 Unless the review is still running, the caller should review
 #                 HEAD with cli-review.sh and rerun with CR_CLI_LOG
 #                 (review-loop.md Step 6b).
+#                 In CLI mode (`CR_CLI_MODE=1`) exit 3 also means CI is green
+#                 and no accepted CLI log covers HEAD yet.
 #
 # Environment (optional):
 #   CR_CLI_LOG         log written by cli-review.sh (review-loop.md Step 6b); read
 #                      only when the PR-side review did not cover HEAD
 #   CR_CLI_ACCEPT      number of findings in that log dispositioned by hand (default 0)
+#   CR_CLI_MODE        1 = CLI-first (`cli` argument): do not wait for a
+#                      CodeRabbit GitHub check, ignore leftover bot reviews, and
+#                      require CR_CLI_LOG. Used when the PR description has
+#                      `@coderabbitai ignore` so the bot never runs.
 #   CR_CHECK_INTERVAL  seconds between polls (default 10)
 
 set -euo pipefail
@@ -90,6 +96,13 @@ while [ "$ELAPSED" -lt "$MAX_WAIT" ]; do
     continue
   fi
 
+  # CLI mode disables the GitHub bot (`@coderabbitai ignore`). Drop its rows so a
+  # missing, pending, or leftover CodeRabbit check cannot stall or fail the gate.
+  if [ "${CR_CLI_MODE:-}" = 1 ]; then
+    CHECKS=$(printf '%s\n' "$CHECKS" | grep -viE '^[^|]*coderabbit' || true)
+    CHECKS=$(printf '%s\n' "$CHECKS" | sed '/^$/d')
+  fi
+
   CR_CHECKS=$(printf '%s\n' "$CHECKS" | grep -iE '^[^|]*coderabbit' || true)
   TOTAL=$(count "$CHECKS" '.')
   PENDING=$(count "$CHECKS" '\|pending\|')
@@ -97,12 +110,20 @@ while [ "$ELAPSED" -lt "$MAX_WAIT" ]; do
   CR_PASS=$(count "$CR_CHECKS" '\|pass\|')
   CI_TOTAL=$((TOTAL - CR_TOTAL))
 
-  echo "  Checks on ${HEAD_SHA:0:7}: $((TOTAL - PENDING))/$TOTAL finished, CodeRabbit: $CR_PASS pass / $CR_TOTAL found (${ELAPSED}s elapsed)"
+  if [ "${CR_CLI_MODE:-}" = 1 ]; then
+    echo "  Checks on ${HEAD_SHA:0:7}: $((TOTAL - PENDING))/$TOTAL finished, CLI mode (${ELAPSED}s elapsed)"
+  else
+    echo "  Checks on ${HEAD_SHA:0:7}: $((TOTAL - PENDING))/$TOTAL finished, CodeRabbit: $CR_PASS pass / $CR_TOTAL found (${ELAPSED}s elapsed)"
+  fi
 
+  # No CodeRabbit check: wait for the bot unless this is a CLI review (cli mode,
+  # or a CR_CLI_LOG already in hand). `@coderabbitai ignore` often posts none.
   if [ "$CR_TOTAL" -eq 0 ]; then
-    echo "  CodeRabbit not found on HEAD yet. Waiting..."
-    wait_more
-    continue
+    if [ "${CR_CLI_MODE:-}" != 1 ] && [ -z "${CR_CLI_LOG:-}" ]; then
+      echo "  CodeRabbit not found on HEAD yet. Waiting..."
+      wait_more
+      continue
+    fi
   fi
 
   if [ "$(count "$CR_CHECKS" '\|(fail|cancel)\|')" -gt 0 ]; then
@@ -142,13 +163,20 @@ while [ "$ELAPSED" -lt "$MAX_WAIT" ]; do
     fi
 
     # Even with no unresolved threads, we must not merge until every CodeRabbit
-    # check on current HEAD passed.
-    if [ "$CR_PASS" -lt "$CR_TOTAL" ]; then
+    # check on current HEAD passed. CLI mode already dropped those rows.
+    if [ "${CR_CLI_MODE:-}" != 1 ] && [ "$CR_PASS" -lt "$CR_TOTAL" ]; then
       echo ""
       echo "CodeRabbit review is not in completed+success state yet."
       exit 1
     fi
 
+    # CLI mode: the bot is disabled. Do not accept a leftover GitHub review.
+    # Layers (a)–(c) stay for the default path only.
+    echo ""
+    if [ "${CR_CLI_MODE:-}" = 1 ]; then
+      echo "CLI mode: a CodeRabbit CLI review must cover ${HEAD_SHA:0:7} (the GitHub bot is disabled)."
+      NO_REVIEW="cli mode"
+    else
     # CodeRabbit's check reads success even when it did not review HEAD, so three
     # layers decide whether it did.
     #
@@ -160,7 +188,6 @@ while [ "$ELAPSED" -lt "$MAX_WAIT" ]; do
     # (just used its last credit). Resolve by checking for the walkthrough
     # marker first — if present, the comment IS a real review regardless
     # of any rate-limit text in its footer.
-    echo ""
     echo "Verifying that CodeRabbit really reviewed ${HEAD_SHA:0:7}..."
     NO_REVIEW=""
 
@@ -230,6 +257,7 @@ while [ "$ELAPSED" -lt "$MAX_WAIT" ]; do
         echo "  Confirmed: CodeRabbit left $HEAD_REVIEWS review(s) on ${HEAD_SHA:0:7}."
       fi
     fi
+    fi
 
     # A PR-side review that did not cover HEAD can be replaced by a CodeRabbit CLI
     # review of HEAD (cli-review.sh, review-loop.md Step 6b). Without one, exit 3.
@@ -253,7 +281,11 @@ while [ "$ELAPSED" -lt "$MAX_WAIT" ]; do
         echo "  That CLI review does not cover HEAD (see above). Not merge-ready."
         exit 3
       fi
-      echo "  Accepted: the CLI review replaces the missing PR-side review on ${HEAD_SHA:0:7}."
+      if [ "$NO_REVIEW" = "cli mode" ]; then
+        echo "  Accepted: the CLI review covers ${HEAD_SHA:0:7}."
+      else
+        echo "  Accepted: the CLI review replaces the missing PR-side review on ${HEAD_SHA:0:7}."
+      fi
     fi
 
     echo ""

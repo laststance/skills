@@ -90,8 +90,8 @@ def run(name, args, expect, env=None, contains=(), absent=(), cwd=REPO):
     e["PATH"] = os.path.join(T, "bin") + os.pathsep + e["PATH"]
     e["CR_CLI_LOG_DIR"] = LOGS
     e["FAKE_HEAD"] = HEAD
-    for k in ("CR_CLI_LOG", "CR_CLI_ACCEPT", "CR_CLI_BIN", "FAKE_BUILD", "FAKE_CHECKS", "FAKE_CR_DESC", "FAKE_COMMENT",
-              "FAKE_REVIEW_IDS", "FAKE_HEAD_FIRST"):
+    for k in ("CR_CLI_LOG", "CR_CLI_ACCEPT", "CR_CLI_MODE", "CR_CLI_BIN", "FAKE_BUILD", "FAKE_CHECKS", "FAKE_CR_DESC",
+              "FAKE_COMMENT", "FAKE_REVIEW_IDS", "FAKE_HEAD_FIRST", "FAKE_BODY"):
         e.pop(k, None)
     # The gate polls every second, and each run gets its own state for the fake gh.
     e["CR_CHECK_INTERVAL"] = "1"
@@ -265,6 +265,39 @@ run("gate: missing CodeRabbit check keeps the gate waiting", C_SHORT, 2, env={**
     contains=["CodeRabbit not found on HEAD yet", "Timeout after 2s"])
 run("gate: checks read while HEAD moved are read again", C, 0, env={**REVIEWED, "FAKE_HEAD_FIRST": OTHER},
     contains=["HEAD moved", "Checks on " + HEAD[:7], "All checks passed."], absent=["Checks on " + OTHER[:7]])
+
+# check-ci-status.sh: `cli` mode (`CR_CLI_MODE=1`) and a CLI log without a bot check
+run("gate: CLI mode, no log, asks for a CLI review", C, 3, env={"CR_CLI_MODE": "1"},
+    contains=["CLI mode", "cli-review.sh"], absent=["CodeRabbit not found on HEAD yet", "Fall back to wait-for-ratelimit.sh", "All checks passed."])
+run("gate: CLI mode, no CodeRabbit check, no log", C, 3,
+    env={"CR_CLI_MODE": "1", "FAKE_CHECKS": "build|pass|SUCCESS"},
+    contains=["CLI mode", "cli-review.sh"], absent=["CodeRabbit not found on HEAD yet", "Timeout"])
+run("gate: CLI mode, no CodeRabbit check, clean CLI log", C, 0,
+    env={"CR_CLI_MODE": "1", "CR_CLI_LOG": OK0, "FAKE_CHECKS": "build|pass|SUCCESS"},
+    contains=["CLI mode", "Accepted: the CLI review covers", "All checks passed."], absent=["CodeRabbit not found"])
+run("gate: CLI mode leftover bot review still requires a CLI log", C, 3, env={**REVIEWED, "CR_CLI_MODE": "1"},
+    contains=["CLI mode", "cli-review.sh"], absent=["All checks passed.", "left 1 review(s)"])
+run("gate: CLI mode leftover bot review, clean CLI log", C, 0,
+    env={**REVIEWED, "CR_CLI_MODE": "1", "CR_CLI_LOG": OK0},
+    contains=["Accepted: the CLI review covers", "All checks passed."], absent=["left 1 review(s)"])
+run("gate: CLI mode failed CI still blocks", C, 1,
+    env={"CR_CLI_MODE": "1", "FAKE_CHECKS": "build|fail|FAILURE"},
+    contains=["- build: fail (FAILURE)"], absent=["CLI mode: a CodeRabbit CLI review"])
+run("gate: CLI mode pending CI still waits", C_SHORT, 2,
+    env={"CR_CLI_MODE": "1", "FAKE_CHECKS": "build|pending|IN_PROGRESS"},
+    contains=["Timeout after 2s"], absent=["All checks passed."])
+run("gate: CLI log without a CodeRabbit check does not wait", C, 0,
+    env={"CR_CLI_LOG": OK0, "FAKE_CHECKS": "build|pass|SUCCESS"},
+    contains=["Accepted: the CLI review replaces", "All checks passed."], absent=["CodeRabbit not found"])
+
+# ensure-cli-ignore.sh: write `@coderabbitai ignore` into the PR description
+EI = [os.path.join(S, "ensure-cli-ignore.sh"), "o", "r", "1"]
+run("ignore: adds marker to an empty body", EI, 0, env={"FAKE_BODY": ""}, contains=["Added @coderabbitai ignore"])
+run("ignore: appends marker to an existing body", EI, 0, env={"FAKE_BODY": "## Summary\nDone."}, contains=["Added @coderabbitai ignore"])
+run("ignore: leaves a body that already has the marker", EI, 0,
+    env={"FAKE_BODY": "## Summary\n\n@coderabbitai ignore\n"},
+    contains=["already has @coderabbitai ignore"], absent=["Added @coderabbitai ignore"])
+run("ignore: PR number not numeric", EI[:-1] + ["abc"], 1, contains=["Usage"])
 
 print()
 print(f"{sum(results)}/{len(results)} passed")

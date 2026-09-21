@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # cli-review.sh — Review a PR locally with the CodeRabbit CLI when no PR-side review covers its head
-#                 (the bot was rate limited, or reviews were paused)
+#                 (the bot was rate limited, reviews were paused, or `cli` mode disabled it)
 #
 # Usage: bash cli-review.sh <owner> <repo> <pr_number>
 #        bash cli-review.sh --verify <log> <head_sha> [accepted_findings]
