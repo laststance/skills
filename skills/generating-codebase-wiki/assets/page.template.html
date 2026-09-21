@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="{{LANG}}">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{PAGE_TITLE}} · {{REPO_TITLE}}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Noto+Sans+JP:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="{{CSS_HREF}}" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <a class="brand" href="{{OVERVIEW_HREF}}">
+          <small>{{REPO_SLUG}}</small>
+          <strong>{{REPO_TITLE}}</strong>
+        </a>
+        <input
+          class="sidebar-search"
+          type="search"
+          placeholder="Filter pages"
+          data-wiki-search
+        />
+        {{SIDEBAR_NAV}}
+      </aside>
+      <div class="main">
+        <article>
+          <h1>{{PAGE_TITLE}}</h1>
+          {{ARTICLE}}
+        </article>
+        <aside class="toc" aria-label="On this page">
+          <h2>On this page</h2>
+          {{ON_THIS_PAGE}}
+        </aside>
+      </div>
+    </div>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      window.mermaid = mermaid;
+    </script>
+    <script src="{{JS_HREF}}"></script>
+  </body>
+</html>
