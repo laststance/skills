@@ -4,7 +4,7 @@
 [![Claude Code](https://img.shields.io/badge/Claude_Code-compatible-D97757?style=flat-square&logo=claude&logoColor=white)](https://code.claude.com/docs/en/skills)
 [![Cursor](https://img.shields.io/badge/Cursor-compatible-000000?style=flat-square&logo=cursor&logoColor=white)](https://cursor.com/docs/skills)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-compatible-111827?style=flat-square&logo=openai&logoColor=white)](https://developers.openai.com/codex/skills)
-[![Skills](https://img.shields.io/badge/skills-31-2563EB?style=flat-square)](#available-skills)
+[![Skills](https://img.shields.io/badge/skills-32-2563EB?style=flat-square)](#available-skills)
 
 Agent skills for AI coding assistants. Install via [skills.sh](https://skills.sh).
 
@@ -22,6 +22,7 @@ Install a specific skill:
 npx skills add laststance/skills --skill apollousa
 npx skills add laststance/skills --skill chrome-clean-install
 npx skills add laststance/skills --skill ci-hardening
+npx skills add laststance/skills --skill code-step-tour
 npx skills add laststance/skills --skill code-trace
 npx skills add laststance/skills --skill codebase-litter-audit
 npx skills add laststance/skills --skill coderabbit-resolver
@@ -59,6 +60,7 @@ npx skills add laststance/skills --skill visual-lint
 | [apollousa](skills/apollousa/) | Creates a GitHub PR for completed work, then runs the full CodeRabbit review, CI, merge, and cleanup loop. Pass `cli` to put `@coderabbitai ignore` in the PR body and review with the CodeRabbit CLI. | [coderabbit-resolver](skills/coderabbit-resolver/) **(required)**, [CodeRabbit CLI](https://docs.coderabbit.ai/cli) (required for `cli`) |
 | [chrome-clean-install](skills/chrome-clean-install/) | Refresh Chromium-based browsers by backing up profile/cache data, guiding a clean reinstall, and restoring bookmarks only. Handles Chrome, Chrome Canary, Edge, Brave, Arc, Dia, and custom Chromium browser paths. | [Node.js](https://nodejs.org/) **(required)** |
 | [ci-hardening](skills/ci-hardening/) | Port the skills-desktop GitHub Actions hardening baseline — CodeQL, Dependency Review, Scorecard, Dependabot, CODEOWNERS, pinned actions, least-privilege permissions, and branch/security settings. | [Node.js](https://nodejs.org/) **(required)**, [GitHub CLI](https://cli.github.com/) (recommended) |
+| [code-step-tour](skills/code-step-tour/) | Step-through sequence of a real code path: file tree on the left, one arrow per click, and the functions or callbacks that run on that step. | [Node.js](https://nodejs.org/) **(required)** |
 | [code-trace](skills/code-trace/) | Interactive code execution path tracer. Explains how code flows from entry point to output with step-by-step navigation. | — |
 | [codebase-litter-audit](skills/codebase-litter-audit/) | Audit repositories for half-finished features, stale TODOs, no-op handlers, visible UI wired to stubs, disabled tests, stale docs, placeholder assets, suppressions, and other codebase litter that dead-code tools miss. | — |
 | [coderabbit-resolver](skills/coderabbit-resolver/) | Audits inline and outside-diff CodeRabbit findings, validates fixes, rechecks review evidence before merge, and cleans up. Supports `--bulk` for all open PRs. Pass `cli` to disable the GitHub bot (`@coderabbitai ignore`) and review with the CodeRabbit CLI. | [GitHub CLI](https://cli.github.com/) **(required)**, [jq](https://jqlang.org/) **(required)**, [CodeRabbit CLI](https://docs.coderabbit.ai/cli) (required for `cli`) |
@@ -97,6 +99,7 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /apollousa cli                    # Create PR, review with CodeRabbit CLI (bot ignored), merge
 /chrome-clean-install Chrome Canary # Clean-refresh a Chromium browser profile/cache
 /ci-hardening                        # Port skills-desktop CI security baseline to this repo
+/code-step-tour checkout submit     # Step through a call path with a file tree
 /code-trace                         # Trace code execution paths
 /codebase-litter-audit              # Find half-finished codebase litter
 /coderabbit-resolver 17             # Process PR #17

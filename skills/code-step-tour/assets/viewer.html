@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <title>Code step tour</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f6f8;
+      --panel: #fff;
+      --ink: #1c2430;
+      --muted: #5c6b7a;
+      --line: #d5dee6;
+      --accent: #0b6e4f;
+      --accent-soft: #e5f6ef;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      height: 100vh;
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      font: 14px/1.45 "Hiragino Sans", "Noto Sans JP", sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+    }
+    aside {
+      background: var(--panel);
+      border-right: 1px solid var(--line);
+      overflow: auto;
+      padding: 16px 12px 24px;
+    }
+    aside h1 { margin: 0 12px 12px; font-size: 15px; }
+    .tree, .tree ul { list-style: none; margin: 0; padding: 0; }
+    .tree ul { padding-left: 14px; }
+    .tree button {
+      width: 100%;
+      text-align: left;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      padding: 3px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .tree .dir { color: var(--muted); font-size: 12px; }
+    .tree button.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 650;
+    }
+    main {
+      min-width: 0;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      height: 100vh;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      padding: 12px 20px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+    }
+    header h2 { margin: 0; font-size: 16px; white-space: nowrap; }
+    header > div { flex: 1; min-width: 0; }
+    header p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
+    button.nav {
+      flex-shrink: 0;
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 8px;
+      padding: 8px 14px;
+      font: inherit;
+      cursor: pointer;
+    }
+    button.nav:disabled { opacity: 0.4; cursor: default; }
+    button.nav.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    #stage { overflow: auto; padding: 16px 20px 8px; }
+    svg { width: 100%; min-width: 880px; height: auto; display: block; }
+    .msg { cursor: pointer; }
+    .msg text { font-size: 13px; fill: #8aa; }
+    .msg.active text { fill: var(--ink); font-weight: 700; }
+    .msg.future { opacity: 0.28; }
+    .msg.done { opacity: 0.72; }
+    footer {
+      display: grid;
+      grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+      gap: 16px;
+      max-height: 36vh;
+      padding: 12px 20px 16px;
+      background: var(--panel);
+      border-top: 1px solid var(--line);
+      overflow: auto;
+    }
+    #step-label { margin: 0 0 6px; font-size: 16px; }
+    #step-note { margin: 0; color: var(--muted); }
+    #symbols { display: flex; flex-wrap: wrap; gap: 8px; align-content: start; }
+    .symbol {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 10px;
+      min-width: 220px;
+      max-width: 360px;
+      background: #fbfcfd;
+    }
+    .symbol strong, .symbol code, .symbol .role { display: block; }
+    .symbol code, .symbol .role { color: var(--muted); font-size: 12px; }
+    .kind {
+      display: inline-block;
+      margin-bottom: 4px;
+      padding: 1px 6px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 11px;
+    }
+  </style>
+</head>
+<body>
+  <aside>
+    <h1 id="tree-heading"></h1>
+    <ul class="tree" id="tree"></ul>
+  </aside>
+  <main>
+    <header>
+      <div>
+        <h2 id="title"></h2>
+        <p id="progress"></p>
+      </div>
+      <button class="nav" id="prev" type="button"></button>
+      <button class="nav primary" id="next" type="button"></button>
+    </header>
+    <div id="stage"></div>
+    <footer>
+      <div>
+        <h3 id="step-label"></h3>
+        <p id="step-note"></p>
+      </div>
+      <div id="symbols"></div>
+    </footer>
+  </main>
+  <script id="step-tour-data" type="application/json">__STEP_TOUR_DATA__</script>
+  <script>
+    const data = JSON.parse(document.getElementById("step-tour-data").textContent);
+    const ui = {
+      treeHeading: "関係するファイル",
+      prev: "前のステップ",
+      next: "次のステップ",
+      last: "最後のステップ",
+      ...(data.ui ?? {})
+    };
+    const actors = data.actors;
+    const steps = data.steps;
+    const tree = buildTree(steps);
+    let index = 0;
+
+    const treeRoot = document.getElementById("tree");
+    const stage = document.getElementById("stage");
+    const symbolsEl = document.getElementById("symbols");
+
+    document.title = data.title;
+    document.getElementById("title").textContent = data.title;
+    document.getElementById("tree-heading").textContent = ui.treeHeading;
+    document.getElementById("prev").textContent = ui.prev;
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
+
+    function fileName(path) {
+      return path.split("/").pop();
+    }
+
+    function buildTree(stepList) {
+      const groups = [];
+      const byDir = new Map();
+      for (const step of stepList) {
+        for (const symbol of step.symbols) {
+          const dir = symbol.file.split("/").slice(0, -1).join("/") || ".";
+          if (!byDir.has(dir)) {
+            const group = { dir, files: [] };
+            byDir.set(dir, group);
+            groups.push(group);
+          }
+          const group = byDir.get(dir);
+          if (!group.files.includes(symbol.file)) group.files.push(symbol.file);
+        }
+      }
+      return groups;
+    }
+
+    function renderTree() {
+      const active = new Set(steps[index].symbols.map((symbol) => symbol.file));
+      treeRoot.innerHTML = tree.map((group) => {
+        const items = group.files.map((path) => {
+          const on = active.has(path) ? "active" : "";
+          return `<li><button type="button" class="${on}" data-file="${escapeHtml(path)}">${escapeHtml(fileName(path))}</button></li>`;
+        }).join("");
+        return `<li><div class="dir">${escapeHtml(group.dir)}</div><ul>${items}</ul></li>`;
+      }).join("");
+      const current = treeRoot.querySelector("button.active");
+      if (current) current.scrollIntoView({ block: "nearest" });
+    }
+
+    function renderSequence() {
+      const width = Math.max(880, actors.length * 240);
+      const colW = width / actors.length;
+      const firstY = 92;
+      const gap = 36;
+      const height = firstY + steps.length * gap + 24;
+      const xOf = (id) => actors.findIndex((actor) => actor.id === id) * colW + colW / 2;
+      const heads = actors.map((actor, i) => {
+        const x = i * colW + 16;
+        const color = actor.color || "#0b6e4f";
+        return `<rect x="${x}" y="8" width="${colW - 32}" height="48" rx="8" fill="#fff" stroke="${escapeHtml(color)}" />
+          <text x="${x + (colW - 32) / 2}" y="28" text-anchor="middle" font-size="14" font-weight="700">${escapeHtml(actor.label)}</text>
+          <text x="${x + (colW - 32) / 2}" y="46" text-anchor="middle" font-size="11" fill="#5c6b7a">${escapeHtml(actor.sub || "")}</text>
+          <line x1="${xOf(actor.id)}" y1="56" x2="${xOf(actor.id)}" y2="${height - 8}" stroke="#d5dee6" stroke-dasharray="4 4" />`;
+      }).join("");
+      const arrows = steps.map((step, i) => {
+        const y = firstY + i * gap;
+        const x1 = xOf(step.from);
+        const x2 = xOf(step.to);
+        const dir = x2 >= x1 ? 1 : -1;
+        const state = i === index ? "active" : i < index ? "done" : "future";
+        const color = step.kind === "dashed" ? "#7c3aed" : step.kind === "return" ? "#64748b" : "#0b6e4f";
+        const dash = step.kind === "return" || step.kind === "dashed" ? 'stroke-dasharray="5 4"' : "";
+        const mid = (x1 + x2) / 2;
+        return `<g class="msg ${state}" data-step="${i}">
+          <line x1="${x1}" y1="${y}" x2="${x2 - dir * 8}" y2="${y}" stroke="${color}" stroke-width="${i === index ? 2.5 : 1.5}" ${dash} />
+          <polygon points="${x2},${y} ${x2 - dir * 8},${y - 4} ${x2 - dir * 8},${y + 4}" fill="${color}" />
+          <text x="${mid}" y="${y - 6}" text-anchor="middle">${escapeHtml(step.label)}</text>
+        </g>`;
+      }).join("");
+      stage.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img">${heads}${arrows}</svg>`;
+      stage.querySelectorAll(".msg").forEach((node) => {
+        node.addEventListener("click", () => {
+          index = Number(node.dataset.step);
+          render();
+        });
+      });
+    }
+
+    function renderDetail() {
+      const step = steps[index];
+      document.getElementById("progress").textContent = `${index + 1} / ${steps.length}`;
+      document.getElementById("step-label").textContent = step.label;
+      document.getElementById("step-note").textContent = step.note;
+      document.getElementById("prev").disabled = index === 0;
+      document.getElementById("next").disabled = index === steps.length - 1;
+      document.getElementById("next").textContent = index === steps.length - 1 ? ui.last : ui.next;
+      symbolsEl.replaceChildren(...step.symbols.map((symbol) => {
+        const article = document.createElement("article");
+        article.className = "symbol";
+        article.innerHTML = `<span class="kind"></span><strong></strong><code></code><span class="role"></span>`;
+        article.querySelector(".kind").textContent = symbol.kind;
+        article.querySelector("strong").textContent = symbol.name;
+        article.querySelector("code").textContent = `${symbol.file}:${symbol.line}`;
+        article.querySelector(".role").textContent = symbol.role;
+        return article;
+      }));
+    }
+
+    function render() {
+      renderTree();
+      renderSequence();
+      renderDetail();
+    }
+
+    document.getElementById("next").addEventListener("click", () => {
+      if (index < steps.length - 1) index += 1;
+      render();
+    });
+    document.getElementById("prev").addEventListener("click", () => {
+      if (index > 0) index -= 1;
+      render();
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowRight") document.getElementById("next").click();
+      if (event.key === "ArrowLeft") document.getElementById("prev").click();
+    });
+    treeRoot.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-file]");
+      if (!button) return;
+      const found = steps.findIndex((step) => step.symbols.some((symbol) => symbol.file === button.dataset.file));
+      if (found >= 0) {
+        index = found;
+        render();
+      }
+    });
+
+    render();
+  </script>
+</body>
+</html>
