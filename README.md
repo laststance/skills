@@ -4,7 +4,7 @@
 [![Claude Code](https://img.shields.io/badge/Claude_Code-compatible-D97757?style=flat-square&logo=claude&logoColor=white)](https://code.claude.com/docs/en/skills)
 [![Cursor](https://img.shields.io/badge/Cursor-compatible-000000?style=flat-square&logo=cursor&logoColor=white)](https://cursor.com/docs/skills)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-compatible-111827?style=flat-square&logo=openai&logoColor=white)](https://developers.openai.com/codex/skills)
-[![Skills](https://img.shields.io/badge/skills-32-2563EB?style=flat-square)](#available-skills)
+[![Skills](https://img.shields.io/badge/skills-33-2563EB?style=flat-square)](#available-skills)
 
 Agent skills for AI coding assistants. Install via [skills.sh](https://skills.sh).
 
@@ -40,6 +40,7 @@ npx skills add laststance/skills --skill laststance-publish-skill
 npx skills add laststance/skills --skill learn-html
 npx skills add laststance/skills --skill load
 npx skills add laststance/skills --skill locate-ui-from-code
+npx skills add laststance/skills --skill oss-repo-setup
 npx skills add laststance/skills --skill pr-tour
 npx skills add laststance/skills --skill product-inspiration
 npx skills add laststance/skills --skill prop-drill
@@ -78,6 +79,7 @@ npx skills add laststance/skills --skill visual-lint
 | [learn-html](skills/learn-html/) | Answers a general "how does X work?" question as one self-contained interactive HTML explainer (background → intuition → mechanics → quiz). Every factual claim must be sourced — docs lookup, a live measurement, or a repo grep — and anything unverified is flagged inline rather than smoothed into confident prose. Output language follows the question's language. | [Context7 MCP](https://github.com/upstash/context7) (recommended) |
 | [load](skills/load/) | Load project context from Serena MCP memory for session initialization. Discovers memories, reads `CRITICAL_*` rules, cross-referenced memories, and the latest session checkpoint, and keeps tooling decisions recorded by a different agent as history. | [Serena MCP](https://github.com/oraios/serena) **(required)** |
 | [locate-ui-from-code](skills/locate-ui-from-code/) | Code → screen: locate UI with on-screen highlight overlay (ring + file badge), reach logic branches (`debugger`, `if`, `useEffect`, handlers) by executing the user operations that trigger them, and capture DOM dump + highlighted screenshots. Agent runs the reach recipe itself and leaves the browser open for DevTools. Tool-agnostic — `cursor-ide-browser` MCP (Cursor), `playwright-cli` (Codex/Claude Code), chrome-devtools MCP when available. | `playwright-cli` (Codex/Claude Code), cursor-ide-browser MCP (Cursor), chrome-devtools MCP (recommended) |
+| [oss-repo-setup](skills/oss-repo-setup/) | Bring a TypeScript/pnpm repo to an OSS-ready baseline modeled on laststance/happy-dom-extended — ESLint + Prettier + Fallow + coverage tooling, Test/Build/TypeCheck/Lint/Format/Fallow/Security/Socket/Scorecard workflows with Codecov, SECURITY/CONTRIBUTING/CODE_OF_CONDUCT/TESTING/ARCHITECTURE/TODOS docs, and README badges, in four commits; pushes and repo settings only after confirmation. No Dependabot. | [Node.js](https://nodejs.org/) **(required)**, [pnpm](https://pnpm.io/) **(required)**, [GitHub CLI](https://cli.github.com/) **(required)** |
 | [pr-tour](skills/pr-tour/) | Live onboarding tour of newly implemented code. Runs the target app in a debug session — the vscode-debug-mcp bridge and playwright-cli attach to the same Chrome — pauses at curated breakpoints inside the new code while driving the real UI, narrates each stop in chat mapping UI moments to exact file:line, and writes a replayable tour artifact (before/after screenshots + deep-trace-extension replay table). | `playwright-cli` **(required)**, [Debug MCP Bridge](https://github.com/laststance/vscode-debug-mcp) **(required)**, [Serena MCP](https://github.com/oraios/serena) (recommended) |
 | [product-inspiration](skills/product-inspiration/) | Provides UI/feature implementation inspiration by researching top-tier apps. Implements all proposed patterns in _trials/ folder for hands-on evaluation. | [Tavily MCP](https://github.com/tavily-ai/tavily-mcp-server) (recommended) |
 | [prop-drill](skills/prop-drill/) | Trace React prop-drilling paths from origin definition to leaf consumers. Shows the original prop definition as a clickable code block, the full drilling route as a table, and a Mermaid flowchart. | [Serena MCP](https://github.com/oraios/serena) (recommended), [Context7](https://github.com/upstash/context7) (recommended) |
@@ -121,6 +123,7 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /load                               # Load session context from Serena MCP
 /locate-ui-from-code FolderHeader     # Locate render target with screenshot + DOM dump
 /locate-ui-from-code src/Foo.tsx:139  # Locate UI + reach debugger/effect/handler at pinned line
+/oss-repo-setup                     # OSS-ready repo: CI, badges, community docs
 /pr-tour                             # Live debug-session tour of newly written code
 /product-inspiration                # Get UI/feature inspiration
 /prop-drill orderData OrderTable    # Trace prop-drilling path
