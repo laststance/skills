@@ -118,6 +118,28 @@
       color: var(--accent);
       font-size: 11px;
     }
+    #react-zoom { margin-top: 16px; }
+    #react-zoom:empty { display: none; }
+    .zoom-head { display: flex; gap: 8px; align-items: center; margin: 0 0 8px; font-size: 12px; color: var(--muted); }
+    .legend-item { display: inline-flex; align-items: center; gap: 6px; }
+    .legend-line { width: 22px; height: 0; border-top: 2px solid #1976d2; }
+    .legend-line.context { border-top-style: dashed; border-top-color: #7c3aed; }
+    .nest { border: 1px solid #1976d2; border-radius: 10px; padding: 8px 10px 10px; background: #f7fbff; }
+    .nest .nest { margin-top: 8px; }
+    .nest .name { font-weight: 650; }
+    .nest .meta { color: var(--muted); font-size: 12px; }
+    .nest.caller { border-color: var(--accent); background: var(--accent-soft); }
+    .paths { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .path {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 10px;
+      background: #fff;
+      min-width: 220px;
+    }
+    .path.context { border-style: dashed; border-color: #c4b5fd; }
+    .path strong, .path code { display: block; }
+    .path code { color: var(--muted); font-size: 12px; }
   </style>
 </head>
 <body>
@@ -134,7 +156,10 @@
       <button class="nav" id="prev" type="button"></button>
       <button class="nav primary" id="next" type="button"></button>
     </header>
-    <div id="stage"></div>
+    <div id="stage">
+      <div id="sequence"></div>
+      <div id="react-zoom"></div>
+    </div>
     <footer>
       <div>
         <h3 id="step-label"></h3>
@@ -159,7 +184,8 @@
     let index = 0;
 
     const treeRoot = document.getElementById("tree");
-    const stage = document.getElementById("stage");
+    const stage = document.getElementById("sequence");
+    const reactZoom = document.getElementById("react-zoom");
     const symbolsEl = document.getElementById("symbols");
 
     document.title = data.title;
@@ -179,26 +205,38 @@
       return path.split("/").pop();
     }
 
+    function stepFiles(step) {
+      const files = step.symbols.map((symbol) => symbol.file);
+      const react = step.react;
+      if (react) {
+        if (react.caller) files.push(react.caller.file);
+        for (const node of react.hierarchy ?? []) files.push(node.file);
+        for (const prop of react.props ?? []) files.push(prop.file);
+        for (const item of react.context ?? []) files.push(item.file);
+      }
+      return files.filter(Boolean);
+    }
+
     function buildTree(stepList) {
       const groups = [];
       const byDir = new Map();
       for (const step of stepList) {
-        for (const symbol of step.symbols) {
-          const dir = symbol.file.split("/").slice(0, -1).join("/") || ".";
+        for (const file of stepFiles(step)) {
+          const dir = file.split("/").slice(0, -1).join("/") || ".";
           if (!byDir.has(dir)) {
             const group = { dir, files: [] };
             byDir.set(dir, group);
             groups.push(group);
           }
           const group = byDir.get(dir);
-          if (!group.files.includes(symbol.file)) group.files.push(symbol.file);
+          if (!group.files.includes(file)) group.files.push(file);
         }
       }
       return groups;
     }
 
     function renderTree() {
-      const active = new Set(steps[index].symbols.map((symbol) => symbol.file));
+      const active = new Set(stepFiles(steps[index]));
       treeRoot.innerHTML = tree.map((group) => {
         const items = group.files.map((path) => {
           const on = active.has(path) ? "active" : "";
@@ -269,9 +307,28 @@
       }));
     }
 
+    function renderReact() {
+      const react = steps[index].react;
+      if (!react || !Array.isArray(react.hierarchy) || react.hierarchy.length === 0) {
+        reactZoom.replaceChildren();
+        return;
+      }
+      const boxes = react.hierarchy.map((node, i) => {
+        const isCaller = i === react.hierarchy.length - 1;
+        const hook = isCaller && react.hook ? `<div class="meta">calls ${escapeHtml(react.hook)}</div>` : "";
+        return `<div class="nest${isCaller ? " caller" : ""}"><div class="name">${escapeHtml(node.name)}</div><div class="meta">${escapeHtml(node.file)}:${node.line}</div>${hook}{{child}}</div>`;
+      });
+      let nested = boxes[boxes.length - 1].replace("{{child}}", "");
+      for (let i = boxes.length - 2; i >= 0; i -= 1) nested = boxes[i].replace("{{child}}", nested);
+      const props = (react.props ?? []).map((prop) => `<article class="path"><span class="kind">Props</span><strong>${escapeHtml(prop.name)}</strong><span>${escapeHtml(prop.from)} → ${escapeHtml(prop.to)}</span><code>${escapeHtml(prop.file)}:${prop.line}</code></article>`).join("");
+      const context = (react.context ?? []).map((item) => `<article class="path context"><span class="kind">Context</span><strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(item.provider)} → ${escapeHtml(item.consumer)}</span><code>${escapeHtml(item.file)}:${item.line}</code></article>`).join("");
+      reactZoom.innerHTML = `<div class="zoom-head"><span>Component</span><span class="legend-item"><i class="legend-line"></i>Props</span><span class="legend-item"><i class="legend-line context"></i>Context</span></div>${nested}<div class="paths">${props}${context}</div>`;
+    }
+
     function render() {
       renderTree();
       renderSequence();
+      renderReact();
       renderDetail();
     }
 

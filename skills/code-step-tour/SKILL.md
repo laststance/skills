@@ -3,9 +3,11 @@ name: code-step-tour
 description: >
   Build a step-through sequence tour of a real code path: a file tree on the
   left, one sequence arrow per click, and the functions or callbacks that run
-  on that step. Use when the user asks for a sequence diagram they can advance
-  one step at a time, a file tree beside a call flow, or 「ステップで進める」
-  「ファイルツリー付きのシーケンス」.
+  on that step. For React, also show the component that calls the hook, the
+  component hierarchy above it, and the Props or Context path. Use when the
+  user asks for a sequence they can advance one step at a time, a file tree
+  beside a call flow, a hook's caller, or 「ステップで進める」
+  「ファイルツリー付きのシーケンス」「Props の経路」「Context の受け渡し」.
 disable-model-invocation: true
 ---
 
@@ -14,6 +16,8 @@ disable-model-invocation: true
 Explain one code path as a self-contained HTML page. The left side is a file tree. The center is a sequence. **次のステップ** reveals one arrow. The bottom lists the file, symbol, and line that perform that step.
 
 Do not redraw this UI. Author a JSON file, then render it with the script next to this skill.
+
+Before writing JSON, read [references/output-guide.md](references/output-guide.md). It is the output shape: actor choice, step order, how many symbols to list, and when to attach a React hierarchy. Follow that shape in any repository.
 
 ## Trace first
 
@@ -58,6 +62,31 @@ The block below is the file shape only. Replace every symbol with one you opened
 ```
 
 `file` is relative to the repository root. `kind` on a symbol is a short word such as `関数` or `コールバック`. `kind` on a step is omitted for a normal call, or `return` or `dashed`.
+
+## React
+
+When the step calls a hook, or passes data through components, add `react`. Read each component before citing it. The hierarchy is the real parent chain, outermost first. The last node is the component that calls the hook, and it must match `caller`.
+
+Zoom the same way a C4 diagram does: the sequence stays the runtime call, and the nested boxes are the component zoom. A value passed in JSX is a `props` entry. A value read from a Provider is a `context` entry. Do not record a prop you did not see in JSX, or a context you did not see in `createContext` / `useContext`.
+
+```json
+"react": {
+  "hook": "useOrderQuery",
+  "caller": { "name": "OrderForm", "file": "src/features/order/OrderForm.tsx", "line": 18 },
+  "hierarchy": [
+    { "name": "OrdersPage", "file": "src/pages/orders.tsx", "line": 12 },
+    { "name": "OrderForm", "file": "src/features/order/OrderForm.tsx", "line": 18 }
+  ],
+  "props": [
+    { "name": "orderId", "from": "OrdersPage", "to": "OrderForm", "file": "src/pages/orders.tsx", "line": 40 }
+  ],
+  "context": [
+    { "name": "OrderContext", "provider": "OrderProvider", "consumer": "OrderForm", "file": "src/features/order/OrderProvider.tsx", "line": 22 }
+  ]
+}
+```
+
+Omit `props` or `context` when that path is unused. Intermediate components stay in `hierarchy` even when they only forward children.
 
 Optional `ui` overrides the chrome: `treeHeading`, `prev`, `next`, `last`. Defaults are Japanese.
 
