@@ -4,7 +4,7 @@
 [![Claude Code](https://img.shields.io/badge/Claude_Code-compatible-D97757?style=flat-square&logo=claude&logoColor=white)](https://code.claude.com/docs/en/skills)
 [![Cursor](https://img.shields.io/badge/Cursor-compatible-000000?style=flat-square&logo=cursor&logoColor=white)](https://cursor.com/docs/skills)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-compatible-111827?style=flat-square&logo=openai&logoColor=white)](https://developers.openai.com/codex/skills)
-[![Skills](https://img.shields.io/badge/skills-33-2563EB?style=flat-square)](#available-skills)
+[![Skills](https://img.shields.io/badge/skills-34-2563EB?style=flat-square)](#available-skills)
 
 Agent skills for AI coding assistants. Install via [skills.sh](https://skills.sh).
 
@@ -48,6 +48,7 @@ npx skills add laststance/skills --skill react-query-key-jump
 npx skills add laststance/skills --skill save
 npx skills add laststance/skills --skill search
 npx skills add laststance/skills --skill source-grounded-research
+npx skills add laststance/skills --skill ternary-occupancy
 npx skills add laststance/skills --skill ts-pattern-refactor
 npx skills add laststance/skills --skill type-expand
 npx skills add laststance/skills --skill ux-gap-detector
@@ -87,6 +88,7 @@ npx skills add laststance/skills --skill visual-lint
 | [save](skills/save/) | Save session context to Serena MCP memory for cross-session persistence. Analyzes accomplishments, persists learnings, and creates session checkpoints tagged with the authoring agent, so agent-specific tooling decisions don't leak into Claude Code / Cursor / Codex sessions that share the same memory. | [Serena MCP](https://github.com/oraios/serena) **(required)** |
 | [search](skills/search/) | Iterative multi-tool research. Picks the best-fit tool (WebSearch, WebFetch, Exa, Perplexity, Tavily, Context7, DeepWiki) for the question type, then switches tool families across up to 3 passes until a citation-backed answer is reached. | [Exa MCP](https://github.com/exa-labs/exa-mcp-server) (recommended), [Perplexity MCP](https://github.com/ppl-ai/modelcontextprotocol) (recommended), [Tavily MCP](https://github.com/tavily-ai/tavily-mcp-server) (recommended), [Context7](https://github.com/upstash/context7) (recommended) |
 | [source-grounded-research](skills/source-grounded-research/) | Produces source-grounded research briefs with citations, contradiction handling, and query logs. Research-only — no implementation or speculative answers without sources. | [Context7](https://github.com/upstash/context7) (recommended), web search / MCP (recommended) |
+| [ternary-occupancy](skills/ternary-occupancy/) | Produces three isolated implemented visual improvements for one existing named web or GUI screen when the request is polish, feel better, もっといい感じにして, or ダサい. | git worktrees **(required)** |
 | [ts-pattern-refactor](skills/ts-pattern-refactor/) | Detect and refactor conditional code to ts-pattern's `match().with().exhaustive()`. Refactors JSX branching, chained ternaries, and discriminated-union dispatch — but deliberately leaves plain single-condition if-chains alone. Codifies syntactic-form × context judgment criteria. | [ts-pattern](https://github.com/gvergnaud/ts-pattern) **(required)**, [Context7](https://github.com/upstash/context7) (recommended), [Serena MCP](https://github.com/oraios/serena) (recommended) |
 | [type-expand](skills/type-expand/) | Expands TypeScript type aliases into concrete, primitive-resolved shapes — unions, intersections, generics, conditional types, infer-based types, and common utility types as far as statically resolvable. Use when IDE hover only shows alias names. | [tsx](https://github.com/privatenumber/tsx) (recommended), TypeScript project `tsconfig.json` **(required)** |
 | [ux-gap-detector](skills/ux-gap-detector/) | Detects UI/UX quality gaps in authenticated SaaS web apps via `playwright-cli`. Crawls app interior, captures screenshots, scores across 4 dimensions (Typography & Spacing, Interactive States, Content Hierarchy, Loading & Error UX), and generates an actionable Markdown gap report. Optionally creates GitHub Issues. | `playwright-cli` **(required)**, [Serena MCP](https://github.com/oraios/serena) (recommended) |
@@ -131,6 +133,7 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /save                               # Save session context to Serena MCP
 /search what changed in React 19    # Iterative multi-tool research (Web + MCPs) until satisfied
 /source-grounded-research React 19  # Cited research brief (no code changes)
+/ternary-occupancy                  # Three isolated visual afters for one named screen
 /ts-pattern-refactor                # Sweep codebase for ts-pattern refactor opportunities
 /type-expand OrderItemSetting       # Expand a TypeScript type alias to its concrete shape
 /ux-gap-detector                    # Detect UX gaps in authenticated SaaS web app
