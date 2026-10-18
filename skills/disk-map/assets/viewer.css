@@ -78,7 +78,7 @@ button.link { border: 0; background: none; padding: 0; text-decoration: underlin
 
 .map { position: relative; height: 560px; border-radius: 10px; overflow: hidden; background: #fafaf8; }
 .map .empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); }
-.tile { position: absolute; display: block; text-align: left; overflow: hidden; border-radius: 8px; padding: 6px 8px; border: 1.5px solid var(--c-other-b); background: var(--c-other); transition: filter .12s ease; }
+.tile { position: absolute; display: flex; flex-direction: column; justify-content: flex-start; align-items: stretch; text-align: left; overflow: hidden; border-radius: 8px; padding: 6px 8px; border: 1.5px solid var(--c-other-b); background: var(--c-other); transition: filter .12s ease; }
 .tile:hover { filter: brightness(.97); }
 .tile[aria-pressed="true"] { outline: 3px solid var(--focus); outline-offset: -3px; }
 .tile .name { display: block; font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

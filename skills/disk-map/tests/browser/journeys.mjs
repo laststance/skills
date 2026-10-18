@@ -83,6 +83,8 @@ const now = () => new Date().toISOString();
 const tile = (name) => page.locator('.tile[data-id]').filter({ has: page.locator('.name', { hasText: new RegExp(`^${name.replace('.', '\\.')}$`) }) }).first();
 // Parent tiles are covered by their child tiles except for the header strip.
 const clickTile = (name) => tile(name).click({ position: { x: 12, y: 10 } });
+// A stray `null` child renders as visible text; fail on it wherever UI is open.
+const noLiteralNull = async (where) => check(!/(^|\s)null(\s|$)/m.test(await page.locator('body').innerText()), `literal "null" rendered (${where})`);
 const openFolder = async (name) => {
   await clickTile(name);
   await page.locator('#drawer').getByRole('button', { name: 'Open folder' }).click();
@@ -118,6 +120,7 @@ await step('E1 map drill-down and breadcrumbs show the right region and path', a
   await clickTile('.next');
   const pathText = await page.locator('#drawer code').textContent();
   check(pathText === path.join(fx.project, '.next'), `drawer path ${pathText}`);
+  await noLiteralNull('map, breadcrumbs and drawer');
   await page.keyboard.press('Escape');
   const crumbs = await page.locator('.crumbs button').allTextContents();
   check(crumbs.slice(-2).join('/') === 'work/shop', `crumbs ${crumbs}`);
@@ -143,6 +146,7 @@ await step('E3 review dialog scopes consent to the listed path', async () => {
   await row.getByRole('button', { name: 'Review' }).click();
   const listed = await page.locator('#review-body ul.mono li').allTextContents();
   check(listed.length === 1 && listed[0].startsWith(path.join(fx.home, 'Movies', 'old-demo')), `listed ${listed}`);
+  await noLiteralNull('review dialog');
   await page.locator('#review-body').getByRole('button', { name: 'Move to Trash' }).click();
   await page.locator('#sel-summary', { hasText: '2 selected' }).waitFor();
   check(await row.locator('input[type="checkbox"]').isChecked(), 'review item not checked after Trash decision');

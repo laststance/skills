@@ -362,7 +362,7 @@ function renderCrumbs() {
   $('crumbs').replaceChildren(...crumbs.flatMap((crumb, index) => [
     index ? h('span', { 'aria-hidden': 'true', class: 'sub' }, '›') : null,
     h('button', { type: 'button', 'aria-current': index === crumbs.length - 1 ? 'page' : null, title: crumb.name, onclick: () => loadTree(crumb.id) }, crumb.name),
-  ]));
+  ]).filter(Boolean));
 }
 
 function listRow(entry) {
@@ -442,7 +442,7 @@ function openDrawer(id, node = null) {
   if (candidate?.question) rows.push([t('question'), candidate.question]);
   const dirLike = entry.kind === 'dir' || entry.hasChildren;
   const eligible = candidate && (candidate.risk === 'safe' || (candidate.risk === 'review' && candidate.decision === 'trash'));
-  $('drawer-body').replaceChildren(
+  $('drawer-body').replaceChildren(...[
     h('h2', { id: 'drawer-title' }, entry.name),
     h('dl', {}, ...rows.flatMap(([label, value]) => [h('dt', {}, label), h('dd', {}, value)])),
     eligible ? h('label', {}, h('input', { type: 'checkbox', checked: candidate.selected, disabled: !live(), onchange: (event) => setSelected([candidate.id], event.target.checked) }), ' ', t('include')) : null,
@@ -450,7 +450,7 @@ function openDrawer(id, node = null) {
       dirLike ? h('button', { type: 'button', onclick: () => { $('drawer').close(); loadTree(id); } }, t('openFolder')) : null,
       candidate?.risk === 'review' ? h('button', { type: 'button', disabled: !live(), onclick: () => { $('drawer').close(); openReview(id); } }, t('review')) : null,
       h('button', { type: 'button', disabled: !live(), onclick: () => { app.context = [{ id, name: entry.name }]; $('drawer').close(); renderChat(); $('chat-input').focus(); } }, t('askChat')),
-      h('button', { type: 'button', class: 'primary', onclick: () => $('drawer').close() }, t('close'))));
+      h('button', { type: 'button', class: 'primary', onclick: () => $('drawer').close() }, t('close')))].filter(Boolean));
   openDialog($('drawer'));
 }
 
@@ -473,7 +473,7 @@ function openReview(id) {
     $('review-dialog').close();
     await refresh();
   };
-  $('review-body').replaceChildren(
+  $('review-body').replaceChildren(...[
     h('h2', { id: 'review-title' }, t('reviewTitle', { name: candidate.purpose || candidate.name })),
     h('p', { class: 'note' }, candidate.question || candidate.reason),
     candidate.consequences?.length ? h('div', {}, h('b', {}, t('consequences')), h('ul', {}, ...candidate.consequences.map((text) => h('li', {}, text)))) : null,
@@ -484,7 +484,7 @@ function openReview(id) {
     h('div', { class: 'row' },
       h('button', { type: 'button', onclick: () => decide('investigate') }, t('investigate')),
       h('button', { type: 'button', onclick: () => decide('trash') }, t('trash')),
-      h('button', { type: 'button', class: 'primary', autofocus: true, onclick: () => decide('keep') }, t('keep'))));
+      h('button', { type: 'button', class: 'primary', autofocus: true, onclick: () => decide('keep') }, t('keep')))].filter(Boolean));
   openDialog($('review-dialog'));
 }
 
