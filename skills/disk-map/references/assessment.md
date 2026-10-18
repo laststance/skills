@@ -24,6 +24,8 @@ Do not bulk-read file contents. Never read conversations, browser profiles (Cook
 
 The runtime protects these regardless of your proposal: credentials (`.ssh`, `.gnupg`, `.aws`, `.kube`, Keychains), browser site/auth stores (Cookies, Login Data, Sessions, Local Storage, IndexedDB, Service Worker), `~/Library/Preferences`, Mail/Messages/Safari/iCloud, the Chrome and Chrome Canary profiles, dotfiles in your home, agent settings (`~/.claude.json`, `~/.claude/settings.json`, `~/.codex/auth.json`, `~/.codex/config.toml`), repository and worktree roots, everything inside a Git work tree except `.next`, `.turbo` and `node_modules`, `*.app` bundles, Photos/Music libraries, Docker/VM disks, anything outside your home, folders that contain any of these, broad roots (`~`, `~/Library`, `~/Library/Caches`, `~/Library/Application Support`, `~/.cache`, …) and whole application data folders. A generic "yes" in chat cannot change this.
 
+Protection applies to children of protected containers and to containers holding protected descendants. A narrow `--root` scan retains the enclosing Git repository context. An agent's `protected` assessment or a user's **Keep** decision also prevents cleanup through a parent selection. The whole conflicting target is refused; disk-map never claims to exclude a child while recursively removing its parent.
+
 ### Examples
 
 | Path | Proposal | Why |

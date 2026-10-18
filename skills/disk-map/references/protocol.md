@@ -92,10 +92,14 @@ Mutations from the viewer require the exact `Origin`. Errors are `{ error: { cod
 
 1. The manifest lists each target's path, identity (device, inode, uid, kind, mtime/ctime ns), operation, metadata digest, bytes, consequences, whether it is irreversible, and the fixed command for CLI recipes. Parent/child overlaps are rejected; items that changed since the scan are excluded and unchecked.
 2. Any selection, assessment, identity or revision change increments an epoch that invalidates unconfirmed plans.
+   Planning captures that epoch before asynchronous checks and rejects changes before sealing. A changed review question or consequence clears the earlier Trash decision. Protected and kept descendants block their containing target.
 3. Entries run sequentially. Before each: canonical parent (no links), identity, ownership, protection rules, metadata digest (no new/removed/changed descendants, no protected names, no other volume), recipe checks and process/open-file checks. Any mismatch → `skipped`.
+   CLI recipes receive the same subtree checks. Verification refuses subtrees over 500,000 entries instead of executing an unverifiable cleanup. Enclosing Git context is checked again immediately before execution.
+   Consent and preservation are rechecked after asynchronous readiness work, immediately before each mutation starts. If they change after staging, the staged data is preserved and its recovery path is reported. Already-started filesystem operations or external commands cannot be rolled back by a later assessment.
 4. Permanent removal renames the target into an exclusive sibling `.disk-map-staging-*` directory, re-validates the moved tree, then removes it. A mismatch keeps it there and reports the recovery path.
 5. Trash moves use an exclusive `~/.Trash/disk-map-<operationId>/` wrapper and `rename` only. Another volume, permission errors or an unsafe Trash path fail closed; nothing is copied or deleted.
 6. Restore uses `link`+`unlink` (files) or an exclusive placeholder + `rename` (folders), so an occupied destination is never overwritten. `sibling` restores to `<path>.restored-<uuid>`.
+   A restore plan must still identify the device/inode/kind recorded by the original Trash move; replacement items are rejected.
 7. After a crash, `start` closes every `intent` without an `outcome` as `interrupted` (source still present) or `unknown`, reports any staging/Trash location, and never replays it.
 
 ## Space accounting

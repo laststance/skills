@@ -147,7 +147,7 @@ const RULES = {
 export function validate(body, shape, required = Object.keys(shape)) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw new HttpError(400, 'invalid-body', 'Body must be a JSON object.');
   for (const key of Object.keys(body)) {
-    if (!(key in shape)) throw new HttpError(400, 'unknown-field', `Unknown field "${key.slice(0, 40)}".`);
+    if (!Object.hasOwn(shape, key)) throw new HttpError(400, 'unknown-field', `Unknown field "${key.slice(0, 40)}".`);
   }
   for (const [key, rule] of Object.entries(shape)) {
     if (body[key] === undefined) {
@@ -181,6 +181,7 @@ export function validateAssessment(item) {
   if (!Array.isArray(item.consequences) || item.consequences.length > 10 || !item.consequences.every((text) => isString(text, 500))) fail('consequences');
   if (!Array.isArray(item.evidence) || item.evidence.length > 12) fail('evidence');
   for (const evidence of item.evidence) {
+    if (!evidence || typeof evidence !== 'object' || Array.isArray(evidence)) fail('evidence');
     const keys = Object.keys(evidence ?? {});
     if (keys.some((key) => !['kind', 'reference', 'checkedAt'].includes(key))) fail('evidence');
     if (!['local', 'documentation'].includes(evidence.kind) || !isString(evidence.reference, 1000) || !isString(evidence.checkedAt, 40)) fail('evidence');

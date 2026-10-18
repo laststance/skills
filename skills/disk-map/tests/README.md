@@ -43,5 +43,6 @@ Each test carries a card comment: `protects | fails_when | no_claim`.
 | I12 | perf.mjs | peak RSS < 512 MiB, first progress < 2 s, ≤ 300 tiles, keyboard drawer < 200 ms |
 | E1–E8 | browser/journeys.mjs | drill-down, checkbox totals, review dialog, manifest = execution, chat + disconnect, keyboard/mobile/reduced motion, inert export, results + restore |
 | H1–H6 | ../references/host-compatibility.md | live host round trips (only Claude Code verified so far) |
+| R1–R14 | safety-regressions.test.mjs | protected children and containers, narrow Git roots, Keep decisions, changed assessment consent, concurrent planning, CLI subtree checks, replaced Trash items, invalid evidence, removed-root reporting, preservation changes during execution |
 
 Extra cases: AC1 packaging and CSP-safe markup (packaging.test.mjs), CLI lifecycle and usage errors (cli.test.mjs), 14 (odd names, sparse files, empty folders), metadata digest change, CSP headers, recipe leaf verification, CLI receipt parsing, disconnected agent refuses plans, review items need a decision.

@@ -26,7 +26,47 @@ const PROTECTED_NAMES = new Set([
  * isProtectedName('Login Data'); // true
  */
 export function isProtectedName(name) {
-  return PROTECTED_NAMES.has(name) || name.endsWith('.keychain-db') || name.endsWith('.keychain');
+  return protectedNameReason(name) !== null;
+}
+
+/**
+ * Share protected-container rules between scans, digests and path checks.
+ * {@link protectionReason} also applies these rules to ancestor components.
+ *
+ * @example
+ * protectedNameReason('Example.app'); // 'Protected: application bundle.'
+ */
+export function protectedNameReason(name) {
+  if (PROTECTED_NAMES.has(name) || name.endsWith('.keychain-db') || name.endsWith('.keychain')) return 'Protected: credentials or browser site data.';
+  if (/\.app$/i.test(name)) return 'Protected: application bundle.';
+  if (/\.(photoslibrary|musiclibrary|tvlibrary)$/i.test(name)) return 'Protected: library database.';
+  if (/(^Docker\.raw$|\.(vmdk|qcow2|vdi|pvm|utm|vmwarevm|vhdx)$)/i.test(name)) return 'Docker/VM disk: lifecycle operations are not supported in this release.';
+  if (name === '.git') return 'Protected: repository metadata.';
+  return null;
+}
+
+/**
+ * Find Git context above a narrow scan root or an operation target.
+ * Scanning and execution call this without reading Git configuration or files.
+ *
+ * @throws When an ancestor cannot be inspected; cleanup must fail closed.
+ * @example
+ * await findEnclosingRepository('/Users/me/project/src'); // '/Users/me/project'
+ */
+export async function findEnclosingRepository(target) {
+  let parent = path.dirname(target);
+  for (;;) {
+    try {
+      await fsp.lstat(path.join(parent, '.git'));
+      return parent;
+    } catch (error) {
+      // Missing markers are normal; unreadable ancestors are not proof of absence.
+      if (error.code !== 'ENOENT') throw error;
+    }
+    const next = path.dirname(parent);
+    if (next === parent) return null;
+    parent = next;
+  }
 }
 
 /**
@@ -66,6 +106,7 @@ export class ScanTree {
     this.ids = [];
     this.byId = new Map();
     this.aliasIndices = [];
+    this.enclosingRepoRoot = null;
   }
 
   /** Lazily assign a UUID to a node index; the UUID is the public node/candidate ID. */
@@ -375,6 +416,7 @@ export function createScan({
     const rootStat = await fsp.lstat(root, { bigint: true });
     if (!rootStat.isDirectory()) throw Object.assign(new Error('Scan root is not a directory'), { code: 'ENOTDIR' });
     rootDev = String(rootStat.dev);
+    tree.enclosingRepoRoot = await findEnclosingRepository(root);
     addNode(-1, root, 'dir', rootStat, { absPath: aliases.get('') ?? root, realPath: root });
     progress(true);
     const queue = [0];

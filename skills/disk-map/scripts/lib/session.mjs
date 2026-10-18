@@ -9,7 +9,7 @@ import { GOOGLE_UPDATER_CACHES, appCacheLeaf, checkRecipe, commandText, detectRe
 import { spaceMetrics as metricsImpl, writeReports } from './report.mjs';
 import { createScan, subtreeDigest, volumeInfo } from './scanner.mjs';
 import { formatBytes } from '../../assets/treemap.mjs';
-import { identityMismatch, identityOf, newId, runFixed, sumBytes, writePrivateJson } from './util.mjs';
+import { canonicalJson, identityMismatch, identityOf, newId, runFixed, sumBytes, writePrivateJson } from './util.mjs';
 
 const MAP_PREVIEW = 40;
 const PAGE = 300;
@@ -48,7 +48,9 @@ export class Session {
     this.agent = { leaseUntil: 0, lastSeenAt: null, everConnected: false, connected: false };
     this.journalFile = path.join(config.runDir, 'journal.jsonl');
     this.mailbox = new Mailbox({ file: path.join(config.runDir, 'mailbox.jsonl'), onChange: () => this.bump() });
-    this.policyCtx = { home: this.config.home, stateDir: this.config.stateDir, skillDir: this.config.skillDir, cli: null };
+    this.policyCtx = { home: this.config.home, stateDir: this.config.stateDir, skillDir: this.config.skillDir, cli: null,
+      preservedPaths: () => [...this.candidates.values()].filter((candidate) => candidate.assessment?.risk === 'protected' || (candidate.decision?.choice === 'keep' && candidate.decision.revision === this.revision)).map((candidate) => ({ path: candidate.path, keep: candidate.assessment?.risk !== 'protected' })),
+    };
     const exec = this.config.exec ?? runFixed;
     this.recipeCtx = { home: this.config.home, uid: this.config.uid, exec, cli: null };
     this.cachedRecipeCtx = { ...this.recipeCtx, exec: cachedExec(exec) };
@@ -256,7 +258,7 @@ export class Session {
       subtreeDigest: null,
       complete: node.kind === 'dir' ? node.complete : node.boundary === null,
       flags: node.flags,
-      repoRoot: repoIndex >= 0 ? tree.pathOf(repoIndex) : null,
+      repoRoot: repoIndex >= 0 ? tree.pathOf(repoIndex) : tree.enclosingRepoRoot,
       recipe: detectRecipe(target, node, { home: this.config.home, cli: this.cli }),
       category: categoryFor(target, this.config.home),
       assessment: null,
@@ -280,6 +282,7 @@ export class Session {
   /** Recompute risk + selection; invalidates pending plans on any change. */
   evaluate(candidate) {
     const previousRisk = candidate.risk;
+    candidate.protection = protectionReason(candidate, this.policyCtx);
     const { risk, reason } = effectiveRisk(candidate, this.policyCtx);
     candidate.risk = risk;
     candidate.reason = reason;
@@ -314,6 +317,8 @@ export class Session {
     if (!Array.isArray(body.assessments) || body.assessments.length === 0 || body.assessments.length > 500) throw new HttpError(400, 'invalid-field', 'assessments must be a non-empty array (max 500).');
     if (this.phase === 'scanning') throw new HttpError(409, 'scan-running', 'Wait for the scan to finish.');
     const items = body.assessments.map(validateAssessment);
+    // Every new assessment voids manifests before any asynchronous readiness check.
+    this.invalidatePlans();
     const results = [];
     for (const item of items) {
       const index = this.scan.tree.indexOf(item.candidateId);
@@ -322,6 +327,10 @@ export class Session {
         continue;
       }
       const candidate = this.ensureCandidate(index);
+      const previous = candidate.assessment;
+      if (previous && ['risk', 'purpose', 'reason', 'question', 'recipe', 'consequences', 'evidence'].some((key) => canonicalJson(previous[key]) !== canonicalJson(item[key]))) {
+        candidate.decision = null;
+      }
       candidate.assessment = { ...item, assessedAt: new Date().toISOString(), revision: this.revision };
       candidate.purpose = item.purpose;
       candidate.consequences = item.consequences;
@@ -333,6 +342,13 @@ export class Session {
       candidate.readiness = item.risk === 'safe' && item.recipe && item.recipe !== 'trash' ? await checkRecipe(item.recipe, candidate, this.cachedRecipeCtx) : null;
       this.evaluate(candidate);
       results.push({ candidateId: candidate.id, status: 'applied', risk: candidate.risk, reason: candidate.reason, selected: candidate.selected });
+    }
+    // A child assessment can change the eligibility of an already selected parent.
+    for (const candidate of this.candidates.values()) this.evaluate(candidate);
+    for (const result of results) {
+      if (result.status !== 'applied') continue;
+      const candidate = this.candidates.get(result.candidateId);
+      Object.assign(result, { risk: candidate.risk, reason: candidate.reason, selected: candidate.selected });
     }
     if (body.messageId) await this.mailbox.answer(body.messageId);
     this.bump();
@@ -384,6 +400,7 @@ export class Session {
     const items = candidateIds.map((id) => {
       const candidate = this.candidates.get(id);
       if (!candidate) throw new HttpError(404, 'unknown-candidate', 'Unknown candidate.');
+      this.evaluate(candidate);
       return candidate;
     });
     if (selected) {
@@ -409,6 +426,7 @@ export class Session {
     const candidate = this.candidates.get(candidateId);
     if (!candidate) throw new HttpError(404, 'unknown-candidate', 'Unknown candidate.');
     if (revision !== this.revision || candidate.revision !== revision) throw new HttpError(409, 'stale-revision', 'The scan changed. Review this item again.');
+    this.evaluate(candidate);
     if (candidate.risk !== 'review') throw new HttpError(409, 'not-review', 'Only review-required items take a decision.');
     candidate.decision = { choice, revision, decidedAt: new Date().toISOString() };
     let result = { ok: true, choice, selected: false };
@@ -431,6 +449,8 @@ export class Session {
       const message = await this.mailbox.post('investigate', { scanId: this.scanId, revision: this.revision, candidates: [this.candidateContext(candidate)], text: `Investigate further: ${candidate.question ?? candidate.path}` });
       this.chat.push({ id: message.id, role: 'user', text: `Investigate further: ${candidate.name}`, candidateIds: [candidate.id], revision: this.revision, status: 'pending', createdAt: message.createdAt });
     }
+    for (const item of this.candidates.values()) this.evaluate(item);
+    result.selected = candidate.selected;
     this.invalidatePlans();
     this.bump();
     return result;
@@ -447,6 +467,8 @@ export class Session {
     if (this.running) throw new HttpError(409, 'cleanup-running', 'A cleanup is already running.');
     if (!this.agent.connected) throw new HttpError(409, 'agent-disconnected', 'The agent is disconnected. New cleanup plans are paused until it reconnects.');
     if (!candidateIds.length) throw new HttpError(400, 'empty-plan', 'Select at least one item.');
+    for (const candidate of this.candidates.values()) this.evaluate(candidate);
+    const planningEpoch = this.epoch;
     const items = candidateIds.map((id) => this.candidates.get(id));
     if (items.some((candidate) => !candidate || !candidate.selected || !eligibleAction(candidate))) throw new HttpError(409, 'not-eligible', 'The plan contains an item that is not selected or not eligible.');
     for (const [position, candidate] of items.entries()) {
@@ -465,7 +487,7 @@ export class Session {
       const operation = action === 'trash' ? 'trash' : operationOf(candidate.assessment.recipe);
       let digest = null;
       let problem = !current ? 'The item no longer exists.' : identityMismatch(candidate.identity, current) ? 'The item changed since the scan. Rescan and review again.' : null;
-      if (!problem && operation !== 'cli') {
+      if (!problem) {
         try {
           digest = await subtreeDigest(candidate.path);
           if (digest.protectedFound) problem = 'A protected item exists inside.';
@@ -482,6 +504,9 @@ export class Session {
       }
       ready.push({ candidate, operation, digest });
     }
+    // Consent must remain unchanged throughout the asynchronous metadata reads.
+    this.assertLive();
+    if (this.epoch !== planningEpoch || this.revision !== revision || this.running) throw new HttpError(409, 'plan-stale', 'The selection or assessment changed while preparing the plan.');
     if (conflicts.length) this.invalidatePlans();
     if (!ready.length) {
       this.bump();
@@ -489,12 +514,11 @@ export class Session {
     }
     const entries = ready.map(({ candidate, operation, digest }) => {
       const recipe = operation === 'trash' ? 'trash' : candidate.assessment.recipe;
-      const excluded = [...this.candidates.values()].filter((other) => other.id !== candidate.id && other.path.startsWith(`${candidate.path}/`) && other.risk === 'protected').length;
       return {
         action: 'clean', candidateId: candidate.id, recipe, identity: candidate.identity, path: candidate.path, operation,
         subtreeDigest: digest?.digest ?? null, entries: digest?.entries ?? null, allocatedBytes: candidate.allocatedBytes, reclaimableBytes: candidate.reclaimableBytes,
         reason: candidate.reason, consequences: candidate.consequences, irreversible: operation !== 'trash', repoRoot: candidate.repoRoot,
-        command: operation === 'cli' ? commandText(recipe, this.cli) : null, excludedProtected: excluded,
+        command: operation === 'cli' ? commandText(recipe, this.cli) : null,
       };
     });
     const plan = sealPlan({ scanId, revision, viewerSessionId: viewer.id, epoch: this.epoch, entries });
@@ -523,7 +547,7 @@ export class Session {
     this.phase = 'cleaning';
     this.bump();
     const before = await volumeInfo(this.config.root).catch(() => null);
-    const env = { journalFile: this.journalFile, uid: this.config.uid, trashDir: this.config.trashDir, policy: this.policyCtx, recipeCtx: this.recipeCtx, fsOps: this.config.fsOps, cliTimeoutMs: this.config.cliTimeoutMs };
+    const env = { journalFile: this.journalFile, uid: this.config.uid, trashDir: this.config.trashDir, policy: this.policyCtx, recipeCtx: this.recipeCtx, fsOps: this.config.fsOps, cliTimeoutMs: this.config.cliTimeoutMs, planIsCurrent: () => this.epoch === plan.epoch };
     const results = [];
     for (const entry of plan.entries) {
       const outcome = this.stopping
@@ -567,9 +591,23 @@ export class Session {
           tree.nodes[ancestor].alloc -= node.alloc;
           tree.nodes[ancestor].logical -= node.logical;
         }
-        const parent = tree.nodes[node.parent];
-        parent.children = parent.children.filter((child) => child !== index);
-        this.candidates.delete(candidate.id);
+        // Detach every removed descendant so search cannot resurrect stale targets.
+        const removed = [index];
+        while (removed.length) {
+          const current = removed.pop();
+          const deleted = tree.nodes[current];
+          removed.push(...deleted.children);
+          deleted.removed = current !== 0;
+          this.candidates.delete(tree.ids[current]);
+          if (current !== 0) tree.byId.delete(tree.ids[current]);
+        }
+        if (node.parent >= 0) {
+          const parent = tree.nodes[node.parent];
+          parent.children = parent.children.filter((child) => child !== index);
+        } else {
+          // A narrow scan may target the build folder itself; retain an empty root.
+          Object.assign(node, { children: [], small: null, alloc: 0, logical: 0 });
+        }
       }
     }
     this.revision += 1;
@@ -596,6 +634,9 @@ export class Session {
       identity = identityOf(await fsp.lstat(outcome.trashPath, { bigint: true }));
     } catch {
       throw new HttpError(409, 'missing-in-trash', 'The item is no longer in the Trash.');
+    }
+    if (!outcome.movedIdentity || identityMismatch(outcome.movedIdentity, identity, ['device', 'inode', 'kind'])) {
+      throw new HttpError(409, 'changed-in-trash', 'The Trash item no longer matches the item originally moved.');
     }
     const entries = [{ action: 'restore', operationId, destinationMode, destinationPath, identity, trashPath: outcome.trashPath, path: destinationPath, allocatedBytes: outcome.allocatedBytes, irreversible: false, operation: 'restore', recipe: 'trash' }];
     const plan = sealPlan({ scanId: this.scanId, revision: this.revision, viewerSessionId: viewer.id, epoch: this.epoch, entries });
@@ -730,7 +771,7 @@ export class Session {
       const needle = q.toLowerCase();
       const hits = [];
       for (let index = 1; index < tree.nodes.length && hits.length < 2000; index += 1) {
-        if (tree.nodes[index].name.toLowerCase().includes(needle)) hits.push(index);
+        if (!tree.nodes[index].removed && tree.nodes[index].name.toLowerCase().includes(needle)) hits.push(index);
       }
       hits.sort((a, b) => tree.nodes[b].alloc - tree.nodes[a].alloc);
       return { search: q, parent: null, ancestors: [], entries: hits.slice(0, PAGE).map((index) => this.viewNode(index, false)), other: null, nextCursor: null };

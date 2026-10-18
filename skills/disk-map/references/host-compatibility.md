@@ -36,6 +36,8 @@ A host passes only with a live round trip: the viewer posts a question about a f
 
 Six-host verification is **not complete**. Each unverified host needs a person (or an authorized session) to run the fixture flow interactively in that host, because driving those hosts from another agent would start a separate, separately billed agent process and new visible chats, which this skill and its verification rules do not allow.
 
+The maintainer waived additional live host verification for this release on 2026-10-18. The unverified entries above remain unverified; automated fixture tests do not establish host compatibility.
+
 ### Fixture flow for a host check
 
 1. Create a disposable fixture (any folder with a Git-ignored `.next` and a personal-looking file) and an empty Trash folder, e.g. under `$TMPDIR`.

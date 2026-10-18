@@ -516,7 +516,7 @@ function openPlan(plan, { restore = false } = {}) {
       h('thead', {}, h('tr', {}, h('th', {}, t('path')), h('th', {}, t('operation')), h('th', {}, t('allocated')), h('th', {}, ''))),
       h('tbody', {}, ...plan.entries.map((entry) => h('tr', { 'data-plan-entry': entry.candidateId ?? entry.operationId },
         h('td', { class: 'mono' }, entry.action === 'restore' ? `${entry.trashPath} → ${entry.destinationPath}` : entry.path),
-        h('td', {}, entry.action === 'restore' ? t('restoreOp') : entry.operation === 'cli' ? entry.command : t(entry.operation === 'trash' ? 'trash' : 'remove'), entry.excludedProtected ? h('div', { class: 'sub' }, t('excluded', { n: entry.excludedProtected })) : null),
+        h('td', {}, entry.action === 'restore' ? t('restoreOp') : entry.operation === 'cli' ? entry.command : t(entry.operation === 'trash' ? 'trash' : 'remove')),
         h('td', {}, fmt(entry.allocatedBytes)),
         h('td', {}, entry.irreversible ? t('irreversible') : entry.action === 'restore' ? '' : t('restorable')))))),
     plan.conflicts?.length ? h('div', {}, h('b', {}, t('conflicts')), h('ul', {}, ...plan.conflicts.map((conflict) => h('li', {}, `${conflict.path}: ${conflict.reason}`)))) : null,

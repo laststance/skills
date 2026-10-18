@@ -2,7 +2,7 @@
 // staged removal, fixed CLI recipes, Trash moves, restore and the journal.
 import fsp from 'node:fs/promises';
 import path from 'node:path';
-import { subtreeDigest } from './scanner.mjs';
+import { findEnclosingRepository, subtreeDigest } from './scanner.mjs';
 import { protectionReason } from './policy.mjs';
 import { buildCommand, checkRecipe, parseCliReport } from './recipes.mjs';
 import { SCHEMA_VERSION, appendJsonl, canonicalJson, identityMismatch, identityOf, newId, newSecret, readJsonl, runFixed, secretEquals, sha256 } from './util.mjs';
@@ -47,6 +47,19 @@ export function checkConfirmation(plan, input, { viewerSessionId, epoch, revisio
 const exists = async (target) => fsp.lstat(target).then(() => true, (error) => (error.code === 'ENOENT' ? false : true));
 
 /**
+ * Check live consent after asynchronous work and before a mutation starts.
+ * {@link perform} and {@link moveToTrash} call this at their mutation boundaries.
+ *
+ * @returns A reason to preserve the target, or null while consent remains valid.
+ * @example
+ * currentPlanProblem(entry, env); // null or 'The confirmed plan changed.'
+ */
+function currentPlanProblem(entry, env) {
+  if (env.planIsCurrent?.() === false) return 'The confirmed plan changed.';
+  return protectionReason({ path: entry.path, kind: entry.identity.kind === 'directory' ? 'dir' : entry.identity.kind, flags: 0, repoRoot: entry.repoRoot }, env.policy);
+}
+
+/**
  * Recheck a planned target immediately before acting on it.
  *
  * Verifies canonical ancestors (no links), identity (device/inode/uid/kind/
@@ -72,7 +85,9 @@ export async function recheckTarget(entry, env) {
   const changed = identityMismatch(entry.identity, identityOf(stat));
   if (changed) return `The target changed since review (${changed}).`;
   if (Number(stat.uid) !== env.uid) return 'The target is not owned by you.';
-  const protection = protectionReason({ path: entry.path, kind: entry.identity.kind === 'directory' ? 'dir' : entry.identity.kind, flags: 0, repoRoot: entry.repoRoot }, env.policy);
+  const repoRoot = await findEnclosingRepository(entry.path);
+  if (repoRoot !== entry.repoRoot) return 'The enclosing repository changed since review.';
+  const protection = currentPlanProblem(entry, env);
   if (protection) return protection;
   if (entry.subtreeDigest) {
     const digest = await subtreeDigest(entry.path);
@@ -123,10 +138,14 @@ async function perform(entry, env, operationId, wrapper) {
   if (recheck) return { status: 'skipped', reason: recheck };
   const readiness = await checkRecipe(entry.recipe, { path: entry.path, kind: entry.identity.kind === 'directory' ? 'dir' : entry.identity.kind, repoRoot: entry.repoRoot }, env.recipeCtx);
   if (!readiness.ok) return { status: 'skipped', reason: readiness.reason };
+  const changed = currentPlanProblem(entry, env);
+  if (changed) return { status: 'skipped', reason: changed };
 
   if (entry.operation === 'cli') {
     const command = buildCommand(entry.recipe, env.recipeCtx.cli);
     const existed = await exists(entry.path);
+    const changed = currentPlanProblem(entry, env);
+    if (changed) return { status: 'skipped', reason: changed };
     const result = await (env.recipeCtx.exec ?? runFixed)(command.file, command.args, { timeoutMs: env.cliTimeoutMs ?? 600_000 });
     const stillExists = await exists(entry.path);
     const cliReportedBytes = parseCliReport(entry.recipe, `${result.stdout}\n${result.stderr}`);
@@ -142,6 +161,11 @@ async function perform(entry, env, operationId, wrapper) {
   const staging = await fsp.mkdtemp(path.join(path.dirname(entry.path), '.disk-map-staging-'));
   const staged = path.join(staging, path.basename(entry.path));
   await appendJsonl(env.journalFile, { schemaVersion: SCHEMA_VERSION, type: 'staging', operationId, stagingPath: staging });
+  const beforeMove = currentPlanProblem(entry, env);
+  if (beforeMove) {
+    await fsp.rmdir(staging).catch(() => {});
+    return { status: 'skipped', reason: beforeMove };
+  }
   try {
     await ops.rename(entry.path, staged);
   } catch (error) {
@@ -150,6 +174,8 @@ async function perform(entry, env, operationId, wrapper) {
   }
   const moved = identityOf(await fsp.lstat(staged, { bigint: true }));
   const after = entry.subtreeDigest ? await subtreeDigest(staged) : null;
+  const beforeRemoval = currentPlanProblem(entry, env);
+  if (beforeRemoval) return { status: 'failed', recoveryPath: staged, reason: `${beforeRemoval} Staged data was preserved for recovery.` };
   if (identityMismatch(entry.identity, moved, ['device', 'inode', 'kind']) || (after && after.digest !== entry.subtreeDigest)) {
     return { status: 'failed', recoveryPath: staged, reason: 'The staged item differs from the reviewed item. It was kept for recovery and not deleted.' };
   }
@@ -180,6 +206,11 @@ async function moveToTrash(entry, env, ops, wrapper) {
     return { status: 'failed', reason: `Could not create a Trash folder (${error.code}). Nothing was moved.` };
   }
   const destination = path.join(wrapper, path.basename(entry.path));
+  const changed = currentPlanProblem(entry, env);
+  if (changed) {
+    await fsp.rmdir(wrapper).catch(() => {});
+    return { status: 'skipped', reason: changed };
+  }
   try {
     await ops.rename(entry.path, destination);
   } catch (error) {
@@ -216,9 +247,14 @@ export async function restoreEntry(entry, env) {
     if (identityMismatch(entry.identity, identityOf(stat), ['device', 'inode', 'kind'])) return { status: 'skipped', reason: 'The Trash item changed; it was left in place.' };
     const parent = path.dirname(entry.destinationPath);
     if ((await fsp.realpath(parent).catch(() => null)) !== parent) return { status: 'skipped', reason: 'The destination folder is missing or is a link.' };
+    if (env.planIsCurrent?.() === false) return { status: 'skipped', reason: 'The confirmed restore plan changed.' };
     try {
       if (stat.isDirectory()) {
         await fsp.mkdir(entry.destinationPath);
+        if (env.planIsCurrent?.() === false) {
+          await fsp.rmdir(entry.destinationPath).catch(() => {});
+          return { status: 'skipped', reason: 'The confirmed restore plan changed.' };
+        }
         try {
           await fsp.rename(entry.trashPath, entry.destinationPath);
         } catch (error) {

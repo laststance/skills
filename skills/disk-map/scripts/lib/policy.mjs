@@ -1,7 +1,7 @@
 // Protection rules, risk evaluation and selection reconciliation.
 // Agent assessments are proposals; these rules decide what may be selected.
 import path from 'node:path';
-import { FLAG } from './scanner.mjs';
+import { FLAG, protectedNameReason } from './scanner.mjs';
 import { matchRecipe } from './recipes.mjs';
 import { isInside, isSameOrInside } from './util.mjs';
 
@@ -46,6 +46,13 @@ export function protectionReason(candidate, ctx) {
     if (isSameOrInside(target, own) || isInside(own, target)) return 'Protected: disk-map runtime state or the skill itself.';
   }
   if (!isSameOrInside(target, home)) return 'Outside your home folder; not supported in this release.';
+  // A protected assessment or Keep choice also protects containing folders.
+  for (const preserved of ctx.preservedPaths?.() ?? []) {
+    if (preserved.keep && target === preserved.path) continue;
+    if (isSameOrInside(target, preserved.path) || isInside(preserved.path, target)) {
+      return 'Protected: this path overlaps data the agent or user chose to preserve.';
+    }
+  }
   const rel = path.relative(home, target);
   if (BROAD.includes(rel)) return 'Too broad to act on; choose a specific folder inside it.';
   if (APP_DATA_PARENTS.includes(path.dirname(rel))) return "A whole application's data folder is never a cleanup target.";
@@ -54,9 +61,11 @@ export function protectionReason(candidate, ctx) {
   }
   const name = path.basename(target);
   if (path.dirname(rel) === '.' && name.startsWith('.') && candidate.kind !== 'dir') return 'Protected: user settings file.';
-  if (name.endsWith('.app')) return 'Protected: application bundle.';
-  if (/\.(photoslibrary|musiclibrary|tvlibrary)$/i.test(name)) return 'Protected: library database.';
-  if (VM_RE.test(name)) return 'Docker/VM disk: lifecycle operations are not supported in this release.';
+  // Descendants inherit their container's protection even in a narrow scan.
+  for (const component of rel.split(path.sep)) {
+    const reason = protectedNameReason(component);
+    if (reason) return reason;
+  }
   if (candidate.kind === 'symlink') return 'Symbolic links are never followed or cleaned.';
   const flags = candidate.flags ?? 0;
   if (flags & FLAG.PROTECTED_MARK) return 'Protected: credentials or browser site data.';
