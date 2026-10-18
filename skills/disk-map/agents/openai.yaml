@@ -1,0 +1,4 @@
+interface:
+  display_name: "Disk Map"
+  short_description: "Map Mac storage, chat about it, clean up with review"
+  default_prompt: "Use $disk-map to scan this Mac, open the disk map viewer, answer my questions about storage, and clean up only what I confirm."
