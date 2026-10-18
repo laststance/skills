@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Disk map</title>
+  <link rel="stylesheet" href="/viewer.css">
+  <script type="module" src="/viewer.mjs"></script>
+</head>
+<body>
+  <div class="app" id="app">
+    <header class="topbar">
+      <div>
+        <h1 data-i18n="title">Disk map</h1>
+        <span id="status" class="status" role="status" aria-live="polite"></span>
+      </div>
+      <div class="top-actions">
+        <span id="agent" class="agent" role="status" aria-live="polite"></span>
+        <button id="rescan" type="button" data-i18n="rescan">Rescan</button>
+        <button id="export" type="button" data-i18n="export">Export report</button>
+        <button id="end" type="button" data-i18n="end">End session</button>
+      </div>
+    </header>
+    <p id="banner" class="banner" role="alert" hidden></p>
+
+    <section class="cards" aria-label="Summary">
+      <article class="card"><h2 data-i18n="free">Free right now</h2><p><b id="c-free">—</b> <span id="c-free-note" class="sub"></span></p></article>
+      <article class="card"><h2><span class="dot safe" aria-hidden="true"></span><span data-i18n="safeCard">Verified cleanup</span></h2><p><b id="c-safe">—</b> <span id="c-safe-note" class="sub"></span></p></article>
+      <article class="card"><h2><span class="dot review" aria-hidden="true"></span><span data-i18n="reviewCard">Needs review</span></h2><p><b id="c-review">—</b> <span id="c-review-note" class="sub"></span></p></article>
+      <article class="card"><h2 data-i18n="unaccounted">Unaccounted</h2><p><b id="c-unaccounted">—</b> <span id="c-unaccounted-note" class="sub"></span></p></article>
+    </section>
+
+    <main class="layout">
+      <section class="panel explorer" aria-labelledby="explorer-title">
+        <div class="panel-head">
+          <div>
+            <h2 id="explorer-title" data-i18n="explorer">Explorer</h2>
+            <p class="sub" data-i18n="explorerSub">Sized by allocated space. Select a region to inspect it.</p>
+          </div>
+          <div class="seg" role="group" aria-label="Color mode">
+            <button type="button" data-mode="category" aria-pressed="true" data-i18n="category">Category</button>
+            <button type="button" data-mode="cleanup" aria-pressed="false" data-i18n="cleanupMode">Cleanup</button>
+          </div>
+        </div>
+        <div class="toolbar">
+          <nav id="crumbs" class="crumbs" aria-label="Breadcrumbs"></nav>
+          <input id="search" type="search" autocomplete="off" aria-label="Search names" data-i18n-placeholder="search">
+          <span id="mapped" class="sub"></span>
+        </div>
+        <div id="map" class="map" role="group" aria-label="Disk map"></div>
+        <ul id="legend" class="legend"></ul>
+        <details class="list-wrap" open>
+          <summary id="list-title" data-i18n="list">Folder contents</summary>
+          <table class="list" aria-labelledby="list-title">
+            <thead><tr><th data-i18n="name">Name</th><th class="num" data-i18n="allocated">Allocated</th><th data-i18n="state">State</th></tr></thead>
+            <tbody id="list"></tbody>
+          </table>
+          <button id="more" type="button" hidden data-i18n="more">Show more</button>
+        </details>
+      </section>
+
+      <aside class="side">
+        <section class="panel" aria-labelledby="recs-title">
+          <h2 id="recs-title" data-i18n="recs">Recommendations</h2>
+          <p class="sub" data-i18n="recsSub">Checked items enter the cleanup plan. Review items need your answer first.</p>
+          <div id="recs" class="recs-body"></div>
+        </section>
+        <section id="results" class="panel results" aria-labelledby="results-title" hidden>
+          <h2 id="results-title" data-i18n="results">Results</h2>
+          <div id="metrics" class="metrics"></div>
+          <div id="outcomes"></div>
+        </section>
+        <section class="panel chat" aria-labelledby="chat-title">
+          <h2 id="chat-title" data-i18n="chat">Chat with your agent</h2>
+          <p id="agent-help" class="sub"></p>
+          <ol id="messages" class="messages" aria-live="polite"></ol>
+          <div id="context" class="context" hidden>
+            <span id="context-text"></span>
+            <button id="context-clear" type="button" class="link" data-i18n="clear">Clear</button>
+          </div>
+          <form id="composer">
+            <textarea id="chat-input" rows="2" aria-label="Message" data-i18n-placeholder="ask"></textarea>
+            <button type="submit" class="primary" data-i18n="send">Send</button>
+          </form>
+        </section>
+      </aside>
+    </main>
+
+    <footer class="footer">
+      <span id="sel-summary" aria-live="polite"></span>
+      <div class="actions">
+        <button id="select-safe" type="button" data-i18n="selectSafe">Select safe</button>
+        <button id="cleanup" type="button" class="primary" data-i18n="cleanUp">Clean Up</button>
+      </div>
+    </footer>
+  </div>
+
+  <dialog id="drawer" class="drawer" aria-labelledby="drawer-title"><div class="dlg" id="drawer-body"></div></dialog>
+  <dialog id="review-dialog" aria-labelledby="review-title"><div class="dlg" id="review-body"></div></dialog>
+  <dialog id="plan-dialog" aria-labelledby="plan-title"><div class="dlg" id="plan-body"></div></dialog>
+</body>
+</html>
