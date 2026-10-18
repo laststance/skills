@@ -6,7 +6,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { makeFixture } from './helpers.mjs';
 
-const cliPath = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'scripts', 'disk-map.mjs');
+const here = path.dirname(fileURLToPath(import.meta.url));
+const cliPath = path.join(here, '..', 'scripts', 'disk-map.mjs');
 const run = (...args) => {
   const result = spawnSync(process.execPath, [cliPath, ...args], { encoding: 'utf8' });
   return { code: result.status, json: result.stdout.trim().startsWith('{') ? JSON.parse(result.stdout) : null };
@@ -37,8 +38,9 @@ test('a CLI session scans, delivers the scan event, accepts a reply, and stops w
   const duplicate = run('respond', '--session', session, '--file', replyFile);
   const mode = (await fsp.stat(session)).mode & 0o777;
   const stopped = run('stop', '--session', session);
-  await new Promise((resolve) => setTimeout(resolve, 300));
-  const afterStop = run('status', '--session', session);
+  // Poll until the runtime has exited instead of sleeping a fixed time.
+  let afterStop = run('status', '--session', session);
+  for (let attempt = 0; attempt < 50 && afterStop.code !== 4; attempt += 1) afterStop = run('status', '--session', session);
   // Assert
   assert.deepEqual([started.code, started.json.locale, started.json.root], [0, 'ja', fx.home]);
   assert.deepEqual([event.json.type, event.json.kind], ['event', 'scan-complete']);

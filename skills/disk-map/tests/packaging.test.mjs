@@ -5,14 +5,25 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const skillDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const read = (rel) => fsp.readFile(path.join(skillDir, rel), 'utf8');
+const here = path.dirname(fileURLToPath(import.meta.url));
+const skillDir = path.resolve(here, '..');
+const FILES = {
+  skill: path.join(here, '..', 'SKILL.md'),
+  html: path.join(here, '..', 'assets', 'viewer.html'),
+  css: path.join(here, '..', 'assets', 'viewer.css'),
+  viewer: path.join(here, '..', 'assets', 'viewer.mjs'),
+  yaml: path.join(here, '..', 'agents', 'openai.yaml'),
+  matrix: path.join(here, '.', 'README.md'),
+  journeys: path.join(here, 'browser', 'journeys.mjs'),
+  perf: path.join(here, '.', 'perf.mjs'),
+};
+const read = (file) => fsp.readFile(file, 'utf8');
 
 // protects: a clean install is self-contained | fails_when: SKILL.md links or the viewer needs a missing file, a package install or a CDN | no_claim: host discovery behavior
 test('every file the skill and viewer reference ships inside the skill folder', async () => {
   // Arrange
-  const skill = await read('SKILL.md');
-  const html = await read('assets/viewer.html');
+  const skill = await read(FILES.skill);
+  const html = await read(FILES.html);
   const linked = [...skill.matchAll(/\]\((references\/[^)]+)\)/g)].map((match) => match[1]);
   const served = [...html.matchAll(/(?:href|src)="\/([^"]+)"/g)].map((match) => `assets/${match[1]}`);
   // Act
@@ -27,11 +38,22 @@ test('every file the skill and viewer reference ships inside the skill folder', 
   assert.equal(await fsp.access(path.join(skillDir, 'package.json')).then(() => true, () => false), false);
 });
 
+// protects: motion respects the user setting and small screens stack | fails_when: the reduced-motion or narrow-screen rules disappear | no_claim: rendering in every browser
+test('the stylesheet disables motion for reduced-motion users and stacks the layout on narrow screens', async () => {
+  // Arrange
+  const css = await read(FILES.css);
+  // Act
+  const reduced = /@media \(prefers-reduced-motion: reduce\)[^}]*\{[^}]*transition: none !important/.test(css);
+  const narrow = /@media \(max-width: 1100px\)\s*\{\s*\.layout \{ grid-template-columns: minmax\(0, 1fr\); \}/.test(css);
+  // Assert
+  assert.deepEqual({ reduced, narrow }, { reduced: true, narrow: true });
+});
+
 // protects: the viewer works under its CSP and renders untrusted names as text | fails_when: inline script/style or innerHTML appears | no_claim: every DOM sink
 test('the viewer markup has no inline script or style and the viewer never assigns innerHTML', async () => {
   // Arrange
-  const html = await read('assets/viewer.html');
-  const script = await read('assets/viewer.mjs');
+  const html = await read(FILES.html);
+  const script = await read(FILES.viewer);
   // Act
   const inlineScripts = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>/g)].length;
   const styleAttributes = /\sstyle="/.test(html);
@@ -43,8 +65,8 @@ test('the viewer markup has no inline script or style and the viewer never assig
 // protects: English and Japanese UI stay complete | fails_when: a viewer label exists in one language only | no_claim: translation quality
 test('every viewer text key exists in both the English and the Japanese dictionary', async () => {
   // Arrange
-  const html = await read('assets/viewer.html');
-  const script = await read('assets/viewer.mjs');
+  const html = await read(FILES.html);
+  const script = await read(FILES.viewer);
   const [en, ja] = script.split(/^\s{2}ja: \{$/m);
   const keysOf = (block) => new Set([...block.matchAll(/(?:^|[\s,{])([A-Za-z_]+):\s['"]/g)].map((match) => match[1]));
   const htmlKeys = [...html.matchAll(/data-i18n(?:-placeholder)?="([^"]+)"/g)].map((match) => match[1]);
@@ -60,8 +82,8 @@ test('every viewer text key exists in both the English and the Japanese dictiona
 // protects: normal skill discovery stays enabled | fails_when: implicit invocation is disabled or metadata is missing | no_claim: how each host ranks skills
 test('Codex metadata names the skill and keeps implicit invocation enabled', async () => {
   // Arrange
-  const yaml = await read('agents/openai.yaml');
-  const skill = await read('SKILL.md');
+  const yaml = await read(FILES.yaml);
+  const skill = await read(FILES.skill);
   // Act
   const frontmatter = skill.split('---')[1];
   // Assert
@@ -75,8 +97,8 @@ test('Codex metadata names the skill and keeps implicit invocation enabled', asy
 // protects: the test matrix document matches real tests | fails_when: tests/README.md names a test that does not exist | no_claim: test quality
 test('every test named in the test matrix exists in a test file', async () => {
   // Arrange
-  const matrix = await read('tests/README.md');
-  const sources = (await Promise.all(['scanner', 'policy', 'cleanup', 'bridge', 'recipes-report', 'cli', 'packaging'].map((name) => read(`tests/${name}.test.mjs`)))).join('\n');
+  const matrix = await read(FILES.matrix);
+  const sources = (await Promise.all(['scanner', 'policy', 'cleanup', 'bridge', 'recipes-report', 'cli', 'packaging'].map((name) => read(path.join(here, `${name}.test.mjs`))))).join('\n');
   const rows = [...matrix.matchAll(/^\| [UI]\d+ \| [\w.-]+\.test\.mjs \| (.+) \|$/gm)].flatMap((match) => match[1].split('; ').map((name) => name.replace(/ \(.*\)$/, '').trim()));
   // Act
   const missing = rows.filter((name) => !sources.includes(name.split(';')[0].trim()));
@@ -88,7 +110,7 @@ test('every test named in the test matrix exists in a test file', async () => {
 // protects: the browser and perf entry points stay runnable | fails_when: a syntax error hides in a script node --test does not load | no_claim: their runtime results
 test('the browser journey and performance scripts parse', () => {
   // Arrange
-  const scripts = [path.join(skillDir, 'tests/browser/journeys.mjs'), path.join(skillDir, 'tests/perf.mjs')];
+  const scripts = [FILES.journeys, FILES.perf];
   // Act
   const statuses = scripts.map((file) => spawnSync(process.execPath, ['--check', file]).status);
   // Assert
