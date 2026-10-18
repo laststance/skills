@@ -65,6 +65,7 @@ export class ScanTree {
     this.nodes = [];
     this.ids = [];
     this.byId = new Map();
+    this.aliasIndices = [];
   }
 
   /** Lazily assign a UUID to a node index; the UUID is the public node/candidate ID. */
@@ -115,18 +116,27 @@ export class ScanTree {
     }
   }
 
-  /** Find the node index for an absolute alias/real path, or undefined. */
+  /**
+   * Find the node index for an absolute path, or undefined. Accepts display
+   * paths below a firmlink alias (`/Users/...`) as well as scanned real paths.
+   */
   findByPath(target) {
-    const rootPath = this.pathOf(0);
-    if (target === rootPath || target === this.nodes[0].realPath) return 0;
-    for (let index = 1; index < this.nodes.length; index += 1) {
-      if (this.nodes[index].absPath === target) return index;
+    const root = this.nodes[0];
+    const under = (base) => target === base || target.startsWith(base === '/' ? '/' : `${base}/`);
+    let start = 0;
+    let base = under(root.absPath) ? root.absPath : root.realPath;
+    // Prefer the deepest alias whose display path contains the target.
+    for (const index of this.aliasIndices) {
+      const alias = this.nodes[index].absPath;
+      if (under(alias) && (start === 0 || alias.length > base.length)) {
+        start = index;
+        base = alias;
+      }
     }
-    const base = target.startsWith(`${rootPath}/`) || rootPath === '/' ? rootPath : this.nodes[0].realPath;
-    const rel = path.relative(base, target);
-    if (rel.startsWith('..')) return undefined;
-    let cursor = 0;
-    for (const part of rel.split(path.sep)) {
+    if (!under(base)) return undefined;
+    if (target === base) return start;
+    let cursor = start;
+    for (const part of path.relative(base, target).split(path.sep)) {
       cursor = this.nodes[cursor].children.find((child) => this.nodes[child].name === part);
       if (cursor === undefined) return undefined;
     }
@@ -209,6 +219,7 @@ export function createScan({
       ...extra,
     });
     if (parent >= 0) tree.nodes[parent].children.push(index);
+    if (parent >= 0 && extra.absPath) tree.aliasIndices.push(index);
     return index;
   };
 

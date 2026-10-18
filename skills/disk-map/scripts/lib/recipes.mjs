@@ -103,7 +103,7 @@ export async function resolveCli({ env = process.env, exec = runFixed, home } = 
       const candidate = path.join(dir, name);
       try {
         await fsp.access(candidate, fsp.constants.X_OK);
-        return await fsp.realpath(candidate).then(() => candidate);
+        return candidate;
       } catch {
         // Try the next PATH entry.
       }

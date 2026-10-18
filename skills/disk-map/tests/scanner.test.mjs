@@ -145,3 +145,21 @@ test('adding a file inside a folder changes its metadata digest', async () => {
   assert.equal(after.entries, 2);
   await fsp.rm(root, { recursive: true });
 });
+
+// protects: firmlink display paths resolve to scanned nodes | fails_when: a /Users-style alias path cannot be found after a rescan | no_claim: every firmlink on every macOS release
+test('a path below a firmlink alias resolves to the same node as its scanned real path', async () => {
+  // Arrange
+  const root = await tempRoot();
+  await writeBytes(path.join(root, 'Users', 'me', 'notes.txt'), 10);
+  const scan = createScan({ root, fileNodeThreshold: 0, aliases: new Map([['Users', '/Users']]) });
+  await scan.run();
+  // Act
+  const byAlias = scan.tree.findByPath('/Users/me/notes.txt');
+  const byReal = scan.tree.findByPath(path.join(root, 'Users', 'me', 'notes.txt'));
+  // Assert
+  assert.equal(scan.tree.nodes[byAlias].name, 'notes.txt');
+  assert.equal(byAlias, byReal);
+  assert.equal(scan.tree.pathOf(byAlias), '/Users/me/notes.txt');
+  assert.equal(scan.tree.findByPath('/Users/someone-else'), undefined);
+  await fsp.rm(root, { recursive: true });
+});
