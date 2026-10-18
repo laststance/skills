@@ -64,7 +64,7 @@ export function squarify(values, rect) {
  * Format a decimal byte string for display (base 1000, like Finder).
  *
  * @example
- * formatBytes('1500000000'); // '1.5 GB'
+ * formatBytes('1500'); // '1.5 KB'
  */
 export function formatBytes(value, locale = 'en') {
   const bytes = Number(value ?? 0);

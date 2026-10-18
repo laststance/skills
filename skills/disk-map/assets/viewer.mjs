@@ -93,13 +93,13 @@ function h(tag, attrs = {}, ...children) {
   return element;
 }
 
-const app = { token: null, state: null, seq: -1, tree: null, parentId: null, mode: 'category', context: [], selectedId: null, treeAt: 0, treeKey: '', search: '', listCursor: 0, timer: null };
+const app = { viewer: null, state: null, seq: -1, tree: null, parentId: null, mode: 'category', context: [], selectedId: null, treeAt: 0, treeKey: '', search: '', listCursor: 0, timer: null };
 
 async function api(method, route, body) {
   const response = await fetch(route, {
     method,
     cache: 'no-store',
-    headers: { Authorization: `Bearer ${app.token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    headers: { Authorization: `Bearer ${app.viewer}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = await response.json().catch(() => ({}));
@@ -667,18 +667,18 @@ async function bootstrap() {
   const oneUse = fragment.get('t');
   // Remove the one-use token from the address bar and history immediately.
   history.replaceState(null, '', location.pathname);
-  app.token = sessionStorage.getItem('disk-map-viewer');
-  if (oneUse && !app.token) {
+  app.viewer = sessionStorage.getItem('disk-map-viewer');
+  if (oneUse && !app.viewer) {
     const response = await fetch('/api/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: oneUse }) });
     const data = await response.json().catch(() => ({}));
     if (response.ok) {
-      app.token = data.viewerToken;
+      app.viewer = data.viewerToken;
       locale = data.locale ?? locale;
-      sessionStorage.setItem('disk-map-viewer', app.token);
+      sessionStorage.setItem('disk-map-viewer', app.viewer);
     }
   }
   applyStaticText();
-  if (!app.token) return banner(t('noSession'));
+  if (!app.viewer) return banner(t('noSession'));
   poll();
 }
 
