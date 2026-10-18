@@ -124,6 +124,8 @@ for (const dialog of document.querySelectorAll('dialog')) {
   });
 }
 
+/** Home-relative display path for compact lists; dialogs keep the exact path. */
+const shortPath = (target) => (app.state?.home && target.startsWith(`${app.state.home}/`) ? `~${target.slice(app.state.home.length)}` : target);
 const candidateById = (id) => app.state?.candidates.find((candidate) => candidate.id === id) ?? null;
 const live = () => app.state && !app.state.ended;
 
@@ -139,6 +141,7 @@ function applyStaticText() {
 function renderStatus() {
   const state = app.state;
   const status = $('status');
+  $('root').textContent = state.root;
   if (state.ended) status.textContent = t('ended');
   else if (state.phase === 'scanning') status.textContent = t('scanning', { n: (state.progress?.entries ?? 0).toLocaleString(locale), bytes: fmt(state.progress?.allocatedBytes ?? '0') });
   else if (state.phase === 'cleaning') status.textContent = t('cleaning');
@@ -206,7 +209,7 @@ function recRow(candidate, { checkbox, question }) {
   }) : h('span');
   const row = h('div', { class: 'rec', 'data-candidate': candidate.id },
     box,
-    h('div', {}, h('button', { type: 'button', class: 'title', onclick: () => openDrawer(candidate.id) }, candidate.purpose || candidate.name), h('div', { class: 'meta' }, operationLabel(candidate)), h('div', { class: 'meta' }, candidate.path)),
+    h('div', {}, h('button', { type: 'button', class: 'title', onclick: () => openDrawer(candidate.id) }, candidate.purpose || candidate.name), h('div', { class: 'meta' }, operationLabel(candidate)), h('div', { class: 'meta' }, shortPath(candidate.path))),
     h('span', { class: 'size' }, fmt(candidate.allocatedBytes)));
   if (question) {
     row.append(h('div', { class: 'question' }, h('span', {}, candidate.question || candidate.reason), h('button', { type: 'button', disabled: !live(), onclick: () => openReview(candidate.id) }, t('review'))));
@@ -294,6 +297,8 @@ function tileClasses(entry, extra = '') {
 }
 
 function placeTile(map, rect, entry, extra, onclick) {
+  // Slivers are unreadable and unclickable; the list below still shows them.
+  if (rect.w < 8 || rect.h < 8) return null;
   const label = `${entry.name}, ${fmt(entry.allocatedBytes)}${entry.risk ? `, ${t(`risk_${entry.risk}`)}` : ''}`;
   const tiny = rect.w < 64 || rect.h < 40;
   const tile = h(onclick ? 'button' : 'div', {
@@ -307,7 +312,7 @@ function placeTile(map, rect, entry, extra, onclick) {
     onclick,
   });
   if (extra.includes('parent')) tile.append(h('span', { class: 'head' }, h('span', { class: 'name' }, entry.name), h('span', { class: 'size' }, fmt(entry.allocatedBytes))));
-  else tile.append(h('span', { class: 'name' }, entry.name), h('span', { class: 'size' }, fmt(entry.allocatedBytes)), entry.risk && entry.risk !== 'unassessed' ? h('span', { class: 'badge-wrap' }, riskBadge(entry.risk)) : null);
+  else tile.append(...[h('span', { class: 'name' }, entry.name), h('span', { class: 'size' }, fmt(entry.allocatedBytes)), entry.risk && entry.risk !== 'unassessed' ? h('span', { class: 'badge-wrap' }, riskBadge(entry.risk)) : null].filter(Boolean));
   map.append(tile);
   return tile;
 }
@@ -379,9 +384,13 @@ async function loadTree(parentId = app.parentId, { quiet = false } = {}) {
     const query = new URLSearchParams();
     if (parentId) query.set('parentId', parentId);
     const tree = await api('GET', `/api/tree?${query}`);
+    // Skip re-rendering identical data so focus and hover survive polling.
+    const key = JSON.stringify(tree);
+    app.treeAt = Date.now();
+    if (key === app.treeJson) return;
+    app.treeJson = key;
     app.tree = tree;
     app.parentId = tree.parent?.id ?? null;
-    app.treeAt = Date.now();
   } catch (error) {
     if (error.code === 'unknown-node') return loadTree(null, { quiet });
     if (!quiet) banner(error.message);

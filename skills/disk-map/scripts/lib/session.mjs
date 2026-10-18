@@ -205,10 +205,11 @@ export class Session {
     const tree = this.scan.tree;
     const largest = [];
     const home = this.config.home;
+    const floor = Math.min(50 * 1024 * 1024, tree.nodes[0].alloc / 100);
     // Largest folders under home (depth-limited) for the agent to consider.
     for (let index = 0; index < tree.nodes.length; index += 1) {
       const node = tree.nodes[index];
-      if (node.kind === 'symlink' || node.alloc < 50 * 1024 * 1024) continue;
+      if (node.kind === 'symlink' || node.alloc < floor) continue;
       const target = tree.pathOf(index);
       if (!target.startsWith(`${home}/`) || target.split('/').length - home.split('/').length > 4) continue;
       largest.push({ index, alloc: node.alloc, target });
