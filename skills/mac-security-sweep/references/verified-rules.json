@@ -14,6 +14,16 @@
       "incident": true,
       "verified": true,
       "verifiedAt": "2026-10-31",
+      "expiresAt": "2026-11-30T00:00:00Z",
+      "iocProfile": "cursor-2026-10",
+      "iocs": [
+        {"type": "exact-path", "relativePath": ".config/.smt"},
+        {"type": "exact-path", "relativePath": ".config/.smtk", "metadataOnly": true},
+        {"type": "exact-path", "relativePath": "Library/LaunchAgents/com.apple.sysmond.plist"},
+        {"type": "sha256", "target": "extension-js", "value": "ecb58cb29078d9646ad1dcdbe51526f2d9cfea06be5fb2ab183e8ecc3ab6bf15"},
+        {"type": "process-name", "value": "svc-telemetry"}
+      ],
+      "legacyCursorEvidence": {"ip": "134.209.82.225", "marker": "svc-telemetry", "keyBasename": ".smtk"},
       "note": "2026-10-30更新の公式通知に基づく。配布時間帯は2026-10-29 09:27–20:35 UTC。VS Code側の同名拡張だけで被害判定しない。現在の不在では削除済み履歴を否定できない。"
     },
     {

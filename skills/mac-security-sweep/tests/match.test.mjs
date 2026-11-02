@@ -104,6 +104,37 @@ test('Cursor 領域の権限不足を拡張不在として安全判定しない'
   assert.equal(actual.status, '可能性あり');
 });
 
+test('通常Cursor不在でもPortableの影響版を同じ製品の観測として照合する', () => {
+  // Arrange
+  const inventory = { extensions: [{ id: 'anthropic.claude-code', version: '2.1.312', editor: 'cursor-portable' }],
+    coverage: [{ area: 'cursor-extensions', status: 'absent' }, { area: 'cursor-portable-extensions', status: 'complete' }] };
+  // Act
+  const actual = matchRule(inventory, rule);
+  const structured = matchInventory(inventory, { items: [{ id: 'portable-news', title: 'Extension incident', affected: [{ name: 'anthropic.claude-code', ecosystem: 'VSCode', editor: 'cursor' }] }] });
+  const titleOnly = matchInventory(inventory, { items: [{ id: 'cursor-news', title: 'Cursor extension incident' }] });
+  // Assert
+  assert.equal(actual.status, '可能性高');
+  assert.equal(structured.newsAssessment[0].relevance, '関係あり');
+  assert.equal(titleOnly.newsAssessment[0].relevance, '関係あり');
+});
+
+test('Portable領域の未読・製品不明は拡張不在を阻止しInsidersを安定版へ統合しない', () => {
+  // Arrange
+  const targetRule = { ...rule, editor: 'vscode' };
+  const baseCoverage = [{ area: 'vscode-extensions', status: 'absent' }];
+  // Act
+  const unread = matchRule({ extensions: [], coverage: [...baseCoverage, { area: 'vscode-portable-extensions', status: 'partial' }] }, targetRule);
+  const ambiguousInventory = { extensions: [{ editor: 'portable', id: rule.extensionId, version: '2.1.312' }], coverage: [...baseCoverage, { area: 'portable-extensions', status: 'complete' }] };
+  const ambiguous = matchRule(ambiguousInventory, targetRule);
+  const insiders = matchRule({ extensions: [{ editor: 'vscode-insiders', id: rule.extensionId, version: '2.1.312' }], coverage: [...baseCoverage, { area: 'vscode-insiders-extensions', status: 'complete' }] }, targetRule);
+  const news = matchInventory(ambiguousInventory, { items: [{ id: 'portable-news', title: 'Extension incident', affected: [{ name: rule.extensionId, ecosystem: 'VSCode', editor: 'vscode' }] }] });
+  // Assert
+  assert.equal(unread.status, '可能性あり');
+  assert.equal(ambiguous.status, '可能性あり');
+  assert.equal(insiders.status, '影響なし');
+  assert.equal(news.newsAssessment[0].relevance, '確認候補');
+});
+
 test('VS Code の同じ版を Cursor 配布経路の被害と混同しない', () => {
   // Arrange
   const inventory = { extensions: [{ editor: 'vscode', id: 'anthropic.claude-code', version: '2.1.313' }], coverage: [{ area: 'extensions:cursor', status: 'complete' }] };
@@ -199,6 +230,38 @@ test('Chrome の比較不能な版は修正済みとみなさない', () => {
   assert.equal(actual.status, '可能性あり');
 });
 
+test('一部のアプリroot未読を別rootの完了で覆い隠して不在・全版修正済みとしない', () => {
+  // Arrange
+  const appRule = { id: 'example-app', kind: 'application', applicationNames: ['Example'], affectedRange: '<2.0', fixedVersion: '2.0', verified: true };
+  const coverage = [{ area: 'applications', path: '/Applications', status: 'complete' }, { area: 'applications', path: '/CustomApps', status: 'partial' }];
+  // Act
+  const absent = matchRule({ applications: [], coverage }, appRule);
+  const fixed = matchRule({ applications: [{ name: 'Example', version: '2.0', path: '/Applications/Example.app' }], coverage }, appRule);
+  const complete = matchRule({ applications: [], coverage: coverage.map(entry => ({ ...entry, status: 'complete' })) }, appRule);
+  // Assert
+  assert.equal(absent.status, '可能性あり');
+  assert.equal(fixed.status, '可能性あり');
+  assert.match(fixed.reason, /確認した版は当該影響範囲外/);
+  assert.equal(fixed.evidence.length, 1);
+  assert.equal(complete.status, '影響なし');
+});
+
+test('runtime managerの未読範囲が残るとき修正済み実物の個別事実だけを保持する', () => {
+  // Arrange
+  const runtimeRule = { id: 'node-security', kind: 'runtime', runtimeName: 'node', affectedRanges: ['>=24.0.0, <24.22.1'], supportedMajors: [24], verified: true };
+  const coverage = [{ area: 'runtime:system', status: 'complete' }, { area: 'runtime:volta', status: 'partial' }];
+  const runtimes = [{ name: 'node', path: '/current/node', version: 'v24.22.1', isCurrent: true }];
+  // Act
+  const missing = matchRule({ runtimes: [], coverage }, runtimeRule);
+  const fixed = matchRule({ runtimes, coverage }, runtimeRule);
+  const complete = matchRule({ runtimes, coverage: coverage.map(entry => ({ ...entry, status: 'complete' })) }, runtimeRule);
+  // Assert
+  assert.equal(missing.status, '可能性あり');
+  assert.equal(fixed.status, '可能性あり');
+  assert.equal(fixed.runtimeEvidence[0].status, '影響なし');
+  assert.equal(complete.status, '影響なし');
+});
+
 test('macOS の修正バージョンそのものは影響範囲外と判定する', () => {
   // Arrange
   const inventory = { host: { osVersion: '27.2', buildVersion: '26B123' } };
@@ -241,7 +304,7 @@ test('Cursor の版が unknown なら影響版一覧にないことだけで安�
 
 test('バックポート修正済み Node は内蔵 Brotli の古い版文字列だけで脆弱と判定しない', () => {
   // Arrange
-  const inventory = { runtimes: [{ name: 'node', path: '/test/node', version: 'v24.22.1', brotli: '1.2.0', isCurrent: true }] };
+  const inventory = { runtimes: [{ name: 'node', path: '/test/node', version: 'v24.22.1', brotli: '1.2.0', isCurrent: true }], coverage: [{ area: 'runtime:system', status: 'complete' }] };
   const componentRule = { id: 'brotli', kind: 'runtime-component', runtimeName: 'node', component: 'brotli', affectedRanges: ['>=1.2.0, <1.2.1'],
     patchedRuntimeRanges: ['>=24.22.1, <25.0.0'], supportedMajors: [24], verified: true };
   // Act

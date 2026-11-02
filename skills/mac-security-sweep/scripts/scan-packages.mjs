@@ -1,385 +1,366 @@
 #!/usr/bin/env node
-import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import { packageKey, planLockfiles } from './assessment.mjs';
+import { packageKey, assessmentStatus } from './assessment.mjs';
+import { createRunContext } from './runtime.mjs';
+import { allowedProjectRoot, boundedJson, LIMITS, readStatus, within } from './safe-io.mjs';
+import { SweepError, safeDiagnostic } from './diagnostics.mjs';
+import { extractLockfile, validPackage, publicResolution, identifyFormat } from './package-formats.mjs';
 
-const ECOSYSTEMS = new Set(['npm', 'PyPI', 'crates.io', 'Go', 'Packagist', 'RubyGems', 'Maven']);
-const PUBLIC_HOSTS = new Set(['registry.npmjs.org', 'registry.yarnpkg.com', 'pypi.org', 'files.pythonhosted.org', 'index.crates.io', 'github.com', 'proxy.golang.org', 'repo.packagist.org', 'packagist.org']);
+export { extractLockfile, validPackage } from './package-formats.mjs';
+const ADVISORY_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{2,120}$/;
+const DAY = 86400000;
+const MAX_FINDINGS = 30000;
+const iso = value => typeof value === 'string' && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : null;
+const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
-/**
- * OSV に送れるパッケージ識別子だけを受け入れる。
- * {@link scanPackages} とロックファイル抽出が、URL・ローカル参照・秘密値の送信を防ぐために呼ぶ。
- * @returns 名前・版・エコシステムが許可形式なら true。
- * @example
- * validPackage({ name: 'lodash', version: '4.17.21', ecosystem: 'npm' });
- */
-export function validPackage(pkg) {
-  return ECOSYSTEMS.has(pkg.ecosystem) && typeof pkg.name === 'string' && pkg.name.length <= 200
-    && /^(?:@[a-z0-9_.-]+\/)?[a-zA-Z0-9_.+/-]+$/.test(pkg.name)
-    && !pkg.name.includes('..') && typeof pkg.version === 'string'
-    && /^[v0-9][a-zA-Z0-9.+_-]{0,149}$/.test(pkg.version)
-    && !/^(?:file|git|link|workspace|https?):/i.test(pkg.version);
-}
-
-/**
- * 明示的な私有・ローカル・Git 由来だけをグローバル照合から除外する。
- * {@link scanPackages} が呼ぶ。出所不明の通常パッケージは、ユーザーが許可した名前と版だけを照合する。
- * @returns 固定版の最小メタデータを OSV に照合できる場合は true。
- */
-export function allowGlobalPackage(pkg) {
-  // 棚卸しが非公開由来と記録した項目（例: cargo の path/git インストール）は除外する。
-  if (!validPackage(pkg) || pkg.private === true || pkg.explicitPrivate === true || pkg.publicRegistry === false) return false;
+/** installed-global例外だけを保つ。lock/SBOM記録はこの関数を使わない。 @example allowGlobalPackage({name:'example',version:'1.0.0',ecosystem:'npm'}) */
+export function allowGlobalPackage(pkg, { queryUnknownGlobals = true } = {}) {
+  if (!validPackage(pkg) || pkg.private === true || pkg.explicitPrivate === true || pkg.publicRegistry === false || ['private', 'git', 'local'].includes(pkg.origin)) return false;
   const source = typeof pkg.source === 'string' ? pkg.source : pkg.source?.type || '';
-  const sourceType = pkg.sourceType || source;
-  if (/(?:^|[:+/\s])(?:local|file|link|workspace|git|private)(?:[:+/\s]|$)/i.test(sourceType)) return false;
-  for (const reference of [pkg.resolved, pkg.registry, /^https?:/.test(source) ? source : null]) {
-    if (reference && !publicResolution(reference)) return false;
-  }
-  return true;
+  if (/(?:^|[:+/\s])(?:local|file|link|workspace|git|private)(?:[:+/\s]|$)/i.test(pkg.sourceType || source)) return false;
+  const references = [pkg.resolved, pkg.registry, /^https?:/.test(source) ? source : null].filter(Boolean);
+  if (references.some(reference => !publicResolution(reference, pkg.ecosystem))) return false;
+  return queryUnknownGlobals || pkg.publicRegistry === true || references.length > 0;
 }
 
-/**
- * 解決先が明示された場合だけ公開レジストリと照合する。
- * フォールバック抽出がローカル参照や非公開レジストリの名前を外部に送らないために呼ぶ。
- * @returns 公開レジストリの HTTP(S) URL なら true。
- */
-function publicResolution(value) {
-  try {
-    const url = new URL(value);
-    return ['http:', 'https:'].includes(url.protocol) && PUBLIC_HOSTS.has(url.hostname)
-      && !url.username && !url.password && !url.search;
-  } catch { return false; }
+/** payloadの全追加フィールドを落とす。送信前にexact identifierを再検証する。 @example queryPayload([{name:'a',version:'1.0.0',ecosystem:'npm'}]) */
+export function queryPayload(packages, tokens = new Map()) {
+  if (!Array.isArray(packages) || packages.length > 100 || packages.some(pkg => !validPackage(pkg))) throw new SweepError('FORMAT', { cause: 'malformed', operation: 'packages' });
+  return { queries: packages.map(pkg => ({ package: { name: pkg.name, ecosystem: pkg.ecosystem }, version: pkg.version,
+    ...(tokens.get(packageKey(pkg)) ? { page_token: tokens.get(packageKey(pkg)) } : {}) })) };
 }
 
-/**
- * osv-scanner がない環境で、対応ロック形式から確定した版だけを抽出する。
- * YAML/TOML の汎用パーサではなく限定した構文を扱うため、不完全な形式は coverage に残す。
- * @param filename - 形式判定に使うファイル名。
- * @param content - ローカルだけで処理し、出力に転載しないロック本文。
- * @returns パッケージ一覧、除外件数、形式対応の状態。
- * @example
- * extractLockfile('package-lock.json', '{"packages":{}}');
- */
-export function extractLockfile(filename, content) {
-  const packages = [];
-  let skipped = 0;
-  const add = (name, version, ecosystem, publicSource) => {
-    const pkg = { name, version, ecosystem };
-    if (publicSource && validPackage(pkg)) packages.push(pkg);
-    else skipped++;
-  };
-  const base = path.basename(filename);
-  // npm v2/v3 の解決 URL を使い、workspace と private registry を除外する。
-  if (['package-lock.json', 'npm-shrinkwrap.json'].includes(base)) {
-    const data = JSON.parse(content);
-    if (data.packages) {
-      for (const [location, pkg] of Object.entries(data.packages)) {
-        if (!location || pkg.link) continue;
-        const name = pkg.name || location.split('node_modules/').at(-1);
-        add(name, pkg.version, 'npm', publicResolution(pkg.resolved));
-      }
-      return { packages, skipped, status: skipped ? 'partial' : 'complete' };
-    }
-    return { packages, skipped, status: 'unsupported', reason: 'npm v1 ロックは外部スキャナが必要' };
-  }
-  // pnpm の package/snapshot キーだけを抽出し、importer の要求範囲は採用しない。
-  if (base === 'pnpm-lock.yaml') {
-    let section = '';
-    const lines = content.split('\n');
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (/^[a-zA-Z][^ ]*:/.test(line)) section = line.split(':')[0];
-      if (section !== 'packages') continue;
-      const key = line.match(/^  ['"]?([^\s]+?)['"]?:\s*(?:\{\})?\s*$/)?.[1];
-      if (!key) continue;
-      const clean = key.replace(/^\//, '').replace(/\([^)]*\)/g, '');
-      const parsed = clean.match(/^(@[^/]+\/[^@/]+|[^@/]+)@([^/]+)$/)
-        || clean.match(/^(@[^/]+\/[^/]+|[^/]+)\/([^/]+)$/);
-      if (!parsed) { skipped++; continue; }
-      // tarball の独自 URL があれば公開性が確かでないものを除外する。
-      let blockEnd = i + 1;
-      while (blockEnd < lines.length && !/^(?:\S|  \S)/.test(lines[blockEnd])) blockEnd++;
-      const block = lines.slice(i + 1, blockEnd).join('\n');
-      const tarball = block.match(/tarball:\s*['"]?([^\s,'"}]+)/)?.[1];
-      add(parsed[1], parsed[2], 'npm', !tarball || publicResolution(tarball));
-    }
-    return { packages, skipped, status: 'partial', reason: 'pnpm の限定構文抽出。レジストリ設定は読まないため公開性・全形式の確認には限界あり' };
-  }
-  // Cargo の crates.io source と uv/Poetry の公開 source だけを扱う。
-  if (['Cargo.lock', 'uv.lock', 'poetry.lock'].includes(base)) {
-    for (const block of content.split(/^\[\[package\]\]\s*$/m).slice(1)) {
-      const name = block.match(/^name\s*=\s*"([^"]+)"/m)?.[1];
-      const version = block.match(/^version\s*=\s*"([^"]+)"/m)?.[1];
-      const source = block.match(/^source\s*=\s*"([^"]+)"/m)?.[1];
-      const registry = block.match(/registry\s*=\s*"([^"]+)"/)?.[1];
-      const sourceUrl = block.match(/^url\s*=\s*"([^"]+)"/m)?.[1];
-      const isPublic = base === 'Cargo.lock' ? /^registry\+https:\/\/(?:github\.com\/rust-lang\/crates.io-index|index\.crates\.io\/?)/.test(source || '')
-        : base === 'uv.lock' ? publicResolution(registry) : !/\[package\.source\]/.test(block) || publicResolution(sourceUrl);
-      add(name, version, base === 'Cargo.lock' ? 'crates.io' : 'PyPI', isPublic);
-    }
-    return { packages, skipped, status: 'partial', reason: '限定 TOML 構文の抽出。未対応 source・複数行形式は未確認' };
-  }
-  if (base === 'Pipfile.lock') {
-    const data = JSON.parse(content);
-    const sources = new Map((data._meta?.sources || []).map(s => [s.name, publicResolution(s.url)]));
-    for (const group of ['default', 'develop']) {
-      for (const [name, pkg] of Object.entries(data[group] || {})) {
-        const version = /^==(.+)$/.exec(pkg.version || '')?.[1];
-        add(name, version, 'PyPI', !pkg.path && !pkg.git && sources.get(pkg.index || 'pypi') === true);
-      }
-    }
-    return { packages, skipped, status: skipped ? 'partial' : 'complete' };
-  }
-  if (base === 'go.sum') {
-    for (const line of content.split('\n')) {
-      if (!line.trim()) continue;
-      const [name, rawVersion] = line.split(/\s+/);
-      add(name, rawVersion?.replace(/\/go\.mod$/, ''), 'Go', /^(github\.com|golang\.org|google\.golang\.org|gopkg\.in)\//.test(name));
-    }
-    return { packages, skipped, status: 'partial', reason: 'go.sum は過去の取得版も含む。実際のビルド採用版は未確認' };
-  }
-  return { packages, skipped, status: 'unsupported', reason: 'この形式の抽出には osv-scanner が必要' };
+/** 現在の許可occurrenceと再開照会を結ぶ。由来変更で古い応答を無効にする。 @example queryFingerprint(pkg) */
+function queryFingerprint(pkg) {
+  return digest([pkg.ecosystem, pkg.name, pkg.version, (pkg.occurrences || []).map(record => [record.recordId, record.sourceIdentity, record.origin, record.queryEligible]).sort(), [...(pkg.evidence || [])].sort()]);
 }
 
-/**
- * 任意のメタデータを落として OSV の最小リクエストを組み立てる。
- * {@link queryOsv} が送信直前に呼び、ローカルパスやファイル本文の混入を防ぐ。
- * @returns 名前・版・API の振り分けに必要なエコシステムだけのペイロード。
- */
-export function queryPayload(packages) {
-  return { queries: packages.map(pkg => ({ package: { name: pkg.name, ecosystem: pkg.ecosystem }, version: pkg.version })) };
+/** API応答のID・更新日以外を落とす。継続キャッシュも同じ射影を通る。 @example projectedVuln({id:'GHSA-example'}) */
+function projectedVuln(value) {
+  return value && typeof value.id === 'string' && ADVISORY_ID.test(value.id) ? { id: value.id, modified: iso(value.modified) } : null;
 }
 
-/**
- * 固定 OSV エンドポイントへ最小メタデータだけを問い合わせる。
- * {@link scanPackages} が呼ぶ。応答サイズ、時間、ページ打ち切りは明示して不完全な結果を成功扱いしない。
- * @returns パッケージごとのアドバイザリ ID と coverage。
- */
-export async function queryOsv(packages, { fetchImpl = fetch, deadline = Date.now() + 240_000 } = {}) {
-  const findings = [], coverage = [], successfulKeys = [];
-  let queried = 0;
-  for (let offset = 0; offset < packages.length; offset += 100) {
-    if (Date.now() >= deadline) break;
-    const batch = packages.slice(offset, offset + 100);
-    try {
-      const response = await fetchImpl('https://api.osv.dev/v1/querybatch', { method: 'POST', redirect: 'error',
-        headers: { 'content-type': 'application/json' }, body: JSON.stringify(queryPayload(batch)),
-        signal: AbortSignal.timeout(Math.max(1, Math.min(25_000, deadline - Date.now()))) });
-      if (!response.ok) throw new Error('HTTP');
-      const body = await response.text();
-      if (body.length > 8_000_000) throw new Error('SIZE');
-      const json = JSON.parse(body);
-      if (!Array.isArray(json.results) || json.results.length !== batch.length) throw new Error('SCHEMA');
-      for (let index = 0; index < batch.length; index++) {
-        const pkg = batch[index], result = json.results[index];
-        for (const vuln of result.vulns || []) {
-          if (!/^[A-Za-z0-9_.:-]{1,160}$/.test(vuln.id || '')) continue;
-          findings.push({ id: vuln.id, package: { name: pkg.name, ecosystem: pkg.ecosystem }, version: pkg.version,
-            modified: vuln.modified || null, advisoryType: /^MAL-/.test(vuln.id) ? 'malware' : 'vulnerability', evidence: pkg.evidence, sourceUrl: `https://osv.dev/vulnerability/${encodeURIComponent(vuln.id)}` });
-        }
-        if (!result.next_page_token) successfulKeys.push(packageKey(pkg));
-        if (result.next_page_token) coverage.push({ area: 'osv-pagination', status: 'partial', reason: 'OSV の追加ページあり。今回の結果は全件ではない', count: 1 });
-      }
-      queried += batch.length;
-    } catch {
-      coverage.push({ area: 'osv-batch', status: 'unavailable', reason: 'OSV 問い合わせに失敗、タイムアウトまたは応答形式が不正', count: batch.length });
-    }
+/** query単位のページと部分陽性を保持する。{@link scanPackages}と試験が呼ぶ。 @example await queryOsv(packages, {context,previous}) */
+export async function queryOsv(packages, options = {}) {
+  const context = options.context || options.ctx || createRunContext({ fetchImpl: options.fetchImpl, budgetMs: 240000, home: options.home });
+  const owned = !options.context && !options.ctx;
+  const now = context.wallNow;
+  const deadline = options.deadline ?? now() + 240000;
+  const maxPages = options.maxPages ?? 20;
+  const maxPackages = options.maxPackages ?? 15000;
+  if (!Number.isSafeInteger(maxPages) || maxPages < 1 || maxPages > 100 || !Number.isSafeInteger(maxPackages) || maxPackages < 1 || maxPackages > 15000 || packages.length > 15000) {
+    if (owned) await context.close();
+    throw new SweepError('CONFIG', { cause: 'limit', operation: 'packages' });
   }
-  coverage.push({ area: 'osv-query', status: queried === packages.length ? 'complete' : 'partial', count: queried, total: packages.length,
-    reason: queried === packages.length ? '名前・版・エコシステムだけを照合' : '未照合パッケージあり' });
-  return { findings, coverage, queried, successfulKeys };
-}
-
-/**
- * 影響版の実物を限定件数で確認する。{@link scanPackages} がOSV照合後に呼び、依存コードを実行しない。
- * @returns ロック記録とは別に保存する実物の名前・版・メタデータパス。
- */
-export function inspectInstallations(findings, inventory, { limit = 1200, deadline = Date.now() + 15_000 } = {}) {
-  const observations = new Map();
-  let examined = 0, truncated = false;
-  for (const finding of findings) {
-    if (finding.package?.ecosystem !== 'npm' || !validPackage({ ...finding.package, version: finding.version })) continue;
-    const key = packageKey({ ...finding.package, version: finding.version });
-    if (observations.has(key)) continue;
-    const matches = [];
-    const roots = [...new Set((finding.evidence || []).filter(file => path.isAbsolute(file) && /(?:pnpm-lock.yaml|package-lock.json|npm-shrinkwrap.json)$/.test(file))
-      .flatMap(file => [path.dirname(file), ...(inventory.packageRoots || []).filter(root => root.startsWith(`${path.dirname(file)}/`)).slice(0, 25)]))];
-    const canonicalRoots = roots.flatMap(root => { try { return [fs.realpathSync(root)]; } catch { return []; } });
-    for (const root of roots) {
-      if (examined >= limit || Date.now() >= deadline) { truncated = true; break; }
-      examined++;
-      const filename = path.join(root, 'node_modules', finding.package.name, 'package.json');
-      try {
-        const resolved = fs.realpathSync(filename);
-        const allowed = canonicalRoots.some(candidate => resolved.startsWith(`${candidate}/`)) && resolved.includes('/node_modules/');
-        if (!allowed) continue;
-        const metadata = fs.statSync(resolved);
-        if (!metadata.isFile() || metadata.size > 1024 * 1024) continue;
-        const data = JSON.parse(fs.readFileSync(resolved, 'utf8'));
-        if (data.name === finding.package.name && data.version === finding.version) matches.push({ path: filename, version: data.version });
-      } catch { /* 不在・権限不足を「依存なし」の判定には使用しない。 */ }
-    }
-    observations.set(key, matches);
+  const previous = options.previous || {};
+  const age = now() - Date.parse(previous.cycleStartedAt);
+  const continuationVerified = options.continuationVerified === true || context.continuationVerified === true;
+  const resume = continuationVerified && age >= 0 && age < DAY && Array.isArray(previous.pendingPackageKeys) && (previous.pendingPackageKeys.length > 0 || options.holdForDetails === true);
+  const oldList = resume && Array.isArray(previous.queries) ? previous.queries : [];
+  if (oldList.length > 15000 || oldList.some(query => Array.isArray(query?.vulns) && query.vulns.length > 5000) || oldList.reduce((count, query) => count + (Array.isArray(query?.vulns) ? query.vulns.length : 0), 0) > MAX_FINDINGS) {
+    if (owned) await context.close();
+    throw new SweepError('CAPACITY', { cause: 'limit', operation: 'packages' });
   }
-  return { observations, coverage: { area: 'package-installations', status: truncated ? 'partial' : 'complete', count: examined,
-    reason: '影響版のnpm package.jsonだけを限定確認。不一致・不在は実行依存の不在を証明しない。依存コードは未実行' } };
-}
-
-/**
- * 棚卸しで見つけたロックファイルを、実行せずに解析して OSV に照合する。
- * CLI と検証コードが呼ぶ。スキャナは offline 解析に限定し、外部送信は {@link queryPayload} を通す。
- * @returns 証拠パスを含むローカル用 JSON。秘密値やロック本文は含まない。
- */
-export async function scanPackages(inventory, options = {}) {
-  const started = Date.now(), budget = Math.min(options.budgetMs || 480_000, 600_000), deadline = started + budget;
-  const maxLockfiles = options.maxLockfiles || 400, maxPackages = options.maxPackages || 15000;
-  const coverage = [], commands = [], packageMap = new Map();
-  const add = (pkg, evidence) => {
-    if (!validPackage(pkg)) return;
-    const key = `${pkg.ecosystem}\0${pkg.name}\0${pkg.version}`;
-    const current = packageMap.get(key) || { name: pkg.name, ecosystem: pkg.ecosystem, version: pkg.version, evidence: [] };
-    if (evidence && !current.evidence.includes(evidence)) current.evidence.push(evidence);
-    packageMap.set(key, current);
-  };
-  const previous = options.continuation || {};
-  const planned = planLockfiles(inventory.lockfiles || [], previous, (inventory.executionContexts || []).map(context => context.cwd).filter(Boolean));
-  const lockfiles = planned.slice(0, maxLockfiles);
-  const probe = options.noScanner ? { status: null } : spawnSync('osv-scanner', ['--version'], { encoding: 'utf8', timeout: 5000, maxBuffer: 4096, env: { PATH: process.env.PATH, HOME: process.env.HOME } });
-  const scannerPresent = probe.status === 0 && /\b2\./.test(probe.stdout || '');
-  commands.push({ command: 'osv-scanner --version', status: scannerPresent ? 'complete' : 'unavailable', exitCode: probe.status });
-  let processed = 0, omitted = 0;
-  const attempted = new Set(), completed = { ...(previous.completed || {}) };
-  // スキャナに渡すのは明示された lockfile のみ。プロジェクト全体や Git 履歴は渡さない。
-  for (const lockfile of lockfiles) {
-    if (Date.now() >= deadline - 120_000) break;
-    const filename = typeof lockfile === 'string' ? lockfile : lockfile.path;
-    if (typeof filename !== 'string' || !path.isAbsolute(filename)) continue;
-    attempted.add(filename);
-    completed[filename] = `${lockfile.size ?? ''}:${lockfile.modifiedAt ?? ''}`;
-    try {
-      const stat = fs.lstatSync(filename);
-      if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 25_000_000) {
-        coverage.push({ area: 'lockfile', path: filename, status: 'partial', reason: '通常ファイル以外、または 25 MB 上限超過' }); continue;
-      }
-      let extracted = false;
-      // スキャナが source 情報を省略する形式でも、ロックに明示された私有 URL を許可しない。
-      const localPolicy = extractLockfile(filename, fs.readFileSync(filename, 'utf8'));
-      const permitted = localPolicy.status === 'unsupported' ? null : new Set(localPolicy.packages.map(pkg => `${pkg.ecosystem}\0${pkg.name}\0${pkg.version}`));
-      if (scannerPresent && !options.noScanner) {
-        const argv = ['scan', 'source', '--offline', '--no-resolve', '--no-call-analysis=all', '--all-packages', '--format=json', '--config=/dev/null', '--lockfile', filename];
-        const time = Date.now();
-        const result = spawnSync('osv-scanner', argv, { encoding: 'utf8', timeout: 20_000, maxBuffer: 20_000_000,
-          env: { PATH: process.env.PATH, HOME: process.env.HOME, NO_COLOR: '1' } });
-        commands.push({ command: `osv-scanner scan source --offline --no-resolve --no-call-analysis=all --all-packages --format=json --config=/dev/null --lockfile ${JSON.stringify(filename)}`, status: result.error ? 'unavailable' : 'complete', exitCode: result.status, elapsedMs: Date.now() - time });
-        try {
-          const data = JSON.parse(result.stdout);
-          if (Array.isArray(data.results)) {
-            let count = 0, skipped = 0;
-            for (const source of data.results) {
-              for (const entry of source.packages || []) {
-                const pkg = entry.package || {};
-                // pnpm 等は source 注記を持たないため通常の registry 識別子を許容し、明示した私有・ローカル source は除外する。
-                const explicitSource = /(?:[?&])source=([^&]+)/.exec(pkg.purl || '')?.[1];
-                const registry = !explicitSource || explicitSource === 'PUBLIC_REGISTRY';
-                const permittedByLock = !permitted || permitted.has(`${pkg.ecosystem}\0${pkg.name}\0${pkg.version}`);
-                if (registry && permittedByLock && validPackage(pkg)) { add(pkg, filename); count++; }
-                else skipped++;
-              }
-            }
-            omitted += skipped;
-            const unexpectedError = result.status !== 0 && result.status !== 1 && !/no offline version of the OSV database is available/.test(result.stderr || '');
-            coverage.push({ area: 'lockfile', path: filename, status: skipped || result.error || unexpectedError || count === 0 ? 'partial' : 'complete', count, skipped,
-              reason: 'osv-scanner を通信なしの抽出に使用。offline DB 未保存の非ゼロ終了は OSV API で別途照合' });
-            extracted = true;
-          }
-        } catch { /* 抽出失敗は限定パーサにフォールバックし、元の出力は保存しない。 */ }
-      }
-      if (!extracted) {
-        const result = localPolicy;
-        for (const pkg of result.packages) add(pkg, filename);
-        omitted += result.skipped;
-        coverage.push({ area: 'lockfile', path: filename, status: result.status, reason: result.reason || '公開レジストリの固定版を抽出', count: result.packages.length, skipped: result.skipped });
-      }
-      processed++;
-    } catch {
-      coverage.push({ area: 'lockfile', path: filename, status: 'unavailable', reason: '読み取り権限、構文、またはファイルの状態により抽出できなかった' });
-    }
+  const oldQueries = new Map(oldList.map(query => [query.key, query]));
+  const unique = new Map(packages.filter(validPackage).map(pkg => [packageKey(pkg), pkg]));
+  const states = new Map();
+  for (const [key, pkg] of unique) {
+    const fingerprint = queryFingerprint(pkg), old = oldQueries.get(key);
+    const usable = old?.fingerprint === fingerprint;
+    const vulns = (usable && Array.isArray(old.vulns) ? old.vulns : []).map(projectedVuln).filter(Boolean);
+    const token = usable && typeof old.pageToken === 'string' && old.pageToken.length <= 4096 && !/[\x00-\x1f]/.test(old.pageToken) ? old.pageToken : null;
+    states.set(key, { key, fingerprint, pageToken: token, vulns, complete: usable && old.complete === true });
   }
-  // ユーザーが名前・版の送信を許可しているため、通常パッケージは入手元不明でも照合する。
-  let unverifiedGlobals = 0;
-  for (const pkg of inventory.globalPackages || []) {
-    if (allowGlobalPackage(pkg)) {
-      add(pkg, typeof pkg.evidence === 'string' ? pkg.evidence : 'グローバルパッケージ');
-      if (pkg.publicRegistry !== true && !publicResolution(pkg.resolved || pkg.registry || '')) unverifiedGlobals++;
-    } else omitted++;
-  }
-  coverage.push({ area: 'global-package-origins', status: unverifiedGlobals ? 'partial' : 'complete', count: unverifiedGlobals,
-    reason: unverifiedGlobals ? '入手元を独立検証できない通常パッケージも名前・版だけ照合した。明示した私有・ローカル・Git 由来は除外' : '照合対象グローバルパッケージの出所不明項目なし' });
-  const pendingKeys = new Set(previous.pendingPackageKeys || []);
-  const allPackages = [...packageMap.values()].sort((a, b) => Number(pendingKeys.has(packageKey(b))) - Number(pendingKeys.has(packageKey(a))));
-  const catalogSignature = createHash('sha256').update(JSON.stringify(allPackages.map(pkg => [packageKey(pkg), [...pkg.evidence].sort()]).sort())).digest('hex');
-  const resumeCycle = previous.catalogSignature === catalogSignature && (previous.pendingPackageKeys || []).length > 0
-    && Date.now() - Date.parse(previous.cycleStartedAt) < 86400000;
-  const currentPackages = new Map(allPackages.map(pkg => [packageKey(pkg), pkg]));
-  const completedKeys = new Set((resumeCycle ? previous.completedPackageKeys || [] : []).filter(key => currentPackages.has(key)));
-  const packages = allPackages.filter(pkg => !completedKeys.has(packageKey(pkg))).slice(0, maxPackages);
-  coverage.push({ area: 'lockfiles', status: processed === (inventory.lockfiles || []).length ? 'complete' : 'partial', deferred: attempted.size < planned.length, count: processed, total: planned.length, elapsedMs: Date.now() - started,
-    reason: '未処理ファイルを継続情報に保存し、次回は現在の棚卸し内の残りから再開' });
-  coverage.push({ area: 'package-extraction', status: omitted ? 'partial' : 'complete', count: allPackages.length, total: allPackages.length, skipped: omitted,
-    reason: '明示された非公開・ローカル参照・未対応形式・件数制限を除外。通常 registry の名前と版のみ送信。source のない pnpm 等は公開性を独立検証できない' });
-  const response = options.offline ? { findings: [], successfulKeys: [], coverage: [{ area: 'osv-query', status: 'skipped', reason: '検証用 offline 指定' }] } : await queryOsv(packages, { deadline, fetchImpl: options.fetchImpl });
-  coverage.push(...response.coverage.filter(entry => entry.area !== 'osv-query'));
-  if (!options.offline) commands.push({ command: 'POST https://api.osv.dev/v1/querybatch （名前・版・エコシステムのみ、100 件ずつ）', status: response.coverage.some(c => c.status !== 'complete') ? 'partial' : 'complete', count: response.queried });
-  const success = new Set(options.offline ? packages.map(packageKey) : response.successfulKeys);
-  for (const key of success) completedKeys.add(key);
-  const pendingPackages = allPackages.filter(pkg => !completedKeys.has(packageKey(pkg)));
-  const queriedNow = new Set(packages.map(packageKey));
-  // 継続キャッシュも現在の許可対象と交差させ、未知の追加フィールドや古い証拠元を復元しない。
-  const cachedFindings = (resumeCycle ? previous.findingCache || [] : []).flatMap(finding => {
-    const key = packageKey({ ...finding.package, version: finding.version }), current = currentPackages.get(key);
-    if (!current || queriedNow.has(key) || !/^[A-Za-z0-9_.:-]{1,160}$/.test(finding.id || '')) return [];
-    return [{ id: finding.id, package: { name: current.name, ecosystem: current.ecosystem }, version: current.version,
-      modified: typeof finding.modified === 'string' ? finding.modified : null, advisoryType: finding.advisoryType === 'malware' || /^MAL-/.test(finding.id) ? 'malware' : 'vulnerability',
-      evidence: current.evidence, sourceUrl: `https://osv.dev/vulnerability/${encodeURIComponent(finding.id)}` }];
+  const preferred = (Array.isArray(previous.pendingPackageKeys) ? previous.pendingPackageKeys : []).filter(key => states.has(key) && !states.get(key).complete);
+  let queue = [...new Set([...preferred, ...[...states.keys()].sort().filter(key => !states.get(key).complete)])];
+  const attempted = new Set(), succeeded = new Set(), blocked = new Set(), restarted = new Set();
+  const coverage = [];
+  let pages = 0, overflow = false;
+  const continuation = () => ({ schemaVersion: 2, queries: [...states.values()].map(state => ({ ...state, vulns: state.vulns.map(vuln => ({ ...vuln })) })).sort((a, b) => a.key.localeCompare(b.key)),
+    pendingPackageKeys: queue.filter(key => !states.get(key).complete), cycleStartedAt: resume ? previous.cycleStartedAt : new Date(now()).toISOString() });
+  const findings = () => [...states.values()].flatMap(state => {
+    const pkg = unique.get(state.key);
+    return state.vulns.map(vuln => ({ ...vuln, package: { name: pkg.name, ecosystem: pkg.ecosystem }, version: pkg.version,
+      evidence: [...(pkg.evidence || [])], occurrences: pkg.occurrences || [], evidenceKind: pkg.evidenceKind || 'lock-declaration',
+      advisoryType: /^MAL-/.test(vuln.id) ? 'malware' : 'vulnerability', sourceUrl: `https://osv.dev/vulnerability/${vuln.id}` }));
   });
-  const findings = [...cachedFindings, ...response.findings];
-  coverage.push(options.offline ? response.coverage.find(entry => entry.area === 'osv-query') : { area: 'osv-query', status: pendingPackages.length ? 'partial' : 'complete',
-    deferred: pendingPackages.length > 0, count: completedKeys.size, total: allPackages.length,
-    reason: '同一の抽出対象だけ、24時間以内の処理継続で成功済み照会と陽性結果を保持。対象変更・完了後は新しい巡回として再照会' });
-  const deferredFiles = new Set(pendingPackages.flatMap(pkg => pkg.evidence).filter(file => planned.some(lock => (typeof lock === 'string' ? lock : lock.path) === file)));
-  const pendingLockfiles = [...new Set([...planned.map(lock => typeof lock === 'string' ? lock : lock.path).filter(file => !attempted.has(file)),
-    ...coverage.filter(entry => entry.area === 'lockfile' && entry.status !== 'complete').map(entry => entry.path), ...deferredFiles])];
-  const material = options.inspectInstallations === false ? null : inspectInstallations(findings, inventory, { deadline: Math.min(deadline, Date.now() + 15_000) });
-  if (material) {
-    coverage.push(material.coverage);
-    for (const finding of findings) finding.installationEvidence = material.observations.get(packageKey({ ...finding.package, version: finding.version })) || [];
-  }
-  return { schemaVersion: 1, scannedAt: new Date().toISOString(), elapsedMs: Date.now() - started, packages: allPackages, findings, coverage, commands,
-    continuation: { pendingLockfiles, pendingPackageKeys: pendingPackages.map(packageKey), completedPackageKeys: [...completedKeys], catalogSignature,
-      cycleStartedAt: resumeCycle ? previous.cycleStartedAt : new Date().toISOString(), findingCache: pendingPackages.length ? findings : [],
-      completed: Object.fromEntries(planned.map(lock => typeof lock === 'string' ? lock : lock.path).filter(file => completed[file]).map(file => [file, completed[file]])) } };
+  try {
+    while (queue.length && pages < maxPages && now() < deadline && !context.signal.aborted) {
+      const keys = [];
+      for (const key of queue) {
+        if (keys.length >= Math.min(200, (maxPages - pages) * 100)) break;
+        if (blocked.has(key) || !attempted.has(key) && attempted.size >= maxPackages) continue;
+        attempted.add(key); keys.push(key);
+      }
+      if (!keys.length) break;
+      // 独立した100件batchを最大2本だけ送る。全体・host制限は共通contextが所有する。
+      const groups = keys.length > 100 ? [keys.slice(0, 100), keys.slice(100)] : [keys];
+      await Promise.all(groups.map(async groupKeys => {
+      const tokens = new Map(groupKeys.map(key => [key, states.get(key).pageToken]));
+      const batch = groupKeys.map(key => unique.get(key));
+      pages += 1;
+      try {
+        context.check();
+        const response = await context.request('https://api.osv.dev/v1/querybatch', { method: 'POST', body: JSON.stringify(queryPayload(batch, tokens)), maxBytes: LIMITS.http,
+          timeoutMs: Math.max(1, Math.min(25000, deadline - now())) });
+        if (response.status === 400 && groupKeys.some(key => tokens.get(key))) {
+          // 失効tokenだけを一度先頭へ戻し、過去の陽性を消さない。
+          for (const key of groupKeys) {
+            if (tokens.get(key) && !restarted.has(key)) { restarted.add(key); states.get(key).pageToken = null; }
+            else blocked.add(key);
+          }
+        } else {
+          if (!response.ok) throw new SweepError('HTTP', { cause: response.status === 429 ? 'cooldown' : 'http', operation: 'packages' });
+          const body = boundedJson(await response.text(), { maxRecords: 100000 });
+          if (!Array.isArray(body.results) || body.results.length !== batch.length) throw new SweepError('FORMAT', { cause: 'malformed', operation: 'packages' });
+          for (let index = 0; index < groupKeys.length; index += 1) {
+            const key = groupKeys[index], result = body.results[index], state = states.get(key);
+            if (!result || typeof result !== 'object' || Array.isArray(result) || result.vulns !== undefined && !Array.isArray(result.vulns)
+              || result.next_page_token !== undefined && (typeof result.next_page_token !== 'string' || result.next_page_token.length > 4096 || /[\x00-\x1f]/.test(result.next_page_token))) {
+              blocked.add(key); coverage.push({ area: 'osv-page', status: 'partial', diagnostic: safeDiagnostic(new SweepError('FORMAT', { cause: 'malformed', operation: 'packages' })) }); continue;
+            }
+            const projected = (result.vulns || []).map(projectedVuln);
+            if (projected.some(value => !value)) { blocked.add(key); coverage.push({ area: 'osv-page', status: 'partial', diagnostic: safeDiagnostic(new SweepError('FORMAT', { cause: 'malformed', operation: 'packages' })) }); continue; }
+            const merged = new Map([...state.vulns, ...projected].map(vuln => [vuln.id, vuln]));
+            const total = [...states.values()].reduce((sum, item) => sum + item.vulns.length, 0) - state.vulns.length + merged.size;
+            if (merged.size > 5000 || total > MAX_FINDINGS) { overflow = true; blocked.add(key); continue; }
+            state.vulns = [...merged.values()].sort((a, b) => a.id.localeCompare(b.id));
+            state.pageToken = result.next_page_token || null;
+            state.complete = !state.pageToken;
+            succeeded.add(key);
+            // 同じtokenの反復でも無限照会しない。
+            if (state.pageToken && state.pageToken === tokens.get(key)) blocked.add(key);
+          }
+        }
+      } catch (error) {
+        groupKeys.forEach(key => blocked.add(key));
+        coverage.push({ area: 'osv-batch', status: 'partial', count: groupKeys.length, diagnostic: safeDiagnostic(error, 'HTTP', 'packages') });
+      }
+      }));
+      // 処理した未完了項目を後ろへ回す。一部失敗が他のqueryを止めない。
+      const selected = new Set(keys);
+      queue = [...queue.filter(key => !selected.has(key) && !states.get(key).complete), ...keys.filter(key => !states.get(key).complete)];
+      await options.onProgress?.({ findings: findings(), continuation: continuation(), coverage: [{ area: 'osv-query', status: queue.length ? 'partial' : 'complete', count: [...states.values()].filter(state => state.complete).length, total: states.size }] });
+    }
+    const pendingPackageKeys = queue.filter(key => !states.get(key).complete);
+    const successfulKeys = [...states.values()].filter(state => state.complete).map(state => state.key);
+    if (pendingPackageKeys.some(key => states.get(key).pageToken)) coverage.push({ area: 'osv-pagination', status: 'partial', count: pendingPackageKeys.filter(key => states.get(key).pageToken).length, reason: 'queryごとの追加ページを次回へ保持' });
+    if (overflow) coverage.push({ area: 'osv-capacity', status: 'partial', diagnostic: safeDiagnostic(new SweepError('CAPACITY', { cause: 'limit', operation: 'packages' })) });
+    coverage.push({ area: 'osv-query', status: pendingPackageKeys.length ? 'partial' : 'complete', count: successfulKeys.length, total: states.size, deferred: pendingPackageKeys.length > 0,
+      reason: '現在の由来と一致する24時間以内の未完了照会だけ再開。全ページ成功を完了とする' });
+    return { findings: findings(), coverage, queried: succeeded.size, successfulKeys, continuation: continuation() };
+  } finally { if (owned) await context.close(); }
+}
+
+/** 現在の設定から認可済みrootを取り出す。過去のqueueから範囲を広げない。 @example approvedRoots(inventory,context) */
+function approvedRoots(inventory, context) {
+  return [...new Set((inventory.projectRoots || inventory.scanRoots || context.config.scanRoots || []).map(root => typeof root === 'string' ? root : root.path)
+    .filter(root => allowedProjectRoot(context.home, root)))];
+}
+
+/** 影響版の実物だけを読み、宣言と実物を分ける。依存コードは実行しない。 @example await inspectInstallations(findings,inventory,{context}) */
+export async function inspectInstallations(findings, inventory, options = {}) {
+  const context = options.context || options.ctx || createRunContext({ home: options.home, config: { scanRoots: options.projectRoots || inventory.scanRoots || [] } });
+  const owned = !options.context && !options.ctx;
+  const observations = new Map(), details = [];
+  const allowed = approvedRoots(inventory, context);
+  let examined = 0, truncated = false;
+  try {
+    for (const finding of findings) {
+      if (finding.package?.ecosystem !== 'npm' || !validPackage({ ...finding.package, version: finding.version })) continue;
+      const key = packageKey({ ...finding.package, version: finding.version });
+      if (observations.has(key)) continue;
+      const matches = [];
+      const roots = [...new Set((finding.evidence || []).filter(file => typeof file === 'string' && path.isAbsolute(file) && identifyFormat(file))
+        .flatMap(file => [path.dirname(file), ...(inventory.packageRoots || []).filter(root => within(path.dirname(file), root)).slice(0, 25)]))];
+      for (const root of roots) {
+        if (examined >= (options.limit ?? 1200) || context.signal.aborted || context.wallNow() >= (options.deadline ?? Infinity)) { truncated = true; break; }
+        if (!allowed.some(candidate => within(candidate, root))) { details.push({ area: 'package-installation', status: 'excluded', policyExcluded: true }); continue; }
+        examined += 1;
+        const filename = path.join(root, 'node_modules', finding.package.name, 'package.json');
+        try {
+          const data = await context.io.readJson(filename, { roots: allowed, purpose: 'project', maxBytes: 1024 * 1024 });
+          const installed = { ...data, ecosystem: 'npm', resolved: data._resolved || data.resolved, sourceType: data._from || data.sourceType };
+          if (data.name === finding.package.name && data.version === finding.version && allowGlobalPackage(installed)) matches.push({ path: filename, name: data.name, ecosystem: 'npm', version: data.version, evidenceKind: 'installed-metadata' });
+        } catch (error) { if (readStatus(error) !== 'absent') details.push({ area: 'package-installation', status: readStatus(error), diagnostic: safeDiagnostic(error, 'READ', 'packages') }); }
+      }
+      observations.set(key, matches);
+    }
+    return { observations, coverage: { area: 'package-installations', status: truncated || details.length ? 'partial' : 'complete', count: examined,
+      reason: '影響版と名前が一致する実物だけを観測。不在は未使用・未実行の証明にしない' }, details };
+  } finally { if (owned) await context.close(); }
+}
+
+/** lock/globalの由来を維持し、最小payloadへ接続する。CLIと巡回本体が共有する。 @example await scanPackages(inventory,{context,continuation}) */
+export async function scanPackages(inventory, options = {}) {
+  const context = options.context || options.ctx || createRunContext({ home: options.home, config: { scanRoots: options.projectRoots || inventory.scanRoots || [], queryUnknownGlobals: options.queryUnknownGlobals ?? true },
+    fetchImpl: options.fetchImpl, budgetMs: options.budgetMs ?? 480000 });
+  const owned = !options.context && !options.ctx;
+  const started = context.wallNow();
+  const coverage = [], commands = [], records = [], parsedFiles = [];
+  const roots = approvedRoots(inventory, context);
+  const previous = options.continuation || options.previous || {};
+  const maxLockfiles = options.maxLockfiles ?? 400, maxPackages = options.maxPackages ?? 15000;
+  if (![maxLockfiles, maxPackages].every(number => Number.isSafeInteger(number) && number > 0 && number <= 15000)) { if (owned) await context.close(); throw new SweepError('CONFIG', { cause: 'limit', operation: 'packages' }); }
+  const lockfiles = (inventory.lockfiles || []).map(lock => typeof lock === 'string' ? { path: lock } : lock).filter(lock => typeof lock.path === 'string' && path.isAbsolute(lock.path));
+  const pendingFirst = new Set(previous.pendingLockfiles || []);
+  lockfiles.sort((a, b) => Number(pendingFirst.has(b.path)) - Number(pendingFirst.has(a.path)) || a.path.localeCompare(b.path));
+  const oldFiles = new Map((Array.isArray(previous.parsedFiles) ? previous.parsedFiles : []).map(file => [file.path, file]));
+  const pendingLockfiles = [];
+  let processed = 0, revalidated = 0;
+  try {
+    let scannerAvailable = false, invalidLockRecords = 0;
+    if (!options.noScanner && lockfiles.length) {
+      try {
+        const probe = await context.command('osv-scanner', ['--version'], { timeoutMs: 5000, maxBytes: 4096 });
+        scannerAvailable = probe.code === 0 && /\b2\.\d+/.test(probe.stdout);
+        commands.push({ operation: 'osv-scanner-version', status: scannerAvailable ? 'complete' : 'unsupported' });
+      } catch (error) { commands.push({ operation: 'osv-scanner-version', status: 'unavailable', diagnostic: safeDiagnostic(error, 'TOOL', 'packages') }); }
+    }
+    for (const lock of lockfiles) {
+      if (!roots.some(root => within(root, lock.path))) { coverage.push({ area: 'lockfile', status: 'excluded', policyExcluded: true, path: lock.path, reason: '現在の認可済みproject rootの外側' }); continue; }
+      try {
+        context.check();
+        const stat = await context.io.inspect(lock.path, { roots, purpose: 'project' });
+        if (!stat.metadata.isFile()) throw new SweepError('BOUNDARY', { cause: 'boundary', operation: 'packages' });
+        const old = oldFiles.get(lock.path);
+        const unchanged = (options.continuationVerified === true || context.continuationVerified === true) && old?.sourceIdentity === stat.identity && old.parserVersion === 2;
+        if (!unchanged && processed >= maxLockfiles) { pendingLockfiles.push(lock.path); continue; }
+        // 永続cacheから公開性を復元しない。送信の根拠は毎回現在のbounded本文を再解析する。
+        const extracted = await context.io.withVerifiedFile(lock.path, { roots, purpose: 'project', maxBytes: LIMITS.lock }, async ({ fd, bytes, identity }) => {
+            if (identity !== stat.identity) throw new SweepError('BOUNDARY', { cause: 'identity', operation: 'packages' });
+            const parsed = extractLockfile(lock.path, bytes.toString('utf8'), { sourceIdentity: identity });
+            if (!unchanged && scannerAvailable && identifyFormat(lock.path)?.parsing) {
+              try {
+                const output = await context.command('osv-scanner', ['scan', 'source', '--offline', '--no-resolve', '--no-call-analysis=all', '--all-packages', '--format=json', '--config=/dev/null', '--lockfile', `${path.basename(lock.path)}:/dev/fd/3`],
+                  { inputFd: fd, timeoutMs: 20000, maxBytes: LIMITS.lock });
+                const data = boundedJson(output.stdout, { maxRecords: 100000 });
+                if (!Array.isArray(data.results)) throw new SweepError('FORMAT', { cause: 'malformed', operation: 'packages' });
+                const observed = new Set(data.results.flatMap(result => Array.isArray(result.packages) ? result.packages : []).map(entry => entry.package).filter(validPackage).map(packageKey));
+                const confirmed = parsed.records.filter(record => record.queryEligible && observed.has(packageKey(record))).length;
+                // scannerは補助証拠だけ。source省略や別recordの公開性を転用しない。
+                commands.push({ operation: 'osv-scanner-offline', status: [0, 1].includes(output.code) ? 'complete' : 'partial',
+                  metadataStatus: 'complete', vulnerabilityAssessment: 'not-performed', confirmed, extracted: observed.size, exitCode: output.code });
+              } catch (error) { commands.push({ operation: 'osv-scanner-offline', status: 'partial', diagnostic: safeDiagnostic(error, 'COMMAND', 'packages') }); }
+            }
+            return parsed;
+        });
+        if (unchanged) revalidated += 1; else processed += 1;
+        const current = extracted.records.map(record => ({ ...record, path: lock.path, location: lock.path }));
+        invalidLockRecords += extracted.invalid || 0;
+        records.push(...current);
+        parsedFiles.push({ path: lock.path, sourceIdentity: stat.identity, parserVersion: 2, status: extracted.status });
+        coverage.push({ area: 'lockfile', path: lock.path, status: extracted.status, count: current.length, skipped: extracted.skipped,
+          excluded: extracted.excluded || 0, unknown: extracted.unknown || 0, invalid: extracted.invalid || 0, reason: extracted.reason,
+          ...(extracted.diagnostic ? { diagnostic: extracted.diagnostic } : {}) });
+      } catch (error) { pendingLockfiles.push(lock.path); coverage.push({ area: 'lockfile', path: lock.path, status: readStatus(error), diagnostic: safeDiagnostic(error, 'READ', 'packages') }); }
+      if (records.length > 15000) throw new SweepError('CAPACITY', { cause: 'limit', operation: 'packages' });
+    }
+    let unverifiedGlobals = 0, excludedGlobals = 0, unknownGlobals = 0, invalidGlobals = 0;
+    for (const [index, pkg] of (inventory.globalPackages || []).entries()) {
+      if (!validPackage(pkg)) { invalidGlobals += 1; continue; }
+      const legacyEligible = allowGlobalPackage(pkg, { queryUnknownGlobals: true });
+      const eligible = allowGlobalPackage(pkg, { queryUnknownGlobals: options.queryUnknownGlobals ?? context.config.queryUnknownGlobals ?? true });
+      const publicOrigin = pkg.publicRegistry === true || [pkg.registry, pkg.resolved].some(reference => publicResolution(reference, pkg.ecosystem));
+      const origin = ['private', 'git', 'local'].includes(pkg.origin) ? pkg.origin : !legacyEligible ? 'private' : publicOrigin ? 'public' : 'unknown';
+      const unknown = origin === 'unknown';
+      if (unknown) unknownGlobals += 1;
+      if (unknown && eligible) unverifiedGlobals += 1;
+      if (!eligible) excludedGlobals += 1;
+      const evidence = typeof pkg.evidence === 'string' && path.isAbsolute(pkg.evidence) ? pkg.evidence : null;
+      records.push({ name: pkg.name, version: pkg.version, ecosystem: pkg.ecosystem, origin, queryEligible: eligible, policyExcluded: !eligible,
+        ...(!eligible ? { exclusion: unknown ? 'unknown-global-opt-out' : 'non-public-origin' } : {}),
+        recordId: digest(['global', index, pkg.ecosystem, pkg.name, pkg.version, evidence]), sourceIdentity: digest([pkg.ecosystem, pkg.name, pkg.version, evidence, origin, eligible]),
+        evidenceKind: 'installed-metadata', evidenceScope: 'host', path: evidence, location: evidence, originException: unknown && eligible, optional: false, platform: context.platform });
+    }
+    // SBOMには由来不明global例外を適用せず、検証済み画像との結合だけを扱う。
+    for (const pkg of inventory.sbomPackages || []) {
+      if (!validPackage(pkg) || !/^sha256:[a-f0-9]{64}$/.test(pkg.imageDigest || '')) continue;
+      records.push({ name: pkg.name, version: pkg.version, ecosystem: pkg.ecosystem, origin: pkg.origin === 'public' ? 'public' : 'unknown',
+        queryEligible: pkg.publicRegistry === true && pkg.origin === 'public' && !pkg.explicitPrivate,
+        recordId: digest(['sbom', pkg.recordId, pkg.name, pkg.version]), sourceIdentity: pkg.imageDigest,
+        evidenceKind: 'digest-bound-sbom', evidenceScope: 'image', digestBound: true, imageDigest: pkg.imageDigest,
+        path: typeof pkg.evidence === 'string' ? pkg.evidence : null, location: typeof pkg.evidence === 'string' ? pkg.evidence : null, optional: false, platform: 'unknown' });
+    }
+    if (records.length > 15000) throw new SweepError('CAPACITY', { cause: 'limit', operation: 'packages' });
+    const packageMap = new Map();
+    for (const record of records) {
+      if (!validPackage(record)) continue;
+      const key = packageKey(record);
+      if (!packageMap.has(key)) packageMap.set(key, { name: record.name, version: record.version, ecosystem: record.ecosystem, evidence: [], occurrences: [] });
+      const pkg = packageMap.get(key);
+      pkg.occurrences.push(record);
+      if (record.queryEligible && record.path && !pkg.evidence.includes(record.path)) pkg.evidence.push(record.path);
+    }
+    const packages = [...packageMap.values()].filter(pkg => pkg.occurrences.some(record => record.queryEligible)).sort((a, b) => packageKey(a).localeCompare(packageKey(b)));
+    const requestPrevious = { ...(previous.query || previous), pendingPackageKeys: previous.query?.pendingPackageKeys || previous.pendingPackageKeys || [] };
+    if ((previous.pendingLockfiles || []).length && !(requestPrevious.pendingPackageKeys || []).length) requestPrevious.pendingPackageKeys = ['extraction-pending'];
+    const wrapContinuation = query => {
+      const completedPackageKeys = query.queries.filter(item => item.complete).map(item => item.key);
+      const completed = new Set(completedPackageKeys);
+      const acknowledgedLockfiles = parsedFiles.filter(file => records.filter(record => record.path === file.path && record.queryEligible).every(record => completed.has(packageKey(record))))
+        .map(file => ({ path: file.path, sourceIdentity: file.sourceIdentity }));
+      return { schemaVersion: 2, parsedFiles, pendingLockfiles, acknowledgedLockfiles, query, pendingPackageKeys: query.pendingPackageKeys,
+        completedPackageKeys, cycleStartedAt: query.cycleStartedAt, catalogSignature: digest(packages.map(queryFingerprint)), findingCache: [] };
+    };
+    const onProgress = async progress => context.checkpoint({ stage: 'packages', value: { schemaVersion: 2, scannedAt: new Date(started).toISOString(),
+      packages, records, findings: progress.findings, coverage: [...coverage, ...progress.coverage], commands,
+      continuation: wrapContinuation(progress.continuation) } });
+    const response = options.offline ? { findings: [], coverage: [{ area: 'osv-query', status: 'partial', reason: 'offline指定のため公開照会は未実施' }], successfulKeys: [],
+      continuation: { queries: [], pendingPackageKeys: packages.map(packageKey), cycleStartedAt: new Date(started).toISOString() } }
+      : await queryOsv(packages, { context, previous: requestPrevious, continuationVerified: options.continuationVerified,
+        holdForDetails: Array.isArray(options.state?.advisoryContinuation?.pendingIds) && options.state.advisoryContinuation.pendingIds.length > 0,
+        maxPackages, maxPages: options.maxPages, deadline: options.deadline, onProgress });
+    coverage.push({ area: 'lockfiles', status: pendingLockfiles.length ? 'partial' : 'complete', count: lockfiles.length - pendingLockfiles.length, total: lockfiles.length,
+      extracted: processed, revalidated, deferred: pendingLockfiles.length > 0, reason: '新規/変更lockの抽出上限とは別に、以前のlockも現在のbounded本文で公開性を再確認' });
+    coverage.push({ area: 'global-package-origins', status: unverifiedGlobals || invalidGlobals ? 'partial' : excludedGlobals ? 'complete-with-exclusions' : 'complete',
+      count: unverifiedGlobals, unknown: unknownGlobals, invalid: invalidGlobals, excluded: excludedGlobals,
+      reason: '由来未検証のinstalled-global例外を明示。lock/SBOMには適用しない。queryUnknownGlobals=falseで停止可能' });
+    const unknownRecords = records.filter(record => record.origin === 'unknown' && !record.policyExcluded).length;
+    const excludedRecords = records.filter(record => record.policyExcluded).length;
+    coverage.push({ area: 'package-extraction', status: unknownRecords || invalidLockRecords || invalidGlobals || pendingLockfiles.length ? 'partial' : excludedRecords ? 'complete-with-exclusions' : 'complete', count: records.length,
+      excluded: excludedRecords, unknown: unknownRecords, invalid: invalidLockRecords + invalidGlobals, reason: '同一名・版でも由来と方針除外を独立保持。未確認を除外によって隠さない' }, ...response.coverage);
+    const findings = response.findings;
+    if (options.inspectInstallations !== false) {
+      const material = await inspectInstallations(findings, inventory, { context });
+      coverage.push(material.coverage, ...material.details);
+      for (const finding of findings) finding.installationEvidence = material.observations.get(packageKey({ ...finding.package, version: finding.version })) || [];
+    }
+    return { schemaVersion: 2, scannedAt: new Date(started).toISOString(), elapsedMs: context.wallNow() - started, packages, records, findings, coverage, commands,
+      continuation: wrapContinuation(response.continuation) };
+  } finally { if (owned) await context.close(); }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  let context;
   try {
-    const args = process.argv.slice(2), index = args.indexOf('--inventory');
-    if (args.includes('--help') || args.includes('-h')) {
-      process.stdout.write('使い方: node scan-packages.mjs --inventory 棚卸し.json [--state 状態.json] [--offline] [--no-scanner] [--max-lockfiles 件数] [--max-packages 件数] [--budget-ms ミリ秒]\n現在の棚卸し内の未処理分から再開。継続情報を標準出力へ返し、state自体は書き換えません。外部照合は名前・版・ecosystemのみ。--offline は通信なし、--no-scanner は外部スキャナを起動しません。\n');
-      process.exit(0);
+    const args = process.argv.slice(2);
+    if (args.length === 1 && ['--help', '-h'].includes(args[0])) {
+      process.stdout.write('使い方: node scripts/scan-packages.mjs --inventory 棚卸し.json [--state 状態.json] [--offline] [--no-scanner] [--max-lockfiles 件数] [--max-packages 件数] [--budget-ms ミリ秒]\nJSONは非公開の証拠保存先へリダイレクトしてください。既存stateは変更しません。部分結果の終了コードは2です。\n');
+    } else {
+      const options = {};
+      for (let index = 0; index < args.length; index += 1) {
+        const flag = args[index];
+        if (['--offline', '--no-scanner'].includes(flag)) options[flag] = true;
+        else if (['--inventory', '--state', '--max-lockfiles', '--max-packages', '--budget-ms'].includes(flag) && args[index + 1] && !args[index + 1].startsWith('--')) options[flag] = args[++index];
+        else throw new SweepError('CONFIG', { cause: 'malformed', operation: 'cli' });
+      }
+      if (!options['--inventory'] || !path.isAbsolute(options['--inventory'])) throw new SweepError('CONFIG', { cause: 'malformed', operation: 'cli' });
+      context = createRunContext({ budgetMs: options['--budget-ms'] === undefined ? 480000 : Number(options['--budget-ms']) });
+      const inventory = await context.io.readJson(options['--inventory'], { roots: [path.dirname(options['--inventory'])], maxBytes: LIMITS.state });
+      const previous = options['--state'] ? await context.io.readJson(options['--state'], { roots: [path.dirname(options['--state'])], maxBytes: LIMITS.state }) : {};
+      if ((previous.schemaVersion || 1) > 2) throw new SweepError('STATE', { cause: 'future-schema', operation: 'state' });
+      context.config.scanRoots = inventory.scanRoots || previous.scanRoots || [];
+      const result = await scanPackages(inventory, { context, continuation: previous.packageContinuation, offline: options['--offline'], noScanner: options['--no-scanner'],
+        maxLockfiles: options['--max-lockfiles'] === undefined ? undefined : Number(options['--max-lockfiles']), maxPackages: options['--max-packages'] === undefined ? undefined : Number(options['--max-packages']) });
+      process.stdout.write(`${JSON.stringify(result)}\n`);
+      process.exitCode = assessmentStatus(result.coverage) === 'partial' ? 2 : 0;
     }
-    if (index < 0 || !args[index + 1]) throw new Error('usage');
-    const inventory = JSON.parse(fs.readFileSync(args[index + 1], 'utf8'));
-    const numberOption = name => { const at = args.indexOf(name); return at >= 0 ? Number(args[at + 1]) : undefined; };
-    const stateIndex = args.indexOf('--state');
-    let previous = {};
-    if (stateIndex >= 0) { try { previous = JSON.parse(fs.readFileSync(args[stateIndex + 1], 'utf8')); } catch { /* 無効な状態は現在の棚卸しから再開する。 */ } }
-    const result = await scanPackages(inventory, { continuation: previous.packageContinuation, offline: args.includes('--offline'), noScanner: args.includes('--no-scanner'), maxLockfiles: numberOption('--max-lockfiles'), maxPackages: numberOption('--max-packages'), budgetMs: numberOption('--budget-ms') });
-    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
-  } catch {
-    process.stdout.write(JSON.stringify({ schemaVersion: 1, error: '実行できません。--inventory JSON パスを指定してください。秘密値を含む例外本文は表示しません。', coverage: [{ area: 'packages', status: 'unavailable' }] }) + '\n');
-    process.exitCode = 1;
-  }
+  } catch (error) {
+    const detail = safeDiagnostic(error, 'INTERNAL', 'cli');
+    process.stderr.write(`${JSON.stringify(detail)}\n`);
+    process.exitCode = ['MSS_CONFIG', 'MSS_STATE'].includes(detail.code) ? 64 : 1;
+  } finally { await context?.close(); }
 }

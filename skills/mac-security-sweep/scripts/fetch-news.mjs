@@ -7,34 +7,20 @@
  * node scripts/fetch-news.mjs --since 2026-10-17T00:00:00Z --until 2026-10-31T00:00:00Z
  * ```
  */
-import { readFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
+import { SOURCES, MOZILLA_SOURCES, identifyProducts, sourceRegistryCoverage } from './source-registry.mjs';
+import { createRunContext, validatePublicRequest } from './runtime.mjs';
+import { boundedJson, LIMITS } from './safe-io.mjs';
+import { SweepError, safeDiagnostic, causeClass } from './diagnostics.mjs';
+import { fetchHomebrewAdvisories } from './homebrew-advisories.mjs';
+import { normalizeSeverity, validAdvisoryId } from './assessment.mjs';
 
 const DAY = 86_400_000;
 const MAX_BYTES = 6 * 1024 * 1024;
-const SOURCES = [
-  { name: 'CISA KEV', url: 'https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json', kind: 'kev' },
-  { name: 'GitHub Advisory reviewed', url: 'https://api.github.com/advisories', kind: 'github', advisoryType: 'reviewed' },
-  { name: 'GitHub Advisory malware', url: 'https://api.github.com/advisories', kind: 'github', advisoryType: 'malware' },
-  { name: 'The Hacker News', url: 'https://feeds.feedburner.com/TheHackersNews', kind: 'xml' },
-  { name: 'BleepingComputer', url: 'https://www.bleepingcomputer.com/feed/', kind: 'xml' },
-  { name: 'Socket', url: 'https://socket.dev/api/blog/feed.json', kind: 'jsonfeed' },
-  { name: 'OpenSourceMalware', url: 'https://opensourcemalware.com/rss.xml', kind: 'xml' },
-  { name: 'Apple Security Releases', url: 'https://support.apple.com/en-us/100100', kind: 'apple' },
-  { name: 'JPCERT/CC', url: 'https://www.jpcert.or.jp/rss/jpcert.rdf', kind: 'xml' },
-  { name: 'IPA', url: 'https://www.ipa.go.jp/security/rss/alert.rdf', kind: 'xml' },
-  { name: 'Security NEXT', url: 'https://www.security-next.com/feed', kind: 'xml' },
-  { name: 'piyolog', url: 'https://piyolog.hatenadiary.jp/feed', kind: 'xml' },
-  { name: 'Cursor security notice', url: 'https://cursor.com/blog/claude-code-extension-security-notice', kind: 'cursor' },
-  { name: 'Node.js Security Releases', url: 'https://nodejs.org/en/feed/vulnerability.xml', kind: 'xml' },
-  { name: 'Chrome Releases', url: 'https://feeds.feedburner.com/GoogleChromeReleases', kind: 'xml' },
-];
-const ALLOWED_HOSTS = new Set(SOURCES.map(source => new URL(source.url).hostname));
-ALLOWED_HOSTS.add('www.socket.dev');
-ALLOWED_HOSTS.add('www.cursor.com');
+
+
 
 /**
  * XML/HTML の説明を表示用テキストへ縮約する。フィード解析から呼び出す。
@@ -135,8 +121,10 @@ function item(source, fields) {
  * parseXmlFeed('<rss><channel>…</channel></rss>', source)
  */
 export function parseXmlFeed(text, source) {
-  if (!/<(?:rss\b|feed\b|rdf:RDF\b)/i.test(text)) throw new Error('XML フィードではありません');
+  if (typeof text !== 'string' || Buffer.byteLength(text) > MAX_BYTES) throw new SweepError('CAPACITY', { cause: 'limit', operation: 'news' });
+  if (!/<(?:rss\b|feed\b|rdf:RDF\b)/i.test(text)) throw new SweepError('SOURCE', { cause: 'malformed', operation: 'news' });
   const blocks = [...text.matchAll(/<(item|entry)\b[^>]*>([\s\S]*?)<\/\1>/gi)].map(match => match[2]);
+  if (blocks.length > 5000) throw new SweepError('CAPACITY', { cause: 'limit', operation: 'news' });
   return blocks.map(block => {
     const value = tag => block.match(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${tag}>`, 'i'))?.[1];
     const link = value('link') ?? block.match(/<link\b(?=[^>]*\brel=["']alternate["'])[^>]*\bhref=["']([^"']+)["']/i)?.[1]
@@ -156,36 +144,11 @@ export function parseXmlFeed(text, source) {
  * @example
  * await fetchPublic('https://api.github.com/advisories', Date.now() + 180000)
  */
-async function fetchPublic(address, deadline) {
-  let url = new URL(address);
-  for (let redirects = 0; redirects <= 3; redirects += 1) {
-    // 記事中の任意 URL や IOC 宛先は取得対象にしない。
-    if (url.protocol !== 'https:' || !ALLOWED_HOSTS.has(url.hostname) || url.username || url.password) throw new Error('未許可の取得先');
-    const remaining = deadline - Date.now();
-    if (remaining <= 0) throw new Error('全体の取得時間上限');
-    const response = await fetch(url, {
-      redirect: 'manual', signal: AbortSignal.timeout(Math.min(20_000, remaining)),
-      headers: { Accept: 'application/json, application/atom+xml, application/rss+xml, text/html;q=0.8', 'User-Agent': 'mac-security-sweep/1.0 (public-feed-reader)' },
-    });
-    // リダイレクトはホストを再検証してから追う。
-    if ([301, 302, 303, 307, 308].includes(response.status)) {
-      const location = response.headers.get('location');
-      await response.body?.cancel();
-      if (!location) throw new Error('転送先がありません');
-      url = new URL(location, url);
-      continue;
-    }
-    if (!response.ok) { await response.body?.cancel(); throw new Error(`HTTP ${response.status}`); }
-    let bytes = 0;
-    const chunks = [];
-    for await (const chunk of response.body) {
-      bytes += chunk.length;
-      if (bytes > MAX_BYTES) throw new Error('応答容量が 6 MiB を超過');
-      chunks.push(chunk);
-    }
-    return { text: Buffer.concat(chunks).toString('utf8'), link: response.headers.get('link'), url: url.href, bytes };
-  }
-  throw new Error('リダイレクト回数が上限を超過');
+async function fetchPublic(address, context) {
+  const response = await context.request(address, { maxBytes: MAX_BYTES });
+  if (!response.ok) throw new SweepError('HTTP', { operation: 'news', cause: response.status === 429 ? 'cooldown' : 'http' });
+  const text = await response.text();
+  return { text, link: response.headers.get('link'), url: String(address), bytes: Buffer.byteLength(text) };
 }
 
 /**
@@ -201,7 +164,7 @@ export function parseApple(text, source) {
     if (cells.length < 3 || !iso(plain(cells[2]))) return [];
     return [item(source, { title: plain(cells[0]), url: cells[0].match(/href="([^"]+)"/)?.[1], publishedAt: `${plain(cells[2])} UTC`, summary: `対象製品: ${plain(cells[1])}`, fixed: [plain(cells[0])], evidence: '公開日は日付精度。比較のため UTC 00:00 として格納' })];
   });
-  if (!releases.length) throw new Error('Apple のリリース表を解析できません');
+  if (!releases.length || releases.length > 5000) throw new SweepError('SOURCE', { cause: 'malformed', operation: 'news' });
   return releases;
 }
 
@@ -214,7 +177,7 @@ export function parseApple(text, source) {
  */
 function parseCursor(text, source) {
   const body = plain(text);
-  if (!body.includes('2.1.313') || !body.includes('svc-telemetry') || !body.includes('com.apple.sysmond')) throw new Error('公式告知の構造が変わったため手動確認が必要');
+  if (!body.includes('2.1.313') || !body.includes('svc-telemetry') || !body.includes('com.apple.sysmond')) throw new SweepError('SOURCE', { cause: 'malformed', operation: 'news' });
   const versions = body.includes('2.1.312') ? ['2.1.312', '2.1.313'] : ['2.1.313'];
   const paths = ['~/.config/.smt', '~/.config/.smtk', '~/Library/LaunchAgents/com.apple.sysmond.plist'];
   return [item(source, {
@@ -239,38 +202,42 @@ function parseCursor(text, source) {
  * @example
  * await fetchSource(source, window, deadline)
  */
-async function fetchSource(source, window, deadline, continuation) {
-  const started = Date.now();
-  const record = { name: source.name, url: source.url, status: 'ok', itemCount: 0, window, bytes: 0, pages: 0 };
-  let entries = [];
+async function fetchSource(source, window, context, continuation, cachedItems = [], onProgress = async () => {}) {
+  const started = context.monotonicNow();
+  const record = { name: source.name, url: source.url, schema: source.schema, baselineKind: source.baseline, baselineComplete: false, status: 'ok', itemCount: 0, window, bytes: 0, pages: 0 };
+  let entries = [...cachedItems];
   try {
     if (source.kind === 'github') {
       const url = new URL(source.url);
       // API は日付単位で取得し、正確な時刻の範囲は取得後に絞る。
-      url.search = new URLSearchParams({ type: source.advisoryType, modified: `${window.since.slice(0, 10)}..${window.until.slice(0, 10)}`, sort: 'updated', direction: 'desc', per_page: '100' }).toString();
+      url.search = new URLSearchParams({ type: source.advisoryType, modified: `${window.since}..${window.until}`, sort: 'updated', direction: 'desc', per_page: '100' }).toString();
       let next = continuation ?? url.href;
       // API の継続リンクを保持し、次回は同じ先頭ページの再取得を避ける。
       while (next && record.pages < 20) {
         record.nextPageUrl = next;
-        const response = await fetchPublic(next, deadline);
+        const response = await fetchPublic(next, context);
         record.bytes += response.bytes; record.pages += 1;
-        const payload = JSON.parse(response.text);
-        if (!Array.isArray(payload)) throw new Error('アドバイザリ配列ではありません');
+        const payload = boundedJson(response.text);
+        if (!Array.isArray(payload)) throw new SweepError('SOURCE', { cause: 'malformed', operation: 'news' });
+        if (payload.length > 100 || entries.length + payload.length > 20000) throw new SweepError('CAPACITY', { cause: 'limit', operation: 'news' });
         entries.push(...payload.map(advisory => normalizeAdvisory(advisory, source)));
+        entries = [...new Map(entries.map(entry => [entry.id, entry])).values()];
         next = response.link?.match(/<([^>]+)>;\s*rel="next"/)?.[1];
+        if (next && (!validatePublicRequest(next) || new URL(next).searchParams.get('type') !== source.advisoryType)) throw new SweepError('SOURCE', { cause: 'boundary', operation: 'news' });
         record.nextPageUrl = next ?? null;
+        await onProgress({ record: { ...record, status: next ? 'partial' : 'ok' }, items: [...entries], cachedItems: [...entries] });
       }
       if (next) { record.status = 'partial'; record.reason = '20 ページ上限。継続カーソルから次回再開'; }
     } else {
-      const response = await fetchPublic(source.url, deadline);
+      const response = await fetchPublic(source.url, context);
       record.bytes = response.bytes; record.pages = 1;
       if (source.kind === 'kev') {
-        const data = JSON.parse(response.text);
-        if (!Array.isArray(data.vulnerabilities)) throw new Error('KEV の形式が不明');
+        const data = boundedJson(response.text);
+        if (!Array.isArray(data.vulnerabilities)) throw new SweepError('SOURCE', { cause: 'malformed', operation: 'news' });
         entries = data.vulnerabilities.map(value => item(source, { id: value.cveID, title: value.vulnerabilityName, url: `https://www.cisa.gov/known-exploited-vulnerabilities-catalog?field_cve=${encodeURIComponent(value.cveID)}`, publishedAt: value.dateAdded, products: [value.vendorProject, value.product], summary: value.shortDescription, evidence: 'publishedAt は KEV 掲載日。脆弱性の初公開日ではない', requiredAction: value.requiredAction }));
       } else if (source.kind === 'jsonfeed') {
-        const data = JSON.parse(response.text);
-        if (!Array.isArray(data.items)) throw new Error('JSON Feed の形式が不明');
+        const data = boundedJson(response.text);
+        if (!Array.isArray(data.items)) throw new SweepError('SOURCE', { cause: 'malformed', operation: 'news' });
         entries = data.items.map(value => item(source, { title: value.title, url: value.url ?? value.id, publishedAt: value.date_published, updatedAt: value.date_modified, summary: value.summary ?? value.content_text ?? value.content_html }));
       } else if (source.kind === 'apple') entries = parseApple(response.text, source);
       else if (source.kind === 'cursor') entries = parseCursor(response.text, source);
@@ -280,7 +247,8 @@ async function fetchSource(source, window, deadline, continuation) {
   } catch (error) {
     record.status = entries.length ? 'partial' : 'error';
     // HTTP 本文や例外の URL を出さず、固定した診断だけを残す。
-    record.reason = error.name === 'TimeoutError' ? '取得タイムアウト' : String(error.message).slice(0, 150);
+    record.diagnostic = safeDiagnostic(error, 'SOURCE', 'news');
+    record.reason = record.diagnostic.message;
   }
   const dated = entries.map(entry => entry.updatedAt ?? entry.publishedAt).filter(Boolean).sort();
   record.oldestAvailableAt = dated[0] ?? null;
@@ -295,8 +263,9 @@ async function fetchSource(source, window, deadline, continuation) {
     record.historicalCoverage = 'partial';
     record.reason = [record.reason, 'フィード最古日が期間開始より新しいため、以前の記事は手動補完が必要'].filter(Boolean).join('。');
   }
-  record.itemCount = inWindow.length; record.elapsedMs = Date.now() - started;
-  return { record, items: inWindow,
+  record.itemCount = inWindow.length; record.elapsedMs = context.monotonicNow() - started;
+  record.baselineComplete = record.status === 'ok' && ['apple', 'kev', 'cursor'].includes(source.kind);
+  return { record, items: inWindow, cachedItems: entries,
     securityReleases: source.kind === 'apple' ? entries.slice(0, 120) : [],
     knownExploitedIds: source.kind === 'kev' ? entries.map(entry => entry.id) : [] };
 }
@@ -306,6 +275,15 @@ async function fetchSource(source, window, deadline, continuation) {
  * @returns 悪性配布・撤回・深刻度を保持した公開情報だけの項目。
  */
 export function normalizeAdvisory(advisory, source) {
+  if (!advisory || !validAdvisoryId(advisory.ghsa_id) || advisory.vulnerabilities && (!Array.isArray(advisory.vulnerabilities) || advisory.vulnerabilities.length > 1000)) throw new SweepError('SOURCE', { cause: 'malformed', operation: 'news' });
+  const severityEvidence = [normalizeSeverity(advisory.severity, source.name)];
+  for (const [key, type] of [['cvss_v3', 'CVSS_V3'], ['cvss_v4', 'CVSS_V4']]) {
+    const cvss = advisory.cvss_severities?.[key] || (key === 'cvss_v3' ? advisory.cvss : null);
+    if (cvss) {
+      if (cvss.score !== undefined) severityEvidence.push(normalizeSeverity({ type, score: cvss.score }, source.name));
+      if (cvss.vector_string !== undefined) severityEvidence.push(normalizeSeverity({ type, score: cvss.vector_string }, source.name));
+    }
+  }
   return item(source, {
           id: advisory.ghsa_id, title: advisory.summary, summary: advisory.summary, url: advisory.html_url,
           advisoryType: source.advisoryType === 'malware' || advisory.type === 'malware' ? 'malware' : 'reviewed',
@@ -313,8 +291,116 @@ export function normalizeAdvisory(advisory, source) {
           products: (advisory.vulnerabilities ?? []).map(value => value.package?.name).filter(Boolean),
           affected: (advisory.vulnerabilities ?? []).map(value => ({ ecosystem: value.package?.ecosystem, name: value.package?.name, range: value.vulnerable_version_range, fixed: value.first_patched_version })),
           fixed: (advisory.vulnerabilities ?? []).filter(value => value.first_patched_version).map(value => ({ name: value.package?.name, version: value.first_patched_version })),
-          severity: advisory.severity, withdrawnAt: advisory.withdrawn_at, needsReview: false,
+          severity: normalizeSeverity(severityEvidence, source.name), severityEvidence, aliases: [advisory.cve_id, ...(advisory.identifiers || []).map(value => value.value)].filter(validAdvisoryId), withdrawnAt: iso(advisory.withdrawn_at), needsReview: false,
   });
+}
+
+/** Mozillaの明示的なFixed in見出しとMFSAリンクだけを読む。adaptive履歴取得が呼ぶ。 @example parseMozillaBaseline(html, MOZILLA_SOURCES[0]) */
+export function parseMozillaBaseline(text, source) {
+  if (typeof text !== 'string' || Buffer.byteLength(text) > MAX_BYTES) throw new SweepError('SOURCE', { cause: 'limit', operation: 'baseline' });
+  const headings = [...text.matchAll(/<h[23]\b[^>]*>([\s\S]*?)<\/h[23]>/gi)];
+  if (headings.length > 5000) throw new SweepError('CAPACITY', { cause: 'limit', operation: 'baseline' });
+  const updates = [];
+  for (let index = 0; index < headings.length; index++) {
+    const heading = plain(headings[index][1]).replace(/^#\s*/, '');
+    const expected = source.productId === 'firefox-esr' ? /^Fixed in Firefox ESR (\d+(?:\.\d+){0,3})$/
+      : source.productId === 'firefox' ? /^Fixed in Firefox (\d+(?:\.\d+){0,3})$/ : /^Fixed in Thunderbird (\d+(?:\.\d+){0,3})$/;
+    const version = expected.exec(heading)?.[1];
+    if (!version) continue;
+    const block = text.slice(headings[index].index + headings[index][0].length, headings[index + 1]?.index ?? text.length);
+    const advisories = [...block.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)].flatMap(match => {
+      let url;
+      try { url = new URL(match[1], source.url); } catch { return []; }
+      const id = /^\/en-US\/security\/advisories\/mfsa(\d{4}-\d+)\/$/.exec(url.pathname)?.[1];
+      if (url.origin !== 'https://www.mozilla.org' || url.search || url.hash || !id) return [];
+      const title = plain(match[2]);
+      // Firefox一覧にはAndroid専用項目も混在するため、desktopの明示がなければ採用しない。
+      const mobileOnly = /Android|\biOS\b|Focus/i.test(title) && !/Firefox(?: ESR)? \d|Thunderbird \d/.test(title);
+      return mobileOnly ? [] : [{ id: `MFSA-${id}`, url: url.href, title: title.slice(0, 350) }];
+    });
+    if (advisories.length) updates.push({ productId: source.productId, product: source.product, channel: source.channel,
+      fixedVersion: version, advisoryIds: [...new Set(advisories.map(value => value.id))].sort(),
+      urls: [...new Set(advisories.map(value => value.url))].sort(), sourceUrl: source.url, sourceName: source.name,
+      evidenceKind: 'security-update-index', platform: 'desktop', vulnerabilityRangeCoverage: 'unknown' });
+  }
+  if (!updates.length) throw new SweepError('SOURCE', { cause: 'malformed', operation: 'baseline' });
+  return updates;
+}
+
+/** 履歴baselineの射影済みcacheを復元する。期限切れでも古い情報と明示して保持する。 @example restoreBaseline(value, source) */
+function restoreBaseline(value, source) {
+  if (!value || value.schema !== source.schema || !iso(value.fetchedAt) || !Array.isArray(value.updates) || value.updates.length > 5000) return null;
+  const updates = value.updates.filter(update => update.productId === source.productId && update.channel === source.channel && /^\d+(?:\.\d+){0,3}$/.test(update.fixedVersion || '')
+    && Array.isArray(update.advisoryIds) && update.advisoryIds.length <= 100 && update.advisoryIds.every(id => /^MFSA-\d{4}-\d+$/.test(id)))
+    .map(update => ({ productId: source.productId, product: source.product, channel: source.channel, fixedVersion: update.fixedVersion,
+      advisoryIds: [...new Set(update.advisoryIds)].sort(), urls: update.advisoryIds.map(id => `https://www.mozilla.org/en-US/security/advisories/mfsa${id.slice(5)}/`),
+      sourceUrl: source.url, sourceName: source.name, evidenceKind: 'security-update-index', platform: 'desktop', vulnerabilityRangeCoverage: 'unknown' }));
+  return updates.length === value.updates.length && updates.length ? { schema: source.schema, fetchedAt: value.fetchedAt, updates } : null;
+}
+
+/** 棚卸し後に既知製品の履歴を追加する。ニュース差分cursorに関係なく初回・新規導入を確認する。 @example fetchAdaptiveNews(inventory, {context, commonNews}) */
+export async function fetchAdaptiveNews(inventory, options = {}) {
+  const context = options.context || createRunContext({ budgetMs: options.budgetMs || 180000, fetchImpl: options.fetchImpl, home: options.home });
+  try {
+    const products = identifyProducts(inventory);
+    const previous = options.previous?.adaptiveNews || options.previous || {};
+    const required = new Set(products.map(product => product.productId));
+    if (products.some(product => product.productId === 'firefox' && product.channel === 'unknown')) required.add('firefox-esr');
+    const pending = new Set(Array.isArray(previous.pendingProductIds) ? previous.pendingProductIds.filter(value => MOZILLA_SOURCES.some(source => source.productId === value)) : []);
+    const selected = MOZILLA_SOURCES.filter(source => required.has(source.productId)).sort((a, b) => Number(pending.has(b.productId)) - Number(pending.has(a.productId)));
+    const baselines = {}, sources = [], updates = [], pendingProductIds = [];
+    const productCoverage = [];
+    const saveAdaptive = async (homebrew = { records: [], coverage: [{ area: 'homebrew-advisory-database', status: 'partial', reason: '取得段階は未完了' }] }) => context.checkpoint({ stage: 'adaptive', value: {
+      schemaVersion: 2, items: [], sources: [...sources], securityUpdates: [...updates], products, productCoverage: [...productCoverage], homebrew,
+      continuation: { baselines: { ...baselines }, pendingProductIds: selected.filter(source => !baselines[source.productId]).map(source => source.productId), homebrew: homebrew.continuation }, baselines: { ...baselines } } });
+    let cursor = 0;
+    await Promise.all(Array.from({ length: 2 }, async () => {
+      while (cursor < selected.length) {
+        const source = selected[cursor++];
+        const cached = restoreBaseline(previous.baselines?.[source.productId], source);
+        const age = context.wallNow() - Date.parse(cached?.fetchedAt);
+        let baseline = cached, diagnostic = null;
+        if (!(age >= 0 && age < source.ttlMs)) {
+          try {
+            const response = await fetchPublic(source.url, context);
+            baseline = { schema: source.schema, fetchedAt: new Date(context.wallNow()).toISOString(), updates: parseMozillaBaseline(response.text, source) };
+          } catch (error) { diagnostic = safeDiagnostic(error, 'SOURCE', 'baseline'); pendingProductIds.push(source.productId); }
+        }
+        if (baseline) { baselines[source.productId] = baseline; updates.push(...baseline.updates.map(update => ({ ...update, freshness: diagnostic ? 'stale' : 'fresh' }))); }
+        sources.push({ name: source.name, url: source.url, status: diagnostic ? 'partial' : 'ok', diagnostic,
+          reason: diagnostic?.message || '公式Fixed in履歴を取得。影響開始版の全CVE coverageとは別',
+          freshness: diagnostic ? cached ? 'stale' : 'missing' : 'fresh', lastSuccessfulAt: baseline?.fetchedAt || null,
+          baselineKind: source.baseline, baselineComplete: !diagnostic && !!baseline, vulnerabilityRangeCoverage: 'partial', itemCount: baseline?.updates.length || 0 });
+        await saveAdaptive();
+      }
+    }));
+    for (const product of products) {
+      const source = sources.find(value => value.name === MOZILLA_SOURCES.find(entry => entry.productId === product.productId)?.name)
+        || (options.commonNews?.sources || []).find(value => value.name === product.source);
+      productCoverage.push({ area: 'product-baseline', productId: product.productId, name: product.name, version: product.version, location: product.location,
+        status: 'partial', freshness: source?.freshness || 'missing', channel: product.channel,
+        baselineComplete: source?.baselineComplete === true, vulnerabilityRangeCoverage: 'partial', source: source?.name || null,
+        reason: product.productId === 'unsupported' ? '既知の公式情報源registryに対応がない製品。導入検出のみで脆弱性照合済みとはしない'
+          : product.channel === 'unknown' && ['firefox', 'thunderbird', 'chrome'].includes(product.productId) ? '配布チャネルを確認できない。履歴は候補として保持し別チャネルの修正版を適用しない'
+            : source?.baselineComplete ? '更新履歴baselineを確認。CVE影響開始版・実行条件の網羅は未確認' : '差分フィードまたは取得未完了。導入製品の過去の全脆弱性baselineは未確認' });
+    }
+    const homebrewPresent = (inventory.homebrew?.formulae || inventory.homebrewFormulae || []).length + (inventory.homebrew?.casks || inventory.homebrewCasks || []).length > 0;
+    const homebrew = homebrewPresent ? await fetchHomebrewAdvisories(context, previous.homebrew, { ...options.homebrewOptions, onProgress: saveAdaptive }) : { records: [], coverage: [], status: 'not-applicable' };
+    const result = { schemaVersion: 2, fetchedAt: new Date(context.wallNow()).toISOString(), items: [], sources: sources.sort((a, b) => a.name.localeCompare(b.name)),
+      securityUpdates: updates.sort((a, b) => a.productId.localeCompare(b.productId) || a.fixedVersion.localeCompare(b.fixedVersion)), products, productCoverage, homebrew,
+      continuation: { baselines, pendingProductIds: pendingProductIds.sort(), homebrew: homebrew.continuation },
+      baselines };
+    await context.checkpoint({ stage: 'adaptive', value: result });
+    return result;
+  } finally { if (!options.context) await context.close(); }
+}
+
+/** 共通取得と棚卸し後取得を統合する。runnerが同一成果物として保存する。 @example mergeNews(common, adaptive) */
+export function mergeNews(common = {}, adaptive = {}) {
+  return { ...common, schemaVersion: 2, sources: [...(common.sources || []), ...(adaptive.sources || [])],
+    items: [...new Map([...(common.items || []), ...(adaptive.items || [])].map(value => [value.id, value])).values()],
+    securityUpdates: adaptive.securityUpdates || [], productCoverage: adaptive.productCoverage || [], products: adaptive.products || [],
+    homebrew: adaptive.homebrew || {}, baselines: adaptive.baselines || {}, adaptiveContinuation: adaptive.continuation || {} };
 }
 
 /**
@@ -325,69 +411,120 @@ export function normalizeAdvisory(advisory, source) {
  * await fetchNews({ since: '2026-10-17T00:00:00Z' })
  */
 export async function fetchNews(options = {}) {
-  const started = Date.now();
-  const deadline = started + 180_000;
-  const until = iso(options.until ?? new Date());
-  if (!until) throw new Error('until は ISO 日時で指定してください');
-  let state = {};
-  let stateWarning;
-  try { state = JSON.parse(await readFile(options.state ?? join(homedir(), '.local/state/mac-security-sweep/state.json'), 'utf8')); }
-  catch (error) { if (error.code !== 'ENOENT') stateWarning = '前回状態を読めないため直近 14 日を使用'; }
-  // 全体は前回実行、取得失敗の欠落は情報源別カーソルで補う。
-  const previous = iso(state.newsFallbackSince ?? state.lastRunAt ?? state.lastSuccessfulAt);
-  const since = iso(options.since) ?? (previous && previous <= until ? previous : new Date(new Date(until).getTime() - 14 * DAY).toISOString());
-  if (options.since && !iso(options.since)) throw new Error('since は ISO 日時で指定してください');
-  if (since > until) throw new Error('since は until より前にしてください');
-  const window = { since, until };
-  const results = [];
-  let cursor = 0;
-  // 同時接続は 4 本に制限し、他の巡回処理の時間を確保する。
-  await Promise.all(Array.from({ length: 4 }, async () => {
-    while (cursor < SOURCES.length) {
-      const source = SOURCES[cursor++];
-      const saved = iso(state.sourceCursors?.[source.name]);
-      let sourceWindow = { since: !options.since && saved && saved < since ? saved : since, until };
-      let continuation;
-      const pending = state.sourceContinuations?.[source.name];
-      // 保存済みカーソルも未信頼入力として、公開APIの同じ種類だけ許す。
-      if (!options.since && source.kind === 'github' && pending?.url) {
-        try {
-          const candidate = new URL(pending.url);
-          const pendingSince = iso(pending.window?.since), pendingUntil = iso(pending.window?.until);
-          if (candidate.origin === 'https://api.github.com' && candidate.pathname === '/advisories'
-            && candidate.searchParams.get('type') === source.advisoryType && pendingSince && pendingUntil
-            && pendingSince <= pendingUntil && pendingUntil <= until) {
-            continuation = candidate.href;
-            sourceWindow = { since: pendingSince, until: pendingUntil };
-          }
-        } catch { /* 無効な継続情報は破棄して通常の期間で再取得する。 */ }
-      }
-      results.push(await fetchSource(source, sourceWindow, deadline, continuation));
+  const context = options.context || createRunContext({ budgetMs: options.budgetMs || 180000, fetchImpl: options.fetchImpl, home: options.home });
+  const started = context.monotonicNow();
+  try {
+    const until = iso(options.until ?? new Date(context.wallNow()));
+    if (!until || options.since && !iso(options.since)) throw new SweepError('CONFIG', { cause: 'malformed', operation: 'news' });
+    let state = options.previous || {};
+    if (!options.previous) {
+      const filename = options.state || join(context.home, '.local/state/mac-security-sweep/state.json');
+      try { state = await context.io.readJson(filename, { roots: [join(filename, '..')], maxBytes: LIMITS.state }); }
+      catch (error) { if (error.code !== 'ENOENT') throw new SweepError('STATE', { cause: causeClass(error), operation: 'state' }); }
     }
+    if (!state || typeof state !== 'object' || Array.isArray(state) || state.schemaVersion !== undefined && ![1, 2].includes(state.schemaVersion)) throw new SweepError('STATE', { cause: 'future-schema', operation: 'state' });
+    const previous = iso(state.newsFallbackSince ?? state.lastRunAt ?? state.lastSuccessfulAt);
+    const since = iso(options.since) ?? (previous && previous <= until ? previous : new Date(new Date(until).getTime() - 14 * DAY).toISOString());
+    if (since > until) throw new SweepError('CONFIG', { cause: 'malformed', operation: 'news' });
+    const window = { since, until };
+    const results = [];
+    const progress = new Map();
+    const saveProgress = async result => {
+      progress.set(result.record.name, result);
+      const records = SOURCES.map(source => progress.get(source.name)?.record || { name: source.name, url: source.url, status: 'partial', itemCount: 0, window, reason: '今回の取得は未完了' });
+      const cursors = {};
+      for (const record of records) {
+        const saved = iso(state.sourceCursors?.[record.name]);
+        if (record.windowComplete === true || record.status === 'ok' && record.historicalCoverage !== 'partial') cursors[record.name] = record.window.until;
+        else if (saved) cursors[record.name] = saved;
+      }
+      await context.checkpoint({ stage: 'news', value: { schemaVersion: 2, fetchedAt: new Date(context.wallNow()).toISOString(), window,
+        sources: records, items: [...new Map([...progress.values()].flatMap(value => value.items).map(value => [value.id, value])).values()],
+        sourceCursors: cursors, sourceContinuations: Object.fromEntries([...progress.values()].filter(value => value.record.nextPageUrl).map(value => [value.record.name, { url: value.record.nextPageUrl, window: value.record.window, items: value.cachedItems }])),
+        securityReleases: [...progress.values()].flatMap(value => value.securityReleases || []), knownExploitedIds: [...progress.values()].flatMap(value => value.knownExploitedIds || []) } });
+    };
+    let cursor = 0;
+    // 初回の共通取得は4worker、HTTP全体とhost別の上限はshared contextが所有する。
+    await Promise.all(Array.from({ length: 4 }, async () => {
+      while (cursor < SOURCES.length) {
+        const source = SOURCES[cursor++];
+        const saved = iso(state.sourceCursors?.[source.name]);
+        let sourceWindow = { since: !options.since && saved && saved < since ? saved : since, until };
+        let continuation;
+        let cachedItems = [];
+        const pending = state.sourceContinuations?.[source.name];
+        if (!options.since && source.kind === 'github' && pending?.url) {
+          try {
+            const candidate = new URL(pending.url);
+            const pendingSince = iso(pending.window?.since), pendingUntil = iso(pending.window?.until);
+            if (validatePublicRequest(candidate.href) && candidate.searchParams.get('type') === source.advisoryType && pendingSince && pendingUntil && pendingSince <= pendingUntil && pendingUntil <= until
+              && candidate.searchParams.get('modified') === `${pendingSince}..${pendingUntil}`) {
+              continuation = candidate.href; sourceWindow = { since: pendingSince, until: pendingUntil };
+              cachedItems = restoreItems(pending.items, source);
+            }
+          } catch { /* 不正な継続先は取得せず、固定URLから再開する。 */ }
+        }
+        const result = await fetchSource(source, sourceWindow, context, continuation, cachedItems, saveProgress);
+        result.record.lastSuccessfulAt = result.record.status === 'ok' ? sourceWindow.until : saved;
+        result.record.freshness = result.record.status === 'ok' ? 'fresh' : saved ? 'stale' : 'missing';
+        result.record.windowComplete = result.record.status === 'ok' && result.record.historicalCoverage !== 'partial';
+        // 過去windowの再開完了後も、今回までの未取得区間を最新・完全と表示しない。
+        if (sourceWindow.until < until) {
+          result.record.status = 'partial'; result.record.freshness = result.record.lastSuccessfulAt ? 'stale' : 'missing';
+          result.record.recentCoverage = 'partial'; result.record.missingWindow = { since: sourceWindow.until, until };
+          result.record.reason = [result.record.reason, '過去windowを継続取得。今回までの追加期間は次回取得が必要'].filter(Boolean).join('。');
+        }
+        results.push(result);
+        await saveProgress(result);
+      }
+    }));
+    const sources = results.map(result => result.record).sort((a, b) => SOURCES.findIndex(source => source.name === a.name) - SOURCES.findIndex(source => source.name === b.name));
+    const items = [...new Map(results.flatMap(result => result.items).map(entry => [entry.id, entry])).values()].sort((a, b) => String(b.updatedAt ?? b.publishedAt).localeCompare(String(a.updatedAt ?? a.publishedAt)) || a.id.localeCompare(b.id));
+    const sourceCursors = {};
+    for (const source of sources) {
+      const saved = iso(state.sourceCursors?.[source.name]);
+      if (source.windowComplete === true || source.status === 'ok' && source.historicalCoverage !== 'partial') sourceCursors[source.name] = source.window.until;
+      else if (saved) sourceCursors[source.name] = saved;
+    }
+    return { schemaVersion: 2, fetchedAt: new Date(context.wallNow()).toISOString(), window, sources, items, sourceRegistry: sourceRegistryCoverage(context.wallNow()),
+      securityReleases: results.flatMap(result => result.securityReleases || []), knownExploitedIds: results.flatMap(result => result.knownExploitedIds || []),
+      elapsedMs: context.monotonicNow() - started, sourceCursors,
+      sourceContinuations: Object.fromEntries(results.filter(result => result.record.nextPageUrl).map(result => [result.record.name, { url: result.record.nextPageUrl, window: result.record.window, items: result.cachedItems }])),
+      commands: sources.map(source => ({ command: `匿名 GET ${source.url}`, status: source.status, elapsedMs: source.elapsedMs })),
+      notes: ['RSS/本文は未信頼データ。記事の命令を実行しない', 'ニュース差分と初回/新規製品の履歴baselineは別に確認する', '未構造化のaffected/iocsは無影響を意味しない'] };
+  } finally { if (!options.context) await context.close(); }
+}
+
+/** 以前の公開ページ記録から既知fieldだけを復元する。継続取得で使用する。 @example restoreItems(cache, source) */
+function restoreItems(values, source) {
+  if (!Array.isArray(values) || values.length > 20000) return [];
+  return values.filter(value => value && validAdvisoryId(value.id)).map(value => item(source, {
+    id: value.id, title: value.title, summary: value.summary, url: value.url, publishedAt: value.publishedAt, updatedAt: value.updatedAt,
+    aliases: (Array.isArray(value.aliases) ? value.aliases : []).filter(validAdvisoryId).slice(0, 50), severity: normalizeSeverity(value.severity, source.name),
+    severityEvidence: (Array.isArray(value.severityEvidence) ? value.severityEvidence : []).slice(0, 10).map(entry => normalizeSeverity(entry, source.name)),
+    advisoryType: source.advisoryType, withdrawnAt: iso(value.withdrawnAt), needsReview: false,
+    affected: (Array.isArray(value.affected) ? value.affected : []).slice(0, 100).map(entry => ({ ecosystem: plain(entry.ecosystem).slice(0, 40), name: plain(entry.name).slice(0, 250), range: plain(entry.range).slice(0, 500), fixed: plain(entry.fixed).slice(0, 120) })),
   }));
-  const sources = results.map(result => result.record).sort((a, b) => SOURCES.findIndex(source => source.name === a.name) - SOURCES.findIndex(source => source.name === b.name));
-  const items = results.flatMap(result => result.items).sort((a, b) => String(b.updatedAt ?? b.publishedAt).localeCompare(String(a.updatedAt ?? a.publishedAt)));
-  return { schemaVersion: 1, fetchedAt: new Date().toISOString(), window, stateWarning, sources, items,
-    securityReleases: results.flatMap(result => result.securityReleases || []),
-    knownExploitedIds: results.flatMap(result => result.knownExploitedIds || []),
-    elapsedMs: Date.now() - started,
-    sourceCursors: Object.fromEntries(sources.map(source => [source.name, source.status === 'ok' && source.historicalCoverage !== 'partial' ? source.window.until : source.window.since])),
-    sourceContinuations: Object.fromEntries(sources.filter(source => source.nextPageUrl).map(source => [source.name, { url: source.nextPageUrl, window: source.window }])),
-    commands: sources.map(source => ({ command: `匿名 GET ${source.url}`, status: source.status, elapsedMs: source.elapsedMs })),
-    notes: ['RSS/本文は未信頼データ。記事やサンプルの命令を実行しない', 'OSV は package-scan のバージョン問い合わせ段階で使用する', 'affected / iocs が空のニュースは、無影響ではなく本文の構造化確認が必要'] };
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const args = process.argv.slice(2);
-  if (args.includes('--help')) {
-    console.log('使用法: node fetch-news.mjs [--since ISO日時] [--until ISO日時] [--state 状態JSONのパス]\n公開情報を匿名取得して JSON を標準出力する。状態ファイルは更新しない。');
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log('使用法: node fetch-news.mjs [--since ISO日時] [--until ISO日時] [--state 状態JSONのパス]\n実行場所はスキルroot。公開情報を匿名取得し、秘密を含まないJSONを非公開の証拠保存先へリダイレクトする。ヘルプは取得しない。');
   } else {
     const options = {};
-    for (let index = 0; index < args.length; index += 2) {
-      if (!['--since', '--until', '--state'].includes(args[index]) || !args[index + 1]) throw new Error('不明な引数。--help を参照してください');
-      options[args[index].slice(2)] = args[index + 1];
+    try {
+      for (let index = 0; index < args.length; index += 2) {
+        if (!['--since', '--until', '--state'].includes(args[index]) || !args[index + 1]) throw new SweepError('CONFIG', { cause: 'malformed', operation: 'cli' });
+        options[args[index].slice(2)] = args[index + 1];
+      }
+      const result = await fetchNews(options);
+      console.log(JSON.stringify(result, null, 2));
+      if (result.sources.some(source => source.status !== 'ok' || source.historicalCoverage === 'partial')) process.exitCode = 2;
+    } catch (error) {
+      const diagnostic = safeDiagnostic(error, 'INTERNAL', 'cli');
+      console.error(JSON.stringify(diagnostic));
+      process.exitCode = ['MSS_CONFIG', 'MSS_STATE'].includes(diagnostic.code) ? 64 : 1;
     }
-    try { console.log(JSON.stringify(await fetchNews(options), null, 2)); }
-    catch { console.log(JSON.stringify({ schemaVersion: 1, error: '取得条件または実行に失敗しました。ISO 日時と Node.js 22 以降を確認してください', sources: [], items: [] })); process.exitCode = 1; }
   }
 }

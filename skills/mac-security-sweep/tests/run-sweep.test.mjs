@@ -18,7 +18,7 @@ test('悪性パッケージのロック一致でも実行や窃取を確定せ�
 test('詳細取得へのリクエストにローカルパスや秘密の追加フィールドを送信しない', async () => {
   // Arrange
   const requests = [];
-  const fetchImpl = async (url, options) => { requests.push({ url, body: options.body }); return { ok: true, body: [Buffer.from('{"affected":[]}')] }; };
+  const fetchImpl = async (url, options) => { requests.push({ url, body: options.body }); return new Response(JSON.stringify({ id: url.split('/').at(-1), affected: [] })); };
   // Act
   await enrichAdvisories([{ id: 'GHSA-example', evidence: ['/private/SENTINEL_PATH'], token: 'SENTINEL_SECRET' }], Date.now() + 10000, fetchImpl);
   // Assert
@@ -30,7 +30,7 @@ test('詳細の再開キャッシュから未知のフィールドをレポー�
   const previous = { cache: [{ id: 'GHSA-example', fetchedAt: new Date().toISOString(), fixed: [], token: 'SENTINEL_SECRET', body: 'SENTINEL_RAW' }] };
   const fetchImpl = async () => { throw new Error('キャッシュを使用するため呼ばれない'); };
   // Act
-  const result = await enrichAdvisories([{ id: 'GHSA-example' }], Date.now() + 10000, fetchImpl, { previous });
+  const result = await enrichAdvisories([{ id: 'GHSA-example' }], Date.now() + 10000, fetchImpl, { previous, continuationVerified: true });
   // Assert
   assert.equal(result.details.length, 1);
   assert.equal(JSON.stringify(result).includes('SENTINEL'), false);
@@ -43,7 +43,7 @@ test('80件で打ち切った告知詳細は次回に残りから取得する', 
   const fetchImpl = async url => { requested.push(url); const id = url.split('/').at(-1); return { ok: true, body: [Buffer.from(JSON.stringify({ id, summary: 'public summary', affected: [] }))] }; };
   // Act
   const first = await enrichAdvisories(findings, Date.now() + 10000, fetchImpl);
-  const second = await enrichAdvisories(findings, Date.now() + 10000, fetchImpl, { previous: first.continuation });
+  const second = await enrichAdvisories(findings, Date.now() + 10000, fetchImpl, { previous: first.continuation, continuationVerified: true });
   // Assert
   assert.equal(first.details.length, 80);
   assert.deepEqual(first.continuation.pendingIds, ['GHSA-080']);
@@ -57,7 +57,7 @@ test('詳細取得枠は新しい軽微告知より古い重大告知へ先に�
   // Arrange
   const findings = [{ id: 'GHSA-new-low', severity: 'LOW', modified: '2026-11-02' }, { id: 'GHSA-old-critical', severity: 'CRITICAL', modified: '2026-01-01' }];
   const requested = [];
-  const fetchImpl = async url => { requested.push(url); return { ok: true, body: [Buffer.from('{"affected":[]}')] }; };
+  const fetchImpl = async url => { requested.push(url); return new Response(JSON.stringify({ id: url.split('/').at(-1), affected: [] })); };
   // Act
   await enrichAdvisories(findings, Date.now() + 10000, fetchImpl, { maxDetails: 1 });
   // Assert
@@ -68,9 +68,9 @@ test('告知の更新後は7日以内のキャッシュでも再取得する', a
   // Arrange
   const previous = { cache: [{ id: 'GHSA-example', modified: '2026-01-01T00:00:00Z', fetchedAt: new Date().toISOString(), fixed: [] }] };
   const requested = [];
-  const fetchImpl = async url => { requested.push(url); return { ok: true, body: [Buffer.from('{"modified":"2026-11-02T00:00:00Z","affected":[]}')] }; };
+  const fetchImpl = async url => { requested.push(url); return new Response(JSON.stringify({ id: url.split('/').at(-1), modified: '2026-11-02T00:00:00Z', affected: [] })); };
   // Act
-  await enrichAdvisories([{ id: 'GHSA-example', modified: '2026-11-02T00:00:00Z' }], Date.now() + 10000, fetchImpl, { previous });
+  await enrichAdvisories([{ id: 'GHSA-example', modified: '2026-11-02T00:00:00Z' }], Date.now() + 10000, fetchImpl, { previous, continuationVerified: true });
   // Assert
   assert.deepEqual(requested, ['https://api.osv.dev/v1/vulns/GHSA-example']);
 });

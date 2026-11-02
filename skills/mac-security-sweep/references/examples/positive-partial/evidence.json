@@ -1,0 +1,370 @@
+{
+  "changes": {
+    "continuing": [],
+    "new": [
+      {
+        "advisoryId": "GHSA-fixture-positive",
+        "advisoryType": "vulnerability",
+        "aliases": [
+          "GHSA-fixture-positive"
+        ],
+        "evidence": [],
+        "id": "GHSA-fixture-positive:npm:example:1.0.0",
+        "impact": {
+          "compromise": "unconfirmed",
+          "evidenceKinds": [],
+          "executionConfirmed": false,
+          "installationConfirmed": false,
+          "kind": "installation-unknown",
+          "optional": false,
+          "platformUnconfirmed": false
+        },
+        "incident": false,
+        "installationEvidence": [],
+        "knownExploited": false,
+        "localEvidence": [],
+        "occurrences": [],
+        "package": {
+          "ecosystem": "npm",
+          "name": "example"
+        },
+        "projectActive": false,
+        "reason": "OSV がロックまたはグローバル記録のパッケージ版を影響範囲と判定。実際のインストール・実行・到達可能性・攻撃 IOC は未確認",
+        "scope": "",
+        "severity": {
+          "evaluated": false,
+          "level": "UNKNOWN",
+          "method": "unknown",
+          "rank": 1,
+          "raw": null,
+          "score": null,
+          "source": "OSV"
+        },
+        "severityEvidence": [],
+        "sources": [
+          "https://osv.dev/vulnerability/GHSA-fixture-positive"
+        ],
+        "status": "可能性高",
+        "title": "example 1.0.0 — GHSA-fixture-positive",
+        "version": "1.0.0"
+      }
+    ],
+    "resolved": [],
+    "snapshot": [
+      {
+        "advisoryId": "GHSA-fixture-positive",
+        "advisoryType": "vulnerability",
+        "aliases": [
+          "GHSA-fixture-positive"
+        ],
+        "evidence": [],
+        "id": "GHSA-fixture-positive:npm:example:1.0.0",
+        "impact": {
+          "compromise": "unconfirmed",
+          "evidenceKinds": [],
+          "executionConfirmed": false,
+          "installationConfirmed": false,
+          "kind": "installation-unknown",
+          "optional": false,
+          "platformUnconfirmed": false
+        },
+        "incident": false,
+        "package": {
+          "ecosystem": "npm",
+          "name": "example"
+        },
+        "scope": "",
+        "status": "可能性高",
+        "title": "example 1.0.0 — GHSA-fixture-positive",
+        "version": "1.0.0"
+      }
+    ],
+    "unconfirmed": []
+  },
+  "collectionCoverage": "partial",
+  "details": {
+    "continuation": {
+      "cache": [],
+      "pendingIds": []
+    },
+    "coverage": [
+      {
+        "area": "fixture-details",
+        "status": "complete"
+      }
+    ],
+    "details": []
+  },
+  "diagnostics": [],
+  "impact": "compromise-unconfirmed",
+  "inventory": {
+    "applications": [],
+    "coverage": [
+      {
+        "area": "fixture-collection",
+        "reason": "読取制限の架空fixture",
+        "status": "partial"
+      }
+    ],
+    "extensions": [],
+    "lockfiles": [],
+    "projectRoots": [],
+    "runtimes": []
+  },
+  "iocs": {
+    "checks": [],
+    "coverage": [
+      {
+        "area": "fixture-ioc",
+        "status": "complete"
+      }
+    ]
+  },
+  "match": {
+    "advisoryGroups": [
+      {
+        "advisoryIds": [
+          "GHSA-fixture-positive"
+        ],
+        "affectedTargets": [
+          {
+            "ecosystem": "npm",
+            "impact": {
+              "compromise": "unconfirmed",
+              "evidenceKinds": [],
+              "executionConfirmed": false,
+              "installationConfirmed": false,
+              "kind": "installation-unknown",
+              "optional": false,
+              "platformUnconfirmed": false
+            },
+            "location": null,
+            "name": "example",
+            "version": "1.0.0"
+          }
+        ],
+        "findings": [
+          {
+            "advisoryId": "GHSA-fixture-positive",
+            "advisoryType": "vulnerability",
+            "aliases": [],
+            "evidence": [],
+            "id": "GHSA-fixture-positive:npm:example:1.0.0",
+            "impact": {
+              "compromise": "unconfirmed",
+              "evidenceKinds": [],
+              "executionConfirmed": false,
+              "installationConfirmed": false,
+              "kind": "installation-unknown",
+              "optional": false,
+              "platformUnconfirmed": false
+            },
+            "incident": false,
+            "installationEvidence": [],
+            "knownExploited": false,
+            "localEvidence": [],
+            "occurrences": [],
+            "package": {
+              "ecosystem": "npm",
+              "name": "example"
+            },
+            "projectActive": false,
+            "reason": "OSV がロックまたはグローバル記録のパッケージ版を影響範囲と判定。実際のインストール・実行・到達可能性・攻撃 IOC は未確認",
+            "scope": "",
+            "severity": {
+              "evaluated": false,
+              "level": "UNKNOWN",
+              "method": "unknown",
+              "rank": 1,
+              "raw": null,
+              "score": null,
+              "source": "OSV"
+            },
+            "severityEvidence": [],
+            "sources": [
+              "https://osv.dev/vulnerability/GHSA-fixture-positive"
+            ],
+            "status": "可能性高",
+            "title": "example 1.0.0 — GHSA-fixture-positive",
+            "version": "1.0.0"
+          }
+        ],
+        "id": "GHSA-fixture-positive",
+        "severity": {
+          "evaluated": false,
+          "level": "UNKNOWN",
+          "method": "unknown",
+          "rank": 1,
+          "raw": null,
+          "score": null,
+          "source": "unknown"
+        },
+        "sources": [
+          "https://osv.dev/vulnerability/GHSA-fixture-positive"
+        ],
+        "withdrawals": []
+      }
+    ],
+    "advisoryTargetCount": 1,
+    "affectedTargetCount": 1,
+    "conclusion": "検査範囲内で侵害を確定する IOC は未確認。被害がないことの証明ではない",
+    "counts": {
+      "可能性あり": 0,
+      "可能性高": 1,
+      "影響なし": 0,
+      "確定": 0
+    },
+    "coverage": [
+      {
+        "area": "fixture-collection",
+        "reason": "読取制限の架空fixture",
+        "status": "partial"
+      },
+      {
+        "area": "fixture-news",
+        "status": "complete"
+      },
+      {
+        "area": "fixture-query",
+        "status": "complete"
+      },
+      {
+        "area": "fixture-ioc",
+        "status": "complete"
+      },
+      {
+        "area": "fixture-details",
+        "status": "complete"
+      },
+      {
+        "area": "news:CISA KEV",
+        "status": "ok"
+      },
+      {
+        "area": "source:CISA KEV",
+        "reason": "情報源の成功と履歴範囲を確認",
+        "status": "complete"
+      }
+    ],
+    "findings": [
+      {
+        "advisoryId": "GHSA-fixture-positive",
+        "advisoryType": "vulnerability",
+        "aliases": [
+          "GHSA-fixture-positive"
+        ],
+        "evidence": [],
+        "id": "GHSA-fixture-positive:npm:example:1.0.0",
+        "impact": {
+          "compromise": "unconfirmed",
+          "evidenceKinds": [],
+          "executionConfirmed": false,
+          "installationConfirmed": false,
+          "kind": "installation-unknown",
+          "optional": false,
+          "platformUnconfirmed": false
+        },
+        "incident": false,
+        "installationEvidence": [],
+        "knownExploited": false,
+        "localEvidence": [],
+        "occurrences": [],
+        "package": {
+          "ecosystem": "npm",
+          "name": "example"
+        },
+        "projectActive": false,
+        "reason": "OSV がロックまたはグローバル記録のパッケージ版を影響範囲と判定。実際のインストール・実行・到達可能性・攻撃 IOC は未確認",
+        "scope": "",
+        "severity": {
+          "evaluated": false,
+          "level": "UNKNOWN",
+          "method": "unknown",
+          "rank": 1,
+          "raw": null,
+          "score": null,
+          "source": "OSV"
+        },
+        "severityEvidence": [],
+        "sources": [
+          "https://osv.dev/vulnerability/GHSA-fixture-positive"
+        ],
+        "status": "可能性高",
+        "title": "example 1.0.0 — GHSA-fixture-positive",
+        "version": "1.0.0"
+      }
+    ],
+    "generatedAt": "2026-11-02T18:24:19.294Z",
+    "impact": "compromise-unconfirmed",
+    "newsAssessment": [],
+    "schemaVersion": 2,
+    "uniqueAdvisoryCount": 1
+  },
+  "metrics": {
+    "commandCount": 0,
+    "commands": {
+      "peak": 0
+    },
+    "hosts": {},
+    "http": {
+      "peak": 0
+    },
+    "requests": 0,
+    "scanner": {
+      "peak": 0
+    }
+  },
+  "news": {
+    "coverage": [
+      {
+        "area": "fixture-news",
+        "status": "complete"
+      }
+    ],
+    "items": [],
+    "sources": [
+      {
+        "name": "CISA KEV",
+        "status": "ok"
+      }
+    ],
+    "window": {
+      "since": "2026-11-01T00:00:00Z",
+      "until": "2026-11-03T00:00:00Z"
+    }
+  },
+  "packages": {
+    "continuation": {
+      "pendingLockfiles": []
+    },
+    "coverage": [
+      {
+        "area": "fixture-query",
+        "status": "complete"
+      }
+    ],
+    "findings": [
+      {
+        "evidence": [],
+        "evidenceKind": "lock-declaration",
+        "id": "GHSA-fixture-positive",
+        "package": {
+          "ecosystem": "npm",
+          "name": "example"
+        },
+        "version": "1.0.0"
+      }
+    ],
+    "packages": [
+      {
+        "ecosystem": "npm",
+        "name": "example",
+        "version": "1.0.0"
+      }
+    ]
+  },
+  "queryCoverage": "complete",
+  "runId": "42f2f2a9-63e9-4560-92ba-bab074a48a3e",
+  "runStatus": "partial",
+  "schemaVersion": 2
+}

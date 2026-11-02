@@ -1,0 +1,148 @@
+{
+  "changes": {
+    "continuing": [],
+    "new": [],
+    "resolved": [],
+    "snapshot": [],
+    "unconfirmed": []
+  },
+  "collectionCoverage": "complete",
+  "details": {
+    "continuation": {
+      "cache": [],
+      "pendingIds": []
+    },
+    "coverage": [
+      {
+        "area": "fixture-details",
+        "status": "complete"
+      }
+    ],
+    "details": []
+  },
+  "diagnostics": [],
+  "impact": "compromise-unconfirmed",
+  "inventory": {
+    "applications": [],
+    "coverage": [
+      {
+        "area": "fixture-collection",
+        "reason": "架空の対象範囲を確認",
+        "status": "complete"
+      }
+    ],
+    "extensions": [],
+    "lockfiles": [],
+    "projectRoots": [],
+    "runtimes": []
+  },
+  "iocs": {
+    "checks": [],
+    "coverage": [
+      {
+        "area": "fixture-ioc",
+        "status": "complete"
+      }
+    ]
+  },
+  "match": {
+    "advisoryGroups": [],
+    "advisoryTargetCount": 0,
+    "affectedTargetCount": 0,
+    "conclusion": "検査範囲内で侵害を確定する IOC は未確認。被害がないことの証明ではない",
+    "counts": {
+      "可能性あり": 0,
+      "可能性高": 0,
+      "影響なし": 0,
+      "確定": 0
+    },
+    "coverage": [
+      {
+        "area": "fixture-collection",
+        "reason": "架空の対象範囲を確認",
+        "status": "complete"
+      },
+      {
+        "area": "fixture-news",
+        "status": "complete"
+      },
+      {
+        "area": "fixture-query",
+        "status": "complete"
+      },
+      {
+        "area": "fixture-ioc",
+        "status": "complete"
+      },
+      {
+        "area": "fixture-details",
+        "status": "complete"
+      },
+      {
+        "area": "news:CISA KEV",
+        "status": "ok"
+      },
+      {
+        "area": "source:CISA KEV",
+        "reason": "情報源の成功と履歴範囲を確認",
+        "status": "complete"
+      }
+    ],
+    "findings": [],
+    "generatedAt": "2026-11-02T18:24:16.370Z",
+    "impact": "compromise-unconfirmed",
+    "newsAssessment": [],
+    "schemaVersion": 2,
+    "uniqueAdvisoryCount": 0
+  },
+  "metrics": {
+    "commandCount": 0,
+    "commands": {
+      "peak": 0
+    },
+    "hosts": {},
+    "http": {
+      "peak": 0
+    },
+    "requests": 0,
+    "scanner": {
+      "peak": 0
+    }
+  },
+  "news": {
+    "coverage": [
+      {
+        "area": "fixture-news",
+        "status": "complete"
+      }
+    ],
+    "items": [],
+    "sources": [
+      {
+        "name": "CISA KEV",
+        "status": "ok"
+      }
+    ],
+    "window": {
+      "since": "2026-11-01T00:00:00Z",
+      "until": "2026-11-03T00:00:00Z"
+    }
+  },
+  "packages": {
+    "continuation": {
+      "pendingLockfiles": []
+    },
+    "coverage": [
+      {
+        "area": "fixture-query",
+        "status": "complete"
+      }
+    ],
+    "findings": [],
+    "packages": []
+  },
+  "queryCoverage": "complete",
+  "runId": "a79d1202-9047-4040-938c-d97a8932042b",
+  "runStatus": "complete",
+  "schemaVersion": 2
+}

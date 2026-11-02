@@ -2,3 +2,8 @@
 # These deliberately fake values test that credential-bearing URLs are excluded.
 https://user:SENTINEL@example.test',
 https://user:secret@registry.npmjs.org
+
+# Synthetic SENTINEL_SECRET URL fixtures; no usable credentials.
+https://user:SENTINEL_SECRET@github.com
+https://user:SENTINEL_SECRET@private.example
+https://user:SENTINEL_SECRET@private.example')
