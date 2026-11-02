@@ -1,0 +1,4 @@
+# Exact benign basic-auth spans in mac-security-sweep privacy regression fixtures.
+# These deliberately fake values test that credential-bearing URLs are excluded.
+https://user:SENTINEL@example.test',
+https://user:secret@registry.npmjs.org
