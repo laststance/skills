@@ -8,13 +8,21 @@
 
 Agent skills for AI coding assistants. Install via [skills.sh](https://skills.sh).
 
-## 🛡️ mac-security-sweep — このMacに関係するセキュリティ情報を、根拠つきで調べる
+## 🛡️ mac-security-sweep — 最新の脆弱性情報を収集し、実行したMacに被害がないか確認します
 
-**「いま出ている注意報は、このMacに関係がある？ あるなら、何から確認すればいい？」を調べるスキルです。** Macの中にあるソフトの名前・バージョン・状態を読み、公開されているセキュリティ情報と照合して、日本語のレポートを自分のMacに保存します。
+### インストール
 
-感覚としては、**家にある製品の型番と、メーカーのリコール一覧を見比べる**作業です。「その型番が対象だった」という事実が分かったら、実物や利用状況を確かめます。事故が起きたかどうかは、さらに別の証拠で判断します。
+```bash
+npx skills add -g laststance/skills --skill mac-security-sweep
+```
 
-### まずは、1つの記録がレポートになるまで
+### 使い方(お使いのAIエージェントでスキルを起動)
+
+```text
+/mac-security-sweep
+```
+
+### mac-security-sweep 動作の流れ
 
 ![mac-security-sweepの5段階。名前と版を読む、公開の注意報を調べる、照合する、侵害の根拠と未確認範囲を分ける、日本語レポートを保存する。](docs/mac-security-sweep/walkthrough.gif)
 
@@ -93,7 +101,7 @@ MP4はダウンロード後、お使いの動画プレーヤーで再生・一�
 未導入の場合に**自分でターミナルへ入力するインストールコマンド**です。実行場所は任意。スキルを導入する操作で、Macのセキュリティ巡回はまだ始まりません。
 
 ```bash
-npx skills add laststance/skills --skill mac-security-sweep
+npx skills add -g laststance/skills --skill mac-security-sweep
 ```
 
 導入後、対応するエージェントのチャットで **Codexなら `$mac-security-sweep`、Claude Codeなら `/mac-security-sweep`、OpenClawなら `mac-security-sweep を実行`** と依頼すると巡回を開始します。読み込みだけを確かめたい場合は「読み込み確認のみ」と付けます。
