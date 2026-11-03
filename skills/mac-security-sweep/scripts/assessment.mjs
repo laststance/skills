@@ -151,7 +151,10 @@ export function compareAssessments(previous = [], findings = [], packages = {}, 
   const changes = { new: [], continuing: [], resolved: [], unconfirmed: [] };
   const snapshot = findings.filter(positive).map(finding => ({ id: finding.id, title: finding.title, status: finding.status,
     advisoryId: finding.advisoryId, package: finding.package, version: finding.version, evidence: finding.localEvidence || [], scope: finding.scope,
-    incident: finding.incident === true, advisoryType: finding.advisoryType, aliases: (finding.aliases || []).filter(validAdvisoryId), impact: finding.impact }));
+    incident: finding.incident === true, advisoryType: finding.advisoryType, aliases: (finding.aliases || []).filter(validAdvisoryId), impact: finding.impact,
+    observedAt: finding.observedAt, queriedAt: finding.queriedAt, verifiedAt: finding.verifiedAt, queryComplete: finding.queryComplete,
+    historyScope: finding.historyScope, assessmentBasis: finding.assessmentBasis, reasonCode: finding.reasonCode,
+    conflictingEvidence: finding.conflictingEvidence === true }));
   for (const finding of findings.filter(positive)) changes[prior.has(key(finding)) ? 'continuing' : 'new'].push(finding);
   for (const old of previous) {
     if (current.has(key(old)) && positive(current.get(key(old)))) continue;

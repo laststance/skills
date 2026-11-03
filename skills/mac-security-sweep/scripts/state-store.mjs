@@ -3,9 +3,11 @@ import { constants } from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { createSafeIO, boundedJson, inspectAncestors, recheckAncestors, identity, within, LIMITS } from './safe-io.mjs';
-import { projectProgress, mergePrivateState, validateConfiguration, STATE_SCHEMA } from './configuration.mjs';
+import { projectProgress, mergePrivateState, validateConfiguration, validateProfile, CONFIG_KEYS, STATE_SCHEMA } from './configuration.mjs';
 import { SweepError, causeClass } from './diagnostics.mjs';
 import { executeCommand, resolveTool } from './runtime.mjs';
+import { normalizeLanguage } from './locale.mjs';
+import { validateTranslationContent } from './translation-validation.mjs';
 
 const GENERATION = /^mss-[a-f0-9-]{36}-\d{6}$/;
 const HASH = /^[a-f0-9]{64}$/;
@@ -136,10 +138,11 @@ async function acquireLockGuarded(stateRoot, { home, runId = randomUUID(), files
 }
 
 /** report→commit→stateの順序を一箇所で所有する。runnerと耐中断テストが利用する。 @example const store = await createStateStore({home,runId}); */
-export async function createStateStore({ home, runId = randomUUID(), filesystem = fs, identityProvider, onBoundary = async () => {}, checkPreflight = () => {} } = {}) {
+export async function createStateStore({ home, profile, runId = randomUUID(), filesystem = fs, identityProvider, onBoundary = async () => {}, checkPreflight = () => {} } = {}) {
   checkPreflight();
-  const stateRoot = path.join(home, '.local/state/mac-security-sweep');
-  const reportRoot = path.join(home, 'security-reports');
+  validateProfile(profile);
+  const stateRoot = path.join(home, '.local/state/mac-security-sweep', ...(profile ? ['profiles', profile] : []));
+  const reportRoot = path.join(home, 'security-reports', ...(profile ? ['profiles', profile] : []));
   const statePath = path.join(stateRoot, 'state.json');
   const io = createSafeIO({ home, filesystem });
   // 不正なstateは専用ディレクトリ・ロックの作成前に拒否する。
@@ -148,6 +151,13 @@ export async function createStateStore({ home, runId = randomUUID(), filesystem 
     original = await io.readJson(statePath, { roots: [stateRoot], maxBytes: LIMITS.state });
     stateIdentity = identity((await io.inspect(statePath, { roots: [stateRoot] })).metadata);
   } catch (error) { if (causeClass(error) !== 'absent') throw new SweepError('STATE', { cause: causeClass(error), operation: 'state' }); }
+  // A new profile inherits only validated scan settings, never another run's evidence or cursors.
+  if (profile && stateIdentity === null) {
+    const baseRoot = path.join(home, '.local/state/mac-security-sweep');
+    const base = await io.readJson(path.join(baseRoot, 'state.json'), { roots: [baseRoot], maxBytes: LIMITS.state }).catch(error => { if (causeClass(error) === 'absent') return {}; throw error; });
+    validateConfiguration(base, home);
+    original = Object.fromEntries(CONFIG_KEYS.filter(key => base[key] !== undefined).map(key => [key, base[key]]));
+  }
   const config = validateConfiguration(original, home);
   checkPreflight();
   await privateDirectory(stateRoot, { home, filesystem });
@@ -272,9 +282,50 @@ export async function createStateStore({ home, runId = randomUUID(), filesystem 
     // 成功cursorを進めるのはreport/hash/commitの公開が完了した後だけ。
     await saveState(mergePrivateState(state, { ...continuation, schemaVersion: STATE_SCHEMA, generation: id, lastReport: reportPath }));
     progressVerified = true;
-    return { reportPath, evidenceDirectory: directory, statePath, generation: id };
+    return { reportPath, reportHash: marker.report.hash, evidenceDirectory: directory, statePath, generation: id };
+  }
+  /** Read an immutable canonical generation for translation without advancing scan progress.
+   * @example const source = await store.canonicalReport(generation);
+   */
+  async function canonicalReport(generation) {
+    if (!GENERATION.test(generation || '')) throw new SweepError('USAGE', { cause: 'malformed', operation: 'report' });
+    const directory = path.join(reportRoot, generation);
+    const canonical = await readCommit(directory);
+    const content = await io.readText(canonical.reportPath, { roots: [reportRoot], maxBytes: LIMITS.state });
+    return { generation, directory, path: canonical.reportPath, hash: canonical.report.hash, content, locale: canonical.continuation.locale };
+  }
+
+  /** Publish an evidence-linked translation only after host semantic review. The delivery CLI retries this idempotently.
+   * @example await store.commitTranslation({ generation, canonicalHash, language:'es', content, semanticReviewed:true });
+   */
+  async function commitTranslation({ generation, canonicalHash, language, content, semanticReviewed = false }) {
+    const requestedLanguage = normalizeLanguage(language);
+    if (['ja', 'en'].includes(requestedLanguage) || !semanticReviewed) throw new SweepError('TRANSLATION_PENDING', { cause: 'mismatch', operation: 'report' });
+    const canonical = await canonicalReport(generation);
+    if (!HASH.test(canonicalHash || '') || canonical.hash !== canonicalHash || canonical.locale?.requestedLanguage !== requestedLanguage) throw new SweepError('STATE', { cause: 'mismatch', operation: 'report' });
+    validateTranslationContent(canonical.content, content);
+    await lock.assertOwner();
+    const directory = path.join(canonical.directory, 'translations');
+    await privateDirectory(directory, { home, filesystem });
+    const contentHash = digest(content);
+    const name = `${requestedLanguage}-${contentHash}.md`;
+    const translatedPath = path.join(directory, name);
+    const manifestPath = path.join(directory, `${requestedLanguage}-${contentHash}.commit.json`);
+    const expected = { schemaVersion: 1, generation, requestedLanguage, canonicalLanguage: canonical.locale.canonicalLanguage,
+      canonicalReport: '../report.md', canonicalHash, translatedReport: name, translatedHash: contentHash,
+      translationStatus: 'complete', semanticReview: 'host-attested' };
+    // A previous process may have published a marker before losing its response; verify, never overwrite it.
+    const prior = await io.readJson(manifestPath, { roots: [reportRoot], maxBytes: 8192 }).catch(error => { if (causeClass(error) === 'absent') return null; throw error; });
+    if (prior && stableJson(prior) !== stableJson(expected)) throw new SweepError('STATE', { cause: 'mismatch', operation: 'report' });
+    const existing = await io.readBytes(translatedPath, { roots: [reportRoot], maxBytes: LIMITS.state }).catch(error => { if (causeClass(error) === 'absent') return null; throw error; });
+    if (existing && digest(existing) !== contentHash || prior && !existing) throw new SweepError('STATE', { cause: 'mismatch', operation: 'report' });
+    if (!existing) await atomicWrite(translatedPath, content, { boundary: 'translation' });
+    if (!prior) await atomicWrite(manifestPath, stableJson(expected), { boundary: 'translation-commit' });
+    const verified = await io.readJson(manifestPath, { roots: [reportRoot], maxBytes: 8192 });
+    if (stableJson(verified) !== stableJson(expected) || digest(await io.readBytes(translatedPath, { roots: [reportRoot], maxBytes: LIMITS.state })) !== contentHash) throw new SweepError('STATE', { cause: 'mismatch', operation: 'report' });
+    return { ...expected, canonicalReportPath: canonical.path, translatedPath, manifestPath };
   }
   try { await reconcile(); }
   catch (error) { await lock.release().catch(() => {}); throw error; }
-  return { get state() { return state; }, get progressVerified() { return progressVerified; }, config, reportRoot, stateRoot, statePath, commit, reconcile, close: lock.release };
+  return { get state() { return state; }, get progressVerified() { return progressVerified; }, config, reportRoot, stateRoot, statePath, commit, canonicalReport, commitTranslation, reconcile, close: lock.release };
 }

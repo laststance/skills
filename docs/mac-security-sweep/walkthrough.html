@@ -7,108 +7,116 @@
 <link rel="icon" href="data:,">
 <title>mac-security-sweep 動作の流れ</title>
 <style>
+  :root { --canvas: #f5f7fb; --text: #172b49; --secondary: #50617a; --active: #1758b8; --surface: #fff; --border: #a6b6cb; --visited: #7050b7; }
   * { box-sizing: border-box; }
-  body { margin: 0; background: #f5f7fb; color: #172b49; font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif; }
+  body { margin: 0; background: var(--canvas); color: var(--text); font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif; font-size: 16px; line-height: 1.7; }
   main { max-width: 1600px; margin: auto; }
   svg { display: block; width: 100%; aspect-ratio: 16 / 9; }
-  .note, .summary, .sources { margin: 0 auto; max-width: 960px; padding: 14px 24px; line-height: 1.8; }
-  .note { font-size: 14px; color: #50617a; }
-  .controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px; padding: 18px 16px; border-block: 1px solid #d6dfeb; background: #fff; }
-  button { border: 1px solid #a6b6cb; border-radius: 8px; background: #fff; color: #172b49; padding: 11px 18px; min-height: 46px; font: inherit; cursor: pointer; }
-  button:focus-visible { outline: 3px solid #1758b8; outline-offset: 3px; }
+  .note, .description, .sources { margin: 0 auto; max-width: 70ch; padding: 16px 24px; overflow-wrap: anywhere; }
+  .note, .sources { color: var(--secondary); }
+  .controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px; padding: 18px 16px; border-block: 1px solid var(--border); background: var(--surface); }
+  button { border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); padding: 10px 18px; min-width: 46px; min-height: 46px; font: inherit; cursor: pointer; }
+  button:focus-visible, a:focus-visible { outline: 3px solid var(--active); outline-offset: 3px; }
   button:hover { background: #eaf0fa; }
-  button:disabled { color: #687a92; background: #f0f3f7; cursor: default; }
-  #play { color: #fff; background: #1758b8; border-color: #1758b8; min-width: 110px; }
+  button[aria-disabled="true"] { color: var(--secondary); background: #f0f3f7; cursor: default; }
+  #play { color: var(--surface); background: var(--active); border-color: var(--active); min-width: 110px; }
   #step { min-width: 110px; text-align: center; font-weight: 700; }
-  .summary { font-size: 18px; min-height: 84px; }
-  .mobile-detail { display: none; white-space: pre-line; }
-  .sources { font-size: 14px; color: #50617a; }
-  a { color: #1758b8; }
-  html[data-render] .note, html[data-render] .controls, html[data-render] .summary, html[data-render] .sources { display: none; }
+  .summary { margin: 0 0 10px; font-size: 20px; line-height: 1.6; }
+  .detail { margin: 0; white-space: pre-line; }
+  a { color: var(--active); text-underline-offset: 3px; }
+  a:visited { color: var(--visited); }
+  html[data-render] .note, html[data-render] .controls, html[data-render] .description, html[data-render] .sources { display: none; }
   html[data-render] svg { width: 100vw; height: 100vh; }
-  @media (max-width: 640px) { .mobile-detail { display: block; margin: 0 16px 16px; padding: 16px; border: 1px solid #bdc9da; border-radius: 10px; background: white; line-height: 1.8; } .note, .summary, .sources { padding-inline: 16px; } .controls { gap: 8px; } button { padding-inline: 12px; } #step { min-width: 90px; } }
+  @media (max-width: 800px) {
+    .description { margin: 0 16px 16px; padding: 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+    .note, .sources { padding-inline: 16px; }
+    .controls { gap: 8px; }
+    button { padding-inline: 12px; }
+    #step { min-width: 90px; }
+  }
 </style>
 <script>if (new URLSearchParams(location.search).has('render')) document.documentElement.dataset.render = '';</script>
 </head>
 <body>
 <main>
-  <p class="note">説明用のアニメーションです。「次へ」で1段階ずつ読めます。再生してもMacの調査・外部通信は行いません。</p>
-  <svg id="stage" role="img" aria-label="名前と版を読む、注意報を調べる、照合する、根拠を確かめる、結果を残す、という5段階の図" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid meet"></svg>
+  <p class="note">「次へ」で1段階ずつ確認できます。この説明の再生によってMacのスキャンが始まることはありません。</p>
+  <svg id="stage" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid meet"></svg>
   <nav class="controls" aria-label="アニメーションの操作">
     <button id="previous" type="button">← 前へ</button>
-    <output id="step" aria-live="polite">STEP 1 / 5</output>
+    <span id="step" aria-live="off">STEP 1 / 5</span>
     <button id="next" type="button">次へ →</button>
     <button id="play" type="button">再生</button>
     <button id="replay" type="button">最初から</button>
   </nav>
-  <p class="summary" id="summary" aria-live="polite">まず、ソフトの「名前と版」を読む。</p>
-  <p class="mobile-detail" id="detail"></p>
-  <p class="sources">根拠: <a href="../../skills/mac-security-sweep/references/examples/positive-partial/report.md">同梱の合成テストを実行したレポート</a>。example 1.0.0 と GHSA-fixture-positive は合成データで、実在の脆弱性や実Macの監査結果ではありません。<a href="../../README.md">READMEの詳しい説明へ</a>。</p>
+  <section class="description" aria-live="polite" aria-atomic="true" aria-labelledby="summary">
+    <h1 class="summary" id="summary"></h1>
+    <p class="detail" id="detail"></p>
+  </section>
+  <p class="sources">example 1.0.0 と GHSA-fixture-positive は説明用の合成データです。<a href="../../skills/mac-security-sweep/references/examples/positive-partial/report.md">合成テストの実行結果</a> · <a href="../../skills/mac-security-sweep/SKILL.md">SKILL.md（スキル本文）</a></p>
 </main>
 <script>
-// 同梱E2Eの positive-partial 出力を説明する。実Macの情報・実在の脆弱性は使わない。
+// Values come from the bundled synthetic news-first example, never a real Mac report.
 const LOCAL = '#1758b8';
 const PUBLIC = '#7050b7';
 const CHECK = '#a45c08';
 const REPORT = '#116b61';
-
 window.SPEC = {
   title: 'mac-security-sweep 動作の流れ',
-  subtitle: '同梱の合成テストを実行した例  /  実Mac・実在の脆弱性の情報ではありません',
+  subtitle: '説明用の合成テスト  /  実在の脆弱性・実Macの監査結果ではありません',
   row: 615,
   theme: { bg: '#f5f7fb', card: '#ffffff', fg: '#172b49', dim: '#50617a', edge: '#bdc9da', dot: '#f0f3f8', font: "'Hiragino Sans', 'Noto Sans JP', 'Yu Gothic', sans-serif" },
   stations: [
-    { id: 'local', label: '① 名前と版を読む', sub: 'Macの中', color: LOCAL, x: 160, w: 260 },
-    { id: 'public', label: '② 注意報を調べる', sub: '公開情報', color: PUBLIC, x: 480, w: 260 },
-    { id: 'match', label: '③ 突き合わせる', sub: 'Macの中', color: CHECK, x: 800, w: 260 },
-    { id: 'evidence', label: '④ 根拠を確かめる', sub: 'Macの中', color: CHECK, x: 1120, w: 260 },
-    { id: 'report', label: '⑤ 結果を残す', sub: '自分のMacに保存', color: REPORT, x: 1440, w: 260 },
+    { id: 'public', label: '① 最新情報を取得', sub: '公開情報', color: PUBLIC, x: 160, w: 280 },
+    { id: 'local', label: '② ソフトを確認', sub: 'Macの中', color: LOCAL, x: 480, w: 280 },
+    { id: 'match', label: '③ 対象条件を照合', sub: 'Macの中', color: CHECK, x: 800, w: 280 },
+    { id: 'evidence', label: '④ 痕跡を確認', sub: 'Macの中', color: CHECK, x: 1120, w: 280 },
+    { id: 'report', label: '⑤ 結果を保存', sub: '自分のMacに保存', color: REPORT, x: 1440, w: 280 },
   ],
   paths: [
-    { id: '12', from: 'local', to: 'public', kind: 'line' },
-    { id: '23', from: 'public', to: 'match', kind: 'line' },
+    { id: '12', from: 'public', to: 'local', kind: 'line' },
+    { id: '23', from: 'local', to: 'match', kind: 'line' },
     { id: '34', from: 'match', to: 'evidence', kind: 'line' },
     { id: '45', from: 'evidence', to: 'report', kind: 'line' },
   ],
   beats: [
-    { at: 'local', dur: 6, loop: 1, kicker: 'STEP 1 / 5', caption: 'まず、ソフトの「名前と版」を読む。', out: { text: '公開照会を許可した名前・版', color: LOCAL },
-      bubble: { title: 'この例で見つかった依存の記録', w: 640, keep: 'next', lines: [
-        { text: '名前: example', size: 38, bold: true },
-        { text: '版: 1.0.0   /   種類: npm', size: 34 },
-        { text: '実物・実行はまだ未確認', size: 32, color: CHECK },
+    { at: 'public', dur: 8, loop: 1, kicker: 'STEP 1 / 5', caption: '最初に、最新のセキュリティ情報を集めます。', out: { text: '最新の公開情報', color: PUBLIC },
+      bubble: { title: '公開情報を先に取得', w: 780, keep: 'next', lines: [
+        { text: '告知: GHSA-fixture-positive', size: 32, bold: true },
+        { text: '公開日・更新日・取得日時を保存', size: 32 },
+        { text: '取得できなかった情報源は未確認として記録', size: 28, color: CHECK },
       ] } },
     { move: '12', dur: 1.2 },
-    { at: 'public', dur: 7, loop: 1, kicker: 'STEP 2 / 5', caption: 'その名前と版に関係する、公開の注意報を調べる。', out: { text: 'この版に該当する注意報', color: PUBLIC },
-      bubble: { title: '公開APIの応答を模した合成データ', w: 700, keep: 'next', lines: [
-        { text: '対象: example 1.0.0', size: 38, bold: true },
-        { text: '告知: GHSA-fixture-positive', size: 30 },
-        { text: 'ファイル本文は照会に送らない', size: 32, color: PUBLIC },
+    { at: 'local', dur: 7, loop: 1, kicker: 'STEP 2 / 5', caption: 'インストール済みのソフトとバージョンを確認します。', out: { text: 'ソフトとバージョンの記録', color: LOCAL },
+      bubble: { title: 'アプリ・ランタイム・依存を確認', w: 720, keep: 'next', lines: [
+        { text: 'example 1.0.0 / npm', size: 38, bold: true },
+        { text: 'この例ではロックファイルに記録あり', size: 31 },
+        { text: 'インストール・実行は未確認', size: 32, color: CHECK },
       ] } },
     { move: '23', dur: 1.2 },
-    { at: 'match', dur: 7, loop: 1, kicker: 'STEP 3 / 5', caption: '名前と版が一致したので、確認すべき対象になる。', out: { text: '優先して確認する1対象', color: CHECK },
-      bubble: { title: '手元の記録と、告知の対象を照合', w: 690, keep: 'next', lines: [
-        { text: 'example 1.0.0 = 告知の対象', size: 34, bold: true },
-        { text: '分かったこと: 影響版の記録がある', size: 32, color: CHECK },
-        { text: '実行・被害は別の根拠で確認する', size: 32 },
+    { at: 'match', dur: 7, loop: 1, kicker: 'STEP 3 / 5', caption: '確認したバージョンを、脆弱性の対象条件と照合します。', out: { text: '対象条件との照合結果', color: CHECK },
+      bubble: { title: '配布元・バージョンと告知を照合', w: 760, keep: 'next', lines: [
+        { text: 'example 1.0.0: 告知の対象', size: 34, bold: true },
+        { text: '修正済み・対象外・判断不能も区別', size: 32 },
+        { text: '過去の告知も照合', size: 32, color: CHECK },
       ] } },
     { move: '34', dur: 1.2 },
-    { at: 'evidence', dur: 8, loop: 1, kicker: 'STEP 4 / 5', caption: '侵害の証拠と、調べきれなかった範囲を分ける。', out: { text: '分かったこと + 未確認', color: CHECK },
-      bubble: { title: 'このテストで実際に出た確認結果', w: 720, keep: 'next', lines: [
-        { text: '侵害を示すIOCの確定: 0件', size: 34, bold: true },
-        { text: '読めない範囲: 1件', size: 34, color: CHECK },
-        { text: '侵害・窃取があったかは未確認', size: 32 },
+    { at: 'evidence', dur: 8, loop: 1, kicker: 'STEP 4 / 5', caption: '公開された指標を使い、侵害の痕跡を確認します。', out: { text: '観測した事実と未確認範囲', color: CHECK },
+      bubble: { title: 'この合成テストの結果', w: 720, keep: 'next', lines: [
+        { text: '固有IOCの一致: 0件', size: 36, bold: true },
+        { text: '読み取れなかった範囲: 1件', size: 32, color: CHECK },
+        { text: '過去の侵害は未確認', size: 32 },
       ] } },
     { move: '45', dur: 1.2 },
-    { at: 'report', dur: 8, loop: 1, kicker: 'STEP 5 / 5', caption: '根拠と未確認を添えて、次にすることを提案する。', out: { text: '日本語レポート', color: REPORT },
-      bubble: { title: '自分のMacに、日本語の結果を保存', w: 680, lines: [
-        { text: '優先確認: 1対象', size: 38, bold: true },
-        { text: '調査状況: partial（未確認が残る）', size: 31, color: CHECK },
-        { text: '利用状況を確認し、更新を計画する', size: 31 },
-        { text: '対策は提案。勝手に変更しない。', size: 31, color: REPORT },
+    { at: 'report', dur: 8, loop: 1, kicker: 'STEP 5 / 5', caption: '重要なニュースと、このMacの確認結果を保存します。', out: { text: '会話の言語でレポート', color: REPORT },
+      bubble: { title: '自分のMacに結果を保存', w: 730, lines: [
+        { text: '重要ニュース + Macの確認結果', size: 32, bold: true },
+        { text: 'この例: 要確認1件 / 一部未完了', size: 31, color: CHECK },
+        { text: '会話の言語で保存', size: 32 },
+        { text: '対策は提案。実行には本人の確認。', size: 30, color: REPORT },
       ] } },
   ],
-  outro: { kicker: 'READ ONLY', caption: '読んで、照合して、根拠と未確認を残す。', hold: 4, loop: [] },
-  poster: 42.5,
+  outro: { kicker: 'READ ONLY', caption: '最新情報とMacの状態を照合し、根拠を残します。', hold: 4, loop: [] },
+  poster: 43.5,
 };
 
 </script>
@@ -327,7 +335,7 @@ window.SPEC = {
       const arrive = beats.find((x) => !x.move && x.at === n.id && t >= x.t0 && t < x.t0 + 0.6);
       const pu = arrive ? 1 - (t - arrive.t0) / 0.6 : 0;
       const on = active === n.id;
-      set(n.g, { transform: `translate(${n.x} ${n.y}) scale(${lerp(0.6, 1, easeBack(k)) * (1 + pu * 0.05)})`, opacity: easeOut(k) * (b && !on && t < outro.t0 ? 0.6 : 1) });
+      set(n.g, { transform: `translate(${n.x} ${n.y}) scale(${lerp(0.6, 1, easeBack(k)) * (1 + pu * 0.05)})`, opacity: easeOut(k) });
       set(n.glow, { opacity: on ? 0.4 : t >= outro.t0 ? 0.25 : 0 });
       set(n.ring, { opacity: pu * 0.9, transform: `scale(${1 + (1 - pu) * 0.2})` });
       set(n.bar, { width: on ? (n.w - 36) * ramp(t, b.t0 + 0.2, b.t1 - 0.2) : 0 });
@@ -360,7 +368,7 @@ window.SPEC = {
     const chars = Array.from(c || '');
     caption.textContent = chars.slice(0, Math.round(ramp(t - ct, 0.1, 0.1 + chars.length * 0.035) * chars.length)).join('');
     const kt = t >= outro.t0 ? (outro.kicker ?? '') : b ? b.kick : '';
-    if (kt) pill(kt, W - 140, 100, t >= outro.t0 ? T.fg : '#94a3b8', 24, kicker);
+    if (kt) pill(kt, W - 140, 100, t >= outro.t0 ? T.fg : T.dim, 24, kicker);
 
     stamp.textContent = opt.stamp ? `t=${t.toFixed(2)}s` : '';
   }
@@ -386,85 +394,97 @@ window.SPEC = {
 
 </script>
 <script>
-// SVGの決定的な時刻描画を、読む人が自分の速さで操作できるようにする。
 window.addEventListener('guide-ready', () => {
   const phases = ARCH.phases.filter(phase => phase.kind === 'stay');
+  const beats = SPEC.beats.filter(beat => beat.at);
   const previous = document.getElementById('previous');
   const next = document.getElementById('next');
   const play = document.getElementById('play');
   const step = document.getElementById('step');
   const summary = document.getElementById('summary');
   const detail = document.getElementById('detail');
-  const descriptions = SPEC.beats.filter(beat => beat.at).map(beat => beat.bubble.lines.map(line => line.text).join('\n'));
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   const endTime = phases.at(-1).t1 - 0.5;
-  let index = 0;
-  let time = 0;
-  let playing = false;
-  let lastFrame = 0;
+  let index = 0, time = 0, playing = false, lastFrame = 0, frameHandle = null, phaseTimer = null;
 
-  /**
-   * 手動操作や再生から呼び、現在の段階を文字でも読めるようにする。
-   * @example updateLabels();
-   */
+  document.getElementById('stage').setAttribute('aria-label', phases.map(phase => phase.caption).join(' '));
+
+  /** Keep one live region current when manual controls or playback change the stage. @example updateLabels(); */
   function updateLabels() {
     index = Math.max(0, phases.findLastIndex(phase => time >= phase.t0));
     const label = `STEP ${index + 1} / ${phases.length}`;
-    // 同じ段階ではlive regionを書き直さず、読み上げの反復を防ぐ。
     if (step.textContent !== label) step.textContent = label;
     if (summary.textContent !== phases[index].caption) summary.textContent = phases[index].caption;
-    if (detail.textContent !== descriptions[index]) detail.textContent = descriptions[index];
-    previous.disabled = index === 0;
-    next.disabled = index === phases.length - 1;
+    const description = beats[index].bubble.lines.map(line => line.text).join('\n');
+    if (detail.textContent !== description) detail.textContent = description;
+    previous.setAttribute('aria-disabled', String(index === 0));
+    next.setAttribute('aria-disabled', String(index === phases.length - 1));
     play.textContent = playing ? '一時停止' : '再生';
-    play.setAttribute('aria-pressed', String(playing));
   }
 
-  /**
-   * 前後のボタンから呼び、文字が出そろった段階へ止めて移動する。
-   * @example showStep(2);
-   */
+  /** Cancel the sole active animation or phase timer when playback stops. @example cancelScheduled(); */
+  function cancelScheduled() {
+    if (frameHandle !== null) cancelAnimationFrame(frameHandle);
+    if (phaseTimer !== null) clearTimeout(phaseTimer);
+    frameHandle = null;
+    phaseTimer = null;
+  }
+
+  /** Pause on user input, tab hiding or preference changes without losing the current scene. @example pause(); */
+  function pause() { playing = false; cancelScheduled(); updateLabels(); }
+
+  /** Manual navigation shows a complete still scene and keeps the focused boundary button active. @example showStep(2); */
   function showStep(target) {
-    playing = false;
+    pause();
     time = phases[Math.max(0, Math.min(phases.length - 1, target))].t1 - 0.5;
     ARCH.render(time);
     updateLabels();
   }
 
-  /**
-   * 再生中のフレームを進める。動きを減らす設定では段階ごとの静止画を表示する。
-   * @example requestAnimationFrame(tick);
-   */
+  /** Reduced-motion playback advances complete scenes using one timer and no frame animation. @example scheduleReduced(); */
+  function scheduleReduced() {
+    if (!playing) return;
+    phaseTimer = setTimeout(() => {
+      phaseTimer = null;
+      if (!playing) return;
+      if (index >= phases.length - 1) { pause(); return; }
+      time = phases[index + 1].t1 - 0.5;
+      ARCH.render(time);
+      updateLabels();
+      scheduleReduced();
+    }, (phases[index].t1 - phases[index].t0) * 1000);
+  }
+
+  /** Normal playback drives the deterministic renderer until the final result remains visible. @example requestAnimationFrame(tick); */
   function tick(now) {
+    frameHandle = null;
     if (!playing) return;
     time = Math.min(endTime, time + (now - lastFrame) / 1000);
     lastFrame = now;
+    ARCH.render(time);
     updateLabels();
-    ARCH.render(reducedMotion.matches ? phases[index].t1 - 0.5 : time);
-    // 終了時は最後の結果を残し、自動で最初へ戻さない。
-    if (time >= endTime) {
-      playing = false;
-      updateLabels();
-      return;
-    }
-    requestAnimationFrame(tick);
+    if (time >= endTime) { pause(); return; }
+    frameHandle = requestAnimationFrame(tick);
   }
 
-  previous.addEventListener('click', () => showStep(index - 1));
-  next.addEventListener('click', () => showStep(index + 1));
+  previous.addEventListener('click', () => { if (index > 0) showStep(index - 1); });
+  next.addEventListener('click', () => { if (index < phases.length - 1) showStep(index + 1); });
   play.addEventListener('click', () => {
-    playing = !playing;
-    if (playing) {
-      if (time >= endTime) time = 0;
-      lastFrame = performance.now();
-      requestAnimationFrame(tick);
+    if (playing) { pause(); return; }
+    cancelScheduled();
+    if (time >= endTime) {
+      time = reducedMotion.matches ? phases[0].t1 - 0.5 : phases[0].t0;
+      ARCH.render(time);
     }
+    playing = true;
     updateLabels();
+    if (reducedMotion.matches) scheduleReduced();
+    else { lastFrame = performance.now(); frameHandle = requestAnimationFrame(tick); }
   });
   document.getElementById('replay').addEventListener('click', () => showStep(0));
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) { playing = false; updateLabels(); }
-  });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
+  window.addEventListener('pagehide', pause);
+  reducedMotion.addEventListener('change', () => showStep(index));
   showStep(0);
 });
 </script>

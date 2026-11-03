@@ -434,6 +434,8 @@ test('全local container endpointを調べ名前・環境変数を保存せずSB
     assert.equal(fixture.result.containers.length, 4);
     assert.deepEqual([...new Set(fixture.result.containers.map(item => item.endpoint))].sort(), [...sockets].sort());
     assert.equal(fixture.result.sbomPackages[0].evidenceKind, 'digest-bound-sbom');
+    assert.equal(fixture.result.coverage.find(row => row.area === 'container-image-interior').status, 'partial');
+    assert.equal(fixture.result.coverage.find(row => row.area === 'container-image-interior').reasonCode, 'image-sbom-records-only');
     assert.equal(fixture.commands.every(item => item.args[0] === '--host' && item.args[1].startsWith('unix://')), true);
     assert.equal(JSON.stringify(fixture.result).includes(SECRET), false);
   } finally { await fixture.close(); }
@@ -524,5 +526,25 @@ test('このMacのplutilは検証済みFD由来の実binary plistをstdinから�
     assert.equal(fixture.result.applications[0].bundleId, 'org.example.binary');
     assert.equal(fixture.result.applications[0].version, '1.2.3');
     assert.equal(JSON.stringify(fixture.result).includes(SECRET), false);
+  } finally { await fixture.close(); }
+});
+
+test('観測したコンテナ画像にSBOMがなければ画像内部を未確認として記録する', async () => {
+  // Arrange
+  const fixture = await environmentFixture({ execute: async (operation, args) => {
+    assert.equal(operation, 'docker');
+    return { code: 0, stdout: args[2] === 'image' ? JSON.stringify({ ID: 'sha256:' + 'a'.repeat(64), Repository: 'fixture', Tag: 'latest' }) + '\n' : '', stderr: '' };
+  } });
+  try {
+    const socket = await fixture.write('.docker/run/docker.sock', '');
+    const inspect = fixture.context.io.inspect;
+    fixture.context.io.inspect = async (...args) => { const value = await inspect(...args); if (args[0] === socket) value.metadata.isSocket = () => true; return value; };
+    // Act
+    await collectContainersAndSsh(fixture.context, fixture.result);
+    // Assert
+    assert.equal(fixture.result.containers.length, 1);
+    assert.equal(fixture.result.sbomPackages.length, 0);
+    assert.deepEqual(fixture.result.coverage.filter(row => row.area === 'container-image-interior').map(row => [row.status, row.reasonCode]),
+      [['partial', 'image-sbom-missing']]);
   } finally { await fixture.close(); }
 });

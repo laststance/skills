@@ -1,39 +1,21 @@
 {
   "rules": [
     {
-      "id": "cursor-claude-code-2026-10",
-      "title": "Cursor Marketplace の Claude Code 拡張改ざん（2026年10月）",
-      "sourceUrl": "https://cursor.com/blog/claude-code-extension-security-notice",
-      "kind": "extension",
-      "editor": "cursor",
-      "extensionId": "anthropic.claude-code",
-      "affectedVersions": ["2.1.312", "2.1.313"],
-      "acceptedSources": ["gallery", "Cursor marketplace"],
-      "installationWindow": {"since": "2026-10-29T09:27:00Z", "until": "2026-10-29T20:35:00Z"},
-      "fixedVersions": [],
-      "incident": true,
-      "verified": true,
-      "verifiedAt": "2026-10-31",
-      "expiresAt": "2026-11-30T00:00:00Z",
-      "iocProfile": "cursor-2026-10",
-      "iocs": [
-        {"type": "exact-path", "relativePath": ".config/.smt"},
-        {"type": "exact-path", "relativePath": ".config/.smtk", "metadataOnly": true},
-        {"type": "exact-path", "relativePath": "Library/LaunchAgents/com.apple.sysmond.plist"},
-        {"type": "sha256", "target": "extension-js", "value": "ecb58cb29078d9646ad1dcdbe51526f2d9cfea06be5fb2ab183e8ecc3ab6bf15"},
-        {"type": "process-name", "value": "svc-telemetry"}
-      ],
-      "legacyCursorEvidence": {"ip": "134.209.82.225", "marker": "svc-telemetry", "keyBasename": ".smtk"},
-      "note": "2026-10-30更新の公式通知に基づく。配布時間帯は2026-10-29 09:27–20:35 UTC。VS Code側の同名拡張だけで被害判定しない。現在の不在では削除済み履歴を否定できない。"
-    },
-    {
       "id": "node-cve-2026-111497",
       "title": "Node.js / Brotli CVE-2026-111497（ベンダーの修正バックポートを考慮）",
       "sourceUrl": "https://nodejs.org/en/blog/vulnerability/october-2026-security-releases",
       "kind": "runtime",
       "runtimeName": "node",
-      "supportedMajors": [22, 24, 26],
-      "affectedRanges": [">=22.0.0, <22.23.4", ">=24.0.0, <24.22.1", ">=26.0.0, <26.12.1"],
+      "supportedMajors": [
+        22,
+        24,
+        26
+      ],
+      "affectedRanges": [
+        ">=22.0.0, <22.23.4",
+        ">=24.0.0, <24.22.1",
+        ">=26.0.0, <26.12.1"
+      ],
       "incident": false,
       "verified": true,
       "verifiedAt": "2026-10-31",
@@ -44,7 +26,9 @@
       "title": "Chrome Stableの2026-10-29セキュリティ更新",
       "sourceUrl": "https://chromereleases.googleblog.com/2026/10/stable-channel-update-for-desktop_02107719452.html",
       "kind": "application",
-      "applicationNames": ["Google Chrome"],
+      "applicationNames": [
+        "Google Chrome"
+      ],
       "affectedRange": "<156.0.8078.79",
       "fixedVersion": "156.0.8078.79",
       "incident": false,
@@ -57,7 +41,9 @@
       "title": "macOS Golden Gate 27.2のセキュリティ更新",
       "sourceUrl": "https://support.apple.com/en-us/149521",
       "kind": "os",
-      "supportedMajors": [27],
+      "supportedMajors": [
+        27
+      ],
       "affectedRange": ">=27.0, <27.2",
       "fixedVersion": "27.2",
       "incident": false,

@@ -1,0 +1,1492 @@
+{
+  "fixture": true,
+  "sequence": [
+    "news",
+    "inventory"
+  ],
+  "schemaVersion": 2,
+  "runStatus": "partial",
+  "collectionCoverage": "partial",
+  "queryCoverage": "complete",
+  "locale": {
+    "canonicalLanguage": "en",
+    "requestedLanguage": "en",
+    "translationStatus": "not-required"
+  },
+  "stageStatus": {
+    "adaptive": "complete",
+    "details": "complete",
+    "inventory": "partial",
+    "iocs": "complete",
+    "news": "complete",
+    "packages": "complete"
+  },
+  "inventory": {
+    "applications": [],
+    "coverage": [
+      {
+        "area": "synthetic-local-scope",
+        "reason": "合成テストで再現した読取制限",
+        "status": "partial"
+      }
+    ],
+    "extensions": [],
+    "generatedAt": "2026-11-03T00:00:00.000Z",
+    "host": {
+      "osVersion": "26.0"
+    },
+    "lockfiles": [],
+    "projectRoots": [],
+    "runtimes": []
+  },
+  "news": {
+    "categoryCoverage": [
+      {
+        "category": "macos",
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "reasonCode": "PRIMARY_SOURCE_FETCHED",
+        "sourceIds": [
+          "apple"
+        ],
+        "status": "fresh",
+        "undatedCount": 0,
+        "windowStatus": "complete"
+      },
+      {
+        "category": "ios",
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "reasonCode": "PRIMARY_SOURCE_FETCHED",
+        "sourceIds": [
+          "apple"
+        ],
+        "status": "fresh",
+        "undatedCount": 0,
+        "windowStatus": "complete"
+      },
+      {
+        "category": "mac-apps",
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "reasonCode": "PRIMARY_SOURCE_FETCHED",
+        "sourceIds": [
+          "apple",
+          "chrome",
+          "mozilla",
+          "electron",
+          "node"
+        ],
+        "status": "fresh",
+        "undatedCount": 0,
+        "windowStatus": "complete"
+      },
+      {
+        "category": "homebrew",
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "reasonCode": "PRIMARY_SOURCE_FETCHED",
+        "sourceIds": [
+          "homebrew"
+        ],
+        "status": "fresh",
+        "undatedCount": 0,
+        "windowStatus": "complete"
+      },
+      {
+        "category": "linux",
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "reasonCode": "PRIMARY_SOURCE_FETCHED",
+        "sourceIds": [
+          "debian",
+          "ubuntu",
+          "redhat",
+          "alpine"
+        ],
+        "status": "fresh",
+        "undatedCount": 0,
+        "windowStatus": "complete"
+      },
+      {
+        "category": "php",
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "reasonCode": "PRIMARY_SOURCE_FETCHED",
+        "sourceIds": [
+          "php",
+          "php-core"
+        ],
+        "status": "fresh",
+        "undatedCount": 0,
+        "windowStatus": "complete"
+      },
+      {
+        "category": "tls",
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "reasonCode": "PRIMARY_SOURCE_FETCHED",
+        "sourceIds": [
+          "openssl"
+        ],
+        "status": "fresh",
+        "undatedCount": 0,
+        "windowStatus": "complete"
+      },
+      {
+        "category": "imagemagick",
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "reasonCode": "PRIMARY_SOURCE_FETCHED",
+        "sourceIds": [
+          "imagemagick"
+        ],
+        "status": "fresh",
+        "undatedCount": 0,
+        "windowStatus": "complete"
+      },
+      {
+        "category": "ruby",
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "reasonCode": "PRIMARY_SOURCE_FETCHED",
+        "sourceIds": [
+          "ruby",
+          "ruby-security"
+        ],
+        "status": "fresh",
+        "undatedCount": 0,
+        "windowStatus": "complete"
+      },
+      {
+        "category": "java",
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "reasonCode": "PRIMARY_SOURCE_FETCHED",
+        "sourceIds": [
+          "openjdk",
+          "oracle"
+        ],
+        "status": "fresh",
+        "undatedCount": 0,
+        "windowStatus": "complete"
+      },
+      {
+        "category": "docker",
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "reasonCode": "PRIMARY_SOURCE_FETCHED",
+        "sourceIds": [
+          "docker"
+        ],
+        "status": "fresh",
+        "undatedCount": 0,
+        "windowStatus": "complete"
+      },
+      {
+        "category": "incidents",
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "reasonCode": "PRIMARY_SOURCE_FETCHED",
+        "sourceIds": [
+          "cisa-kev",
+          "cisa-advisories",
+          "cisa-analysis",
+          "microsoft-security",
+          "jpcert-analysis",
+          "ghsa-malware",
+          "opensourcemalware"
+        ],
+        "status": "fresh",
+        "undatedCount": 0,
+        "windowStatus": "complete"
+      },
+      {
+        "category": "general",
+        "datedItemCount": 1,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "reasonCode": "PRIMARY_SOURCE_FETCHED",
+        "sourceIds": [
+          "cisa-kev",
+          "ghsa-reviewed",
+          "jpcert",
+          "ipa",
+          "hackernews",
+          "bleepingcomputer",
+          "socket",
+          "securitynext",
+          "piyolog"
+        ],
+        "status": "fresh",
+        "undatedCount": 0,
+        "windowStatus": "complete"
+      }
+    ],
+    "coverage": [
+      {
+        "area": "synthetic-news",
+        "status": "complete"
+      }
+    ],
+    "fetchedAt": "2026-11-03T00:00:00.000Z",
+    "items": [
+      {
+        "affected": [
+          {
+            "ecosystem": "npm",
+            "name": "example",
+            "range": "<1.0.1"
+          }
+        ],
+        "categories": [
+          "general"
+        ],
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "id": "GHSA-fixture-positive",
+        "publishedAt": "2026-11-02T00:00:00.000Z",
+        "severity": "HIGH",
+        "source": "GitHub Advisory reviewed",
+        "sourceId": "ghsa-reviewed",
+        "title": "example 1.0.0: synthetic security advisory",
+        "updatedAt": "2026-11-02T12:00:00.000Z",
+        "url": "https://github.com/advisories/GHSA-fixture-positive"
+      }
+    ],
+    "sources": [
+      {
+        "categories": [
+          "macos",
+          "ios",
+          "mac-apps"
+        ],
+        "datedCount": 0,
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "itemCount": 0,
+        "name": "Apple Security Releases",
+        "pages": 1,
+        "sourceId": "apple",
+        "status": "ok",
+        "undatedCount": 0,
+        "url": "https://support.apple.com/en-us/100100",
+        "windowComplete": true
+      },
+      {
+        "categories": [
+          "mac-apps"
+        ],
+        "datedCount": 0,
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "itemCount": 0,
+        "name": "Chrome Releases",
+        "pages": 1,
+        "sourceId": "chrome",
+        "status": "ok",
+        "undatedCount": 0,
+        "url": "https://feeds.feedburner.com/GoogleChromeReleases",
+        "windowComplete": true
+      },
+      {
+        "categories": [
+          "mac-apps"
+        ],
+        "datedCount": 0,
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "itemCount": 0,
+        "name": "Mozilla Security Advisories",
+        "pages": 1,
+        "sourceId": "mozilla",
+        "status": "ok",
+        "undatedCount": 0,
+        "url": "https://www.mozilla.org/en-US/security/advisories/",
+        "windowComplete": true
+      },
+      {
+        "categories": [
+          "mac-apps"
+        ],
+        "datedCount": 0,
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "itemCount": 0,
+        "name": "Electron Security Advisories",
+        "pages": 1,
+        "sourceId": "electron",
+        "status": "ok",
+        "undatedCount": 0,
+        "url": "https://api.github.com/repos/electron/electron/security-advisories",
+        "windowComplete": true
+      },
+      {
+        "categories": [
+          "mac-apps"
+        ],
+        "datedCount": 0,
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "itemCount": 0,
+        "name": "Node.js Security Releases",
+        "pages": 1,
+        "sourceId": "node",
+        "status": "ok",
+        "undatedCount": 0,
+        "url": "https://nodejs.org/en/feed/vulnerability.xml",
+        "windowComplete": true
+      },
+      {
+        "categories": [
+          "homebrew"
+        ],
+        "datedCount": 0,
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "itemCount": 0,
+        "name": "Homebrew Advisory Database",
+        "pages": 1,
+        "sourceId": "homebrew",
+        "status": "ok",
+        "undatedCount": 0,
+        "url": "https://api.github.com/repos/Homebrew/advisory-database/git/trees/main?recursive=1",
+        "windowComplete": true
+      },
+      {
+        "categories": [
+          "linux"
+        ],
+        "datedCount": 0,
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "itemCount": 0,
+        "name": "Debian Security Advisories",
+        "pages": 1,
+        "sourceId": "debian",
+        "status": "ok",
+        "undatedCount": 0,
+        "url": "https://www.debian.org/security/dsa-long.rdf",
+        "windowComplete": true
+      },
+      {
+        "categories": [
+          "linux"
+        ],
+        "datedCount": 0,
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "itemCount": 0,
+        "name": "Ubuntu Security Notices",
+        "pages": 1,
+        "sourceId": "ubuntu",
+        "status": "ok",
+        "undatedCount": 0,
+        "url": "https://ubuntu.com/security/notices/rss.xml",
+        "windowComplete": true
+      },
+      {
+        "categories": [
+          "linux"
+        ],
+        "datedCount": 0,
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "itemCount": 0,
+        "name": "Red Hat Security Data",
+        "pages": 1,
+        "sourceId": "redhat",
+        "status": "ok",
+        "undatedCount": 0,
+        "url": "https://access.redhat.com/hydra/rest/securitydata/cve.json",
+        "windowComplete": true
+      },
+      {
+        "categories": [
+          "linux"
+        ],
+        "datedCount": 0,
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "itemCount": 0,
+        "name": "Alpine 3.22 main security fixes",
+        "pages": 1,
+        "sourceId": "alpine",
+        "status": "ok",
+        "undatedCount": 0,
+        "url": "https://secdb.alpinelinux.org/v3.22/main.json",
+        "windowComplete": true
+      },
+      {
+        "categories": [
+          "php"
+        ],
+        "datedCount": 0,
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "itemCount": 0,
+        "name": "PHP News",
+        "pages": 1,
+        "sourceId": "php",
+        "status": "ok",
+        "undatedCount": 0,
+        "url": "https://www.php.net/feed.atom",
+        "windowComplete": true
+      },
+      {
+        "categories": [
+          "php"
+        ],
+        "datedCount": 0,
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "itemCount": 0,
+        "name": "PHP Core Security Advisories",
+        "pages": 1,
+        "sourceId": "php-core",
+        "status": "ok",
+        "undatedCount": 0,
+        "url": "https://api.github.com/repos/php/php-src/security-advisories",
+        "windowComplete": true
+      },
+      {
+        "categories": [
+          "tls"
+        ],
+        "datedCount": 0,
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "itemCount": 0,
+        "name": "OpenSSL Security Advisories",
+        "pages": 1,
+        "sourceId": "openssl",
+        "status": "ok",
+        "undatedCount": 0,
+        "url": "https://openssl-library.org/news/secjson/",
+        "windowComplete": true
+      },
+      {
+        "categories": [
+          "imagemagick"
+        ],
+        "datedCount": 0,
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "itemCount": 0,
+        "name": "ImageMagick Security Advisories",
+        "pages": 1,
+        "sourceId": "imagemagick",
+        "status": "ok",
+        "undatedCount": 0,
+        "url": "https://api.github.com/repos/ImageMagick/ImageMagick/security-advisories",
+        "windowComplete": true
+      },
+      {
+        "categories": [
+          "ruby"
+        ],
+        "datedCount": 0,
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "itemCount": 0,
+        "name": "Ruby News",
+        "pages": 1,
+        "sourceId": "ruby",
+        "status": "ok",
+        "undatedCount": 0,
+        "url": "https://www.ruby-lang.org/en/feeds/news.rss",
+        "windowComplete": true
+      },
+      {
+        "categories": [
+          "ruby"
+        ],
+        "datedCount": 0,
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "itemCount": 0,
+        "name": "Ruby Security Announcements",
+        "pages": 1,
+        "sourceId": "ruby-security",
+        "status": "ok",
+        "undatedCount": 0,
+        "url": "https://www.ruby-lang.org/en/security/",
+        "windowComplete": true
+      },
+      {
+        "categories": [
+          "java"
+        ],
+        "datedCount": 0,
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "itemCount": 0,
+        "name": "OpenJDK Security Advisories",
+        "pages": 1,
+        "sourceId": "openjdk",
+        "status": "ok",
+        "undatedCount": 0,
+        "url": "https://openjdk.org/groups/vulnerability/advisories/",
+        "windowComplete": true
+      },
+      {
+        "categories": [
+          "java"
+        ],
+        "datedCount": 0,
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "itemCount": 0,
+        "name": "Oracle Security Alerts",
+        "pages": 1,
+        "sourceId": "oracle",
+        "status": "ok",
+        "undatedCount": 0,
+        "url": "https://www.oracle.com/security-alerts/",
+        "windowComplete": true
+      },
+      {
+        "categories": [
+          "docker"
+        ],
+        "datedCount": 0,
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "itemCount": 0,
+        "name": "Docker Security Announcements",
+        "pages": 1,
+        "sourceId": "docker",
+        "status": "ok",
+        "undatedCount": 0,
+        "url": "https://docs.docker.com/security/security-announcements/",
+        "windowComplete": true
+      },
+      {
+        "categories": [
+          "general",
+          "incidents"
+        ],
+        "datedCount": 0,
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "itemCount": 0,
+        "name": "CISA KEV",
+        "pages": 1,
+        "sourceId": "cisa-kev",
+        "status": "ok",
+        "undatedCount": 0,
+        "url": "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",
+        "windowComplete": true
+      },
+      {
+        "categories": [
+          "incidents"
+        ],
+        "datedCount": 0,
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "itemCount": 0,
+        "name": "CISA Cybersecurity Advisories",
+        "pages": 1,
+        "sourceId": "cisa-advisories",
+        "status": "ok",
+        "undatedCount": 0,
+        "url": "https://www.cisa.gov/cybersecurity-advisories/cybersecurity-advisories.xml",
+        "windowComplete": true
+      },
+      {
+        "categories": [
+          "incidents"
+        ],
+        "datedCount": 0,
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "itemCount": 0,
+        "name": "CISA Analysis Reports",
+        "pages": 1,
+        "sourceId": "cisa-analysis",
+        "status": "ok",
+        "undatedCount": 0,
+        "url": "https://www.cisa.gov/cybersecurity-advisories/analysis-reports.xml",
+        "windowComplete": true
+      },
+      {
+        "categories": [
+          "incidents"
+        ],
+        "datedCount": 0,
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "itemCount": 0,
+        "name": "Microsoft Security Research",
+        "pages": 1,
+        "sourceId": "microsoft-security",
+        "status": "ok",
+        "undatedCount": 0,
+        "url": "https://www.microsoft.com/en-us/security/blog/feed/",
+        "windowComplete": true
+      },
+      {
+        "categories": [
+          "incidents"
+        ],
+        "datedCount": 0,
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "itemCount": 0,
+        "name": "JPCERT/CC Analysis",
+        "pages": 1,
+        "sourceId": "jpcert-analysis",
+        "status": "ok",
+        "undatedCount": 0,
+        "url": "https://blogs.jpcert.or.jp/en/atom.xml",
+        "windowComplete": true
+      },
+      {
+        "categories": [
+          "general"
+        ],
+        "datedCount": 1,
+        "datedItemCount": 1,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "itemCount": 1,
+        "name": "GitHub Advisory reviewed",
+        "pages": 1,
+        "sourceId": "ghsa-reviewed",
+        "status": "ok",
+        "undatedCount": 0,
+        "url": "https://api.github.com/advisories",
+        "windowComplete": true
+      },
+      {
+        "categories": [
+          "incidents"
+        ],
+        "datedCount": 0,
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "itemCount": 0,
+        "name": "GitHub Advisory malware",
+        "pages": 1,
+        "sourceId": "ghsa-malware",
+        "status": "ok",
+        "undatedCount": 0,
+        "url": "https://api.github.com/advisories",
+        "windowComplete": true
+      },
+      {
+        "categories": [
+          "general"
+        ],
+        "datedCount": 0,
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "itemCount": 0,
+        "name": "JPCERT/CC",
+        "pages": 1,
+        "sourceId": "jpcert",
+        "status": "ok",
+        "undatedCount": 0,
+        "url": "https://www.jpcert.or.jp/rss/jpcert.rdf",
+        "windowComplete": true
+      },
+      {
+        "categories": [
+          "general"
+        ],
+        "datedCount": 0,
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "itemCount": 0,
+        "name": "IPA",
+        "pages": 1,
+        "sourceId": "ipa",
+        "status": "ok",
+        "undatedCount": 0,
+        "url": "https://www.ipa.go.jp/security/rss/alert.rdf",
+        "windowComplete": true
+      },
+      {
+        "categories": [
+          "general"
+        ],
+        "datedCount": 0,
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "itemCount": 0,
+        "name": "The Hacker News",
+        "pages": 1,
+        "sourceId": "hackernews",
+        "status": "ok",
+        "undatedCount": 0,
+        "url": "https://feeds.feedburner.com/TheHackersNews",
+        "windowComplete": true
+      },
+      {
+        "categories": [
+          "general"
+        ],
+        "datedCount": 0,
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "itemCount": 0,
+        "name": "BleepingComputer",
+        "pages": 1,
+        "sourceId": "bleepingcomputer",
+        "status": "ok",
+        "undatedCount": 0,
+        "url": "https://www.bleepingcomputer.com/feed/",
+        "windowComplete": true
+      },
+      {
+        "categories": [
+          "general"
+        ],
+        "datedCount": 0,
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "itemCount": 0,
+        "name": "Socket",
+        "pages": 1,
+        "sourceId": "socket",
+        "status": "ok",
+        "undatedCount": 0,
+        "url": "https://socket.dev/api/blog/feed.json",
+        "windowComplete": true
+      },
+      {
+        "categories": [
+          "incidents"
+        ],
+        "datedCount": 0,
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "itemCount": 0,
+        "name": "OpenSourceMalware",
+        "pages": 1,
+        "sourceId": "opensourcemalware",
+        "status": "ok",
+        "undatedCount": 0,
+        "url": "https://opensourcemalware.com/rss.xml",
+        "windowComplete": true
+      },
+      {
+        "categories": [
+          "general"
+        ],
+        "datedCount": 0,
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "itemCount": 0,
+        "name": "Security NEXT",
+        "pages": 1,
+        "sourceId": "securitynext",
+        "status": "ok",
+        "undatedCount": 0,
+        "url": "https://www.security-next.com/feed",
+        "windowComplete": true
+      },
+      {
+        "categories": [
+          "general"
+        ],
+        "datedCount": 0,
+        "datedItemCount": 0,
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "itemCount": 0,
+        "name": "piyolog",
+        "pages": 1,
+        "sourceId": "piyolog",
+        "status": "ok",
+        "undatedCount": 0,
+        "url": "https://piyolog.hatenadiary.jp/feed",
+        "windowComplete": true
+      }
+    ],
+    "window": {
+      "since": "2026-10-04T00:00:00.000Z",
+      "until": "2026-11-03T00:00:00.000Z"
+    }
+  },
+  "packages": {
+    "continuation": {
+      "pendingLockfiles": []
+    },
+    "coverage": [
+      {
+        "area": "synthetic-package-query",
+        "status": "complete"
+      }
+    ],
+    "findings": [
+      {
+        "evidence": [],
+        "evidenceKind": "lock-declaration",
+        "id": "GHSA-fixture-positive",
+        "package": {
+          "ecosystem": "npm",
+          "name": "example"
+        },
+        "severity": "HIGH",
+        "version": "1.0.0"
+      }
+    ],
+    "packages": [
+      {
+        "ecosystem": "npm",
+        "name": "example",
+        "version": "1.0.0"
+      }
+    ],
+    "scannedAt": "2026-11-03T00:00:00.000Z"
+  },
+  "iocs": {
+    "checks": [],
+    "coverage": [
+      {
+        "area": "synthetic-ioc",
+        "status": "complete"
+      }
+    ]
+  },
+  "details": {
+    "continuation": {
+      "cache": [],
+      "pendingIds": []
+    },
+    "coverage": [
+      {
+        "area": "synthetic-details",
+        "status": "complete"
+      }
+    ],
+    "details": []
+  },
+  "match": {
+    "advisoryGroups": [
+      {
+        "advisoryIds": [
+          "GHSA-fixture-positive"
+        ],
+        "affectedTargets": [
+          {
+            "ecosystem": "npm",
+            "impact": {
+              "compromise": "unconfirmed",
+              "evidenceKinds": [],
+              "executionConfirmed": false,
+              "installationConfirmed": false,
+              "kind": "installation-unknown",
+              "optional": false,
+              "platformUnconfirmed": false
+            },
+            "location": null,
+            "name": "example",
+            "version": "1.0.0"
+          }
+        ],
+        "findings": [
+          {
+            "advisoryId": "GHSA-fixture-positive",
+            "advisoryType": "vulnerability",
+            "aliases": [],
+            "evidence": [],
+            "id": "GHSA-fixture-positive:npm:example:1.0.0",
+            "impact": {
+              "compromise": "unconfirmed",
+              "evidenceKinds": [],
+              "executionConfirmed": false,
+              "installationConfirmed": false,
+              "kind": "installation-unknown",
+              "optional": false,
+              "platformUnconfirmed": false
+            },
+            "incident": false,
+            "installationEvidence": [],
+            "knownExploited": false,
+            "localEvidence": [],
+            "observedAt": "2026-11-03T00:00:00.000Z",
+            "occurrences": [],
+            "package": {
+              "ecosystem": "npm",
+              "name": "example"
+            },
+            "projectActive": false,
+            "reason": "OSV がロックまたはグローバル記録のパッケージ版を影響範囲と判定。実際のインストール・実行・到達可能性・攻撃 IOC は未確認",
+            "reasonCode": "package-osv-affected",
+            "scope": "",
+            "severity": {
+              "evaluated": true,
+              "level": "HIGH",
+              "method": "label",
+              "rank": 3,
+              "raw": "HIGH",
+              "score": null,
+              "source": "OSV"
+            },
+            "severityEvidence": [],
+            "sources": [
+              "https://osv.dev/vulnerability/GHSA-fixture-positive"
+            ],
+            "status": "可能性高",
+            "title": "example 1.0.0 — GHSA-fixture-positive",
+            "version": "1.0.0"
+          }
+        ],
+        "id": "GHSA-fixture-positive",
+        "severity": {
+          "evaluated": true,
+          "level": "HIGH",
+          "method": "label",
+          "rank": 3,
+          "raw": "HIGH",
+          "score": null,
+          "source": "unknown"
+        },
+        "sources": [
+          "https://osv.dev/vulnerability/GHSA-fixture-positive"
+        ],
+        "withdrawals": []
+      }
+    ],
+    "advisoryTargetCount": 1,
+    "affectedTargetCount": 1,
+    "conclusion": "検査範囲内で侵害を確定する IOC は未確認。被害がないことの証明ではない",
+    "counts": {
+      "可能性あり": 0,
+      "可能性高": 1,
+      "影響なし": 0,
+      "確定": 0
+    },
+    "coverage": [
+      {
+        "area": "synthetic-local-scope",
+        "reason": "合成テストで再現した読取制限",
+        "status": "partial"
+      },
+      {
+        "area": "synthetic-news",
+        "status": "complete"
+      },
+      {
+        "area": "synthetic-package-query",
+        "status": "complete"
+      },
+      {
+        "area": "synthetic-ioc",
+        "status": "complete"
+      },
+      {
+        "area": "synthetic-details",
+        "status": "complete"
+      },
+      {
+        "area": "news:Apple Security Releases",
+        "count": 0,
+        "status": "ok"
+      },
+      {
+        "area": "news:Chrome Releases",
+        "count": 0,
+        "status": "ok"
+      },
+      {
+        "area": "news:Mozilla Security Advisories",
+        "count": 0,
+        "status": "ok"
+      },
+      {
+        "area": "news:Electron Security Advisories",
+        "count": 0,
+        "status": "ok"
+      },
+      {
+        "area": "news:Node.js Security Releases",
+        "count": 0,
+        "status": "ok"
+      },
+      {
+        "area": "news:Homebrew Advisory Database",
+        "count": 0,
+        "status": "ok"
+      },
+      {
+        "area": "news:Debian Security Advisories",
+        "count": 0,
+        "status": "ok"
+      },
+      {
+        "area": "news:Ubuntu Security Notices",
+        "count": 0,
+        "status": "ok"
+      },
+      {
+        "area": "news:Red Hat Security Data",
+        "count": 0,
+        "status": "ok"
+      },
+      {
+        "area": "news:Alpine 3.22 main security fixes",
+        "count": 0,
+        "status": "ok"
+      },
+      {
+        "area": "news:PHP News",
+        "count": 0,
+        "status": "ok"
+      },
+      {
+        "area": "news:PHP Core Security Advisories",
+        "count": 0,
+        "status": "ok"
+      },
+      {
+        "area": "news:OpenSSL Security Advisories",
+        "count": 0,
+        "status": "ok"
+      },
+      {
+        "area": "news:ImageMagick Security Advisories",
+        "count": 0,
+        "status": "ok"
+      },
+      {
+        "area": "news:Ruby News",
+        "count": 0,
+        "status": "ok"
+      },
+      {
+        "area": "news:Ruby Security Announcements",
+        "count": 0,
+        "status": "ok"
+      },
+      {
+        "area": "news:OpenJDK Security Advisories",
+        "count": 0,
+        "status": "ok"
+      },
+      {
+        "area": "news:Oracle Security Alerts",
+        "count": 0,
+        "status": "ok"
+      },
+      {
+        "area": "news:Docker Security Announcements",
+        "count": 0,
+        "status": "ok"
+      },
+      {
+        "area": "news:CISA KEV",
+        "count": 0,
+        "status": "ok"
+      },
+      {
+        "area": "news:CISA Cybersecurity Advisories",
+        "count": 0,
+        "status": "ok"
+      },
+      {
+        "area": "news:CISA Analysis Reports",
+        "count": 0,
+        "status": "ok"
+      },
+      {
+        "area": "news:Microsoft Security Research",
+        "count": 0,
+        "status": "ok"
+      },
+      {
+        "area": "news:JPCERT/CC Analysis",
+        "count": 0,
+        "status": "ok"
+      },
+      {
+        "area": "news:GitHub Advisory reviewed",
+        "count": 1,
+        "status": "ok"
+      },
+      {
+        "area": "news:GitHub Advisory malware",
+        "count": 0,
+        "status": "ok"
+      },
+      {
+        "area": "news:JPCERT/CC",
+        "count": 0,
+        "status": "ok"
+      },
+      {
+        "area": "news:IPA",
+        "count": 0,
+        "status": "ok"
+      },
+      {
+        "area": "news:The Hacker News",
+        "count": 0,
+        "status": "ok"
+      },
+      {
+        "area": "news:BleepingComputer",
+        "count": 0,
+        "status": "ok"
+      },
+      {
+        "area": "news:Socket",
+        "count": 0,
+        "status": "ok"
+      },
+      {
+        "area": "news:OpenSourceMalware",
+        "count": 0,
+        "status": "ok"
+      },
+      {
+        "area": "news:Security NEXT",
+        "count": 0,
+        "status": "ok"
+      },
+      {
+        "area": "news:piyolog",
+        "count": 0,
+        "status": "ok"
+      },
+      {
+        "area": "source:Apple Security Releases",
+        "reason": "情報源の成功と履歴範囲を確認",
+        "status": "complete"
+      },
+      {
+        "area": "source:Chrome Releases",
+        "reason": "情報源の成功と履歴範囲を確認",
+        "status": "complete"
+      },
+      {
+        "area": "source:Mozilla Security Advisories",
+        "reason": "情報源の成功と履歴範囲を確認",
+        "status": "complete"
+      },
+      {
+        "area": "source:Electron Security Advisories",
+        "reason": "情報源の成功と履歴範囲を確認",
+        "status": "complete"
+      },
+      {
+        "area": "source:Node.js Security Releases",
+        "reason": "情報源の成功と履歴範囲を確認",
+        "status": "complete"
+      },
+      {
+        "area": "source:Homebrew Advisory Database",
+        "reason": "情報源の成功と履歴範囲を確認",
+        "status": "complete"
+      },
+      {
+        "area": "source:Debian Security Advisories",
+        "reason": "情報源の成功と履歴範囲を確認",
+        "status": "complete"
+      },
+      {
+        "area": "source:Ubuntu Security Notices",
+        "reason": "情報源の成功と履歴範囲を確認",
+        "status": "complete"
+      },
+      {
+        "area": "source:Red Hat Security Data",
+        "reason": "情報源の成功と履歴範囲を確認",
+        "status": "complete"
+      },
+      {
+        "area": "source:Alpine 3.22 main security fixes",
+        "reason": "情報源の成功と履歴範囲を確認",
+        "status": "complete"
+      },
+      {
+        "area": "source:PHP News",
+        "reason": "情報源の成功と履歴範囲を確認",
+        "status": "complete"
+      },
+      {
+        "area": "source:PHP Core Security Advisories",
+        "reason": "情報源の成功と履歴範囲を確認",
+        "status": "complete"
+      },
+      {
+        "area": "source:OpenSSL Security Advisories",
+        "reason": "情報源の成功と履歴範囲を確認",
+        "status": "complete"
+      },
+      {
+        "area": "source:ImageMagick Security Advisories",
+        "reason": "情報源の成功と履歴範囲を確認",
+        "status": "complete"
+      },
+      {
+        "area": "source:Ruby News",
+        "reason": "情報源の成功と履歴範囲を確認",
+        "status": "complete"
+      },
+      {
+        "area": "source:Ruby Security Announcements",
+        "reason": "情報源の成功と履歴範囲を確認",
+        "status": "complete"
+      },
+      {
+        "area": "source:OpenJDK Security Advisories",
+        "reason": "情報源の成功と履歴範囲を確認",
+        "status": "complete"
+      },
+      {
+        "area": "source:Oracle Security Alerts",
+        "reason": "情報源の成功と履歴範囲を確認",
+        "status": "complete"
+      },
+      {
+        "area": "source:Docker Security Announcements",
+        "reason": "情報源の成功と履歴範囲を確認",
+        "status": "complete"
+      },
+      {
+        "area": "source:CISA KEV",
+        "reason": "情報源の成功と履歴範囲を確認",
+        "status": "complete"
+      },
+      {
+        "area": "source:CISA Cybersecurity Advisories",
+        "reason": "情報源の成功と履歴範囲を確認",
+        "status": "complete"
+      },
+      {
+        "area": "source:CISA Analysis Reports",
+        "reason": "情報源の成功と履歴範囲を確認",
+        "status": "complete"
+      },
+      {
+        "area": "source:Microsoft Security Research",
+        "reason": "情報源の成功と履歴範囲を確認",
+        "status": "complete"
+      },
+      {
+        "area": "source:JPCERT/CC Analysis",
+        "reason": "情報源の成功と履歴範囲を確認",
+        "status": "complete"
+      },
+      {
+        "area": "source:GitHub Advisory reviewed",
+        "reason": "情報源の成功と履歴範囲を確認",
+        "status": "complete"
+      },
+      {
+        "area": "source:GitHub Advisory malware",
+        "reason": "情報源の成功と履歴範囲を確認",
+        "status": "complete"
+      },
+      {
+        "area": "source:JPCERT/CC",
+        "reason": "情報源の成功と履歴範囲を確認",
+        "status": "complete"
+      },
+      {
+        "area": "source:IPA",
+        "reason": "情報源の成功と履歴範囲を確認",
+        "status": "complete"
+      },
+      {
+        "area": "source:The Hacker News",
+        "reason": "情報源の成功と履歴範囲を確認",
+        "status": "complete"
+      },
+      {
+        "area": "source:BleepingComputer",
+        "reason": "情報源の成功と履歴範囲を確認",
+        "status": "complete"
+      },
+      {
+        "area": "source:Socket",
+        "reason": "情報源の成功と履歴範囲を確認",
+        "status": "complete"
+      },
+      {
+        "area": "source:OpenSourceMalware",
+        "reason": "情報源の成功と履歴範囲を確認",
+        "status": "complete"
+      },
+      {
+        "area": "source:Security NEXT",
+        "reason": "情報源の成功と履歴範囲を確認",
+        "status": "complete"
+      },
+      {
+        "area": "source:piyolog",
+        "reason": "情報源の成功と履歴範囲を確認",
+        "status": "complete"
+      }
+    ],
+    "findings": [
+      {
+        "advisoryId": "GHSA-fixture-positive",
+        "advisoryType": "vulnerability",
+        "aliases": [
+          "GHSA-fixture-positive"
+        ],
+        "evidence": [],
+        "id": "GHSA-fixture-positive:npm:example:1.0.0",
+        "impact": {
+          "compromise": "unconfirmed",
+          "evidenceKinds": [],
+          "executionConfirmed": false,
+          "installationConfirmed": false,
+          "kind": "installation-unknown",
+          "optional": false,
+          "platformUnconfirmed": false
+        },
+        "incident": false,
+        "installationEvidence": [],
+        "knownExploited": false,
+        "localEvidence": [],
+        "observedAt": "2026-11-03T00:00:00.000Z",
+        "occurrences": [],
+        "package": {
+          "ecosystem": "npm",
+          "name": "example"
+        },
+        "projectActive": false,
+        "reason": "OSV がロックまたはグローバル記録のパッケージ版を影響範囲と判定。実際のインストール・実行・到達可能性・攻撃 IOC は未確認",
+        "reasonCode": "package-osv-affected",
+        "scope": "",
+        "severity": {
+          "evaluated": true,
+          "level": "HIGH",
+          "method": "label",
+          "rank": 3,
+          "raw": "HIGH",
+          "score": null,
+          "source": "OSV"
+        },
+        "severityEvidence": [],
+        "sources": [
+          "https://osv.dev/vulnerability/GHSA-fixture-positive"
+        ],
+        "status": "可能性高",
+        "title": "example 1.0.0 — GHSA-fixture-positive",
+        "version": "1.0.0"
+      }
+    ],
+    "generatedAt": "2026-11-03T00:00:00.000Z",
+    "impact": "compromise-unconfirmed",
+    "newsAssessment": [
+      {
+        "advisoryType": "vulnerability",
+        "aliases": [],
+        "categories": [
+          "general"
+        ],
+        "coverageTopics": [],
+        "fetchedAt": "2026-11-03T00:00:00.000Z",
+        "id": "GHSA-fixture-positive",
+        "knownExploited": false,
+        "matchedProducts": [
+          "example"
+        ],
+        "needsReview": true,
+        "ongoing": false,
+        "publishedAt": "2026-11-02T00:00:00.000Z",
+        "reason": "告知の対象名とエコシステムが観測記録に一致。影響版・配布元は個別判定を参照。",
+        "reasonCode": "news-structured-match",
+        "relevance": "関係あり",
+        "severity": "HIGH",
+        "source": "GitHub Advisory reviewed",
+        "sourceId": "ghsa-reviewed",
+        "title": "example 1.0.0: synthetic security advisory",
+        "updatedAt": "2026-11-02T12:00:00.000Z",
+        "url": "https://github.com/advisories/GHSA-fixture-positive"
+      }
+    ],
+    "schemaVersion": 2,
+    "uniqueAdvisoryCount": 1
+  },
+  "changes": {
+    "continuing": [],
+    "new": [
+      {
+        "advisoryId": "GHSA-fixture-positive",
+        "advisoryType": "vulnerability",
+        "aliases": [
+          "GHSA-fixture-positive"
+        ],
+        "evidence": [],
+        "id": "GHSA-fixture-positive:npm:example:1.0.0",
+        "impact": {
+          "compromise": "unconfirmed",
+          "evidenceKinds": [],
+          "executionConfirmed": false,
+          "installationConfirmed": false,
+          "kind": "installation-unknown",
+          "optional": false,
+          "platformUnconfirmed": false
+        },
+        "incident": false,
+        "installationEvidence": [],
+        "knownExploited": false,
+        "localEvidence": [],
+        "observedAt": "2026-11-03T00:00:00.000Z",
+        "occurrences": [],
+        "package": {
+          "ecosystem": "npm",
+          "name": "example"
+        },
+        "projectActive": false,
+        "reason": "OSV がロックまたはグローバル記録のパッケージ版を影響範囲と判定。実際のインストール・実行・到達可能性・攻撃 IOC は未確認",
+        "reasonCode": "package-osv-affected",
+        "scope": "",
+        "severity": {
+          "evaluated": true,
+          "level": "HIGH",
+          "method": "label",
+          "rank": 3,
+          "raw": "HIGH",
+          "score": null,
+          "source": "OSV"
+        },
+        "severityEvidence": [],
+        "sources": [
+          "https://osv.dev/vulnerability/GHSA-fixture-positive"
+        ],
+        "status": "可能性高",
+        "title": "example 1.0.0 — GHSA-fixture-positive",
+        "version": "1.0.0"
+      }
+    ],
+    "resolved": [],
+    "snapshot": [
+      {
+        "advisoryId": "GHSA-fixture-positive",
+        "advisoryType": "vulnerability",
+        "aliases": [
+          "GHSA-fixture-positive"
+        ],
+        "conflictingEvidence": false,
+        "evidence": [],
+        "id": "GHSA-fixture-positive:npm:example:1.0.0",
+        "impact": {
+          "compromise": "unconfirmed",
+          "evidenceKinds": [],
+          "executionConfirmed": false,
+          "installationConfirmed": false,
+          "kind": "installation-unknown",
+          "optional": false,
+          "platformUnconfirmed": false
+        },
+        "incident": false,
+        "observedAt": "2026-11-03T00:00:00.000Z",
+        "package": {
+          "ecosystem": "npm",
+          "name": "example"
+        },
+        "reasonCode": "package-osv-affected",
+        "scope": "",
+        "status": "可能性高",
+        "title": "example 1.0.0 — GHSA-fixture-positive",
+        "version": "1.0.0"
+      }
+    ],
+    "unconfirmed": []
+  }
+}

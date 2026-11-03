@@ -5,7 +5,7 @@ test('threeやconnectの依存名だけでIvantiの記事を関連扱いしな�
   // Arrange
   const packages = { packages: [{ name: 'three', ecosystem: 'npm', version: '1.0.0' }, { name: 'connect', ecosystem: 'npm', version: '1.0.0' }] };
   // Act
-  const result = matchInventory({}, { items: [{ id: 'news', title: 'Attackers Chain Three Ivanti Connect Secure Flaws' }] }, { packages });
+  const result = matchInventory({ coverage: [{ area: 'applications', status: 'complete' }] }, { items: [{ id: 'news', title: 'Attackers Chain Three Ivanti Connect Secure Flaws' }] }, { packages });
   // Assert
   assert.equal(result.newsAssessment[0].relevance, '関係なし');
   assert.equal(result.newsAssessment[0].needsReview, false);
@@ -73,13 +73,13 @@ test('公開詳細で撤回を確認したOSV一致を陽性判定へ復活さ�
 });
 import { matchRule, matchInventory, satisfiesRange } from '../scripts/match.mjs';
 
-const rule = { id: 'cursor-claude-fixture', title: 'Cursor 経由の拡張回帰テスト', kind: 'extension', editor: 'cursor',
-  extensionId: 'anthropic.claude-code', affectedVersions: ['2.1.312', '2.1.313'], verified: true, incident: true,
-  sourceUrl: 'https://cursor.com/blog/claude-code-extension-security-notice' };
+const rule = { id: 'editor-extension-fixture', title: 'Cursor 経由の拡張回帰テスト', kind: 'extension', editor: 'cursor',
+  extensionId: 'fixture.extension', affectedVersions: ['2.1.312', '2.1.313'], verified: true, incident: true,
+  sourceUrl: 'https://www.cisa.gov/cybersecurity-advisories/fixture' };
 
 test('VS Code 2.1.314 があり Cursor にはない端末を当該攻撃の影響なしと判定する', () => {
   // Arrange: ユーザーが指定した既知事例を独立した合成データで表す。
-  const inventory = { extensions: [{ editor: 'vscode', id: 'anthropic.claude-code', version: '2.1.314' }], coverage: [{ area: 'extensions', status: 'complete' }] };
+  const inventory = { extensions: [{ editor: 'vscode', id: 'fixture.extension', version: '2.1.314' }], coverage: [{ area: 'extensions', status: 'complete' }] };
   // Act
   const actual = matchRule(inventory, rule);
   // Assert
@@ -88,7 +88,7 @@ test('VS Code 2.1.314 があり Cursor にはない端末を当該攻撃の影�
 
 test('Cursor の影響版が無効な残骸でも過去の影響可能性を見逃さない', () => {
   // Arrange
-  const inventory = { extensions: [{ editor: 'cursor', id: 'anthropic.claude-code', version: '2.1.313', active: false }], coverage: [{ area: 'extensions', status: 'complete' }] };
+  const inventory = { extensions: [{ editor: 'cursor', id: 'fixture.extension', version: '2.1.313', active: false }], coverage: [{ area: 'extensions', status: 'complete' }] };
   // Act
   const actual = matchRule(inventory, rule);
   // Assert
@@ -106,11 +106,11 @@ test('Cursor 領域の権限不足を拡張不在として安全判定しない'
 
 test('通常Cursor不在でもPortableの影響版を同じ製品の観測として照合する', () => {
   // Arrange
-  const inventory = { extensions: [{ id: 'anthropic.claude-code', version: '2.1.312', editor: 'cursor-portable' }],
+  const inventory = { extensions: [{ id: 'fixture.extension', version: '2.1.312', editor: 'cursor-portable' }],
     coverage: [{ area: 'cursor-extensions', status: 'absent' }, { area: 'cursor-portable-extensions', status: 'complete' }] };
   // Act
   const actual = matchRule(inventory, rule);
-  const structured = matchInventory(inventory, { items: [{ id: 'portable-news', title: 'Extension incident', affected: [{ name: 'anthropic.claude-code', ecosystem: 'VSCode', editor: 'cursor' }] }] });
+  const structured = matchInventory(inventory, { items: [{ id: 'portable-news', title: 'Extension incident', affected: [{ name: 'fixture.extension', ecosystem: 'VSCode', editor: 'cursor' }] }] });
   const titleOnly = matchInventory(inventory, { items: [{ id: 'cursor-news', title: 'Cursor extension incident' }] });
   // Assert
   assert.equal(actual.status, '可能性高');
@@ -137,7 +137,7 @@ test('Portable領域の未読・製品不明は拡張不在を阻止しInsiders�
 
 test('VS Code の同じ版を Cursor 配布経路の被害と混同しない', () => {
   // Arrange
-  const inventory = { extensions: [{ editor: 'vscode', id: 'anthropic.claude-code', version: '2.1.313' }], coverage: [{ area: 'extensions:cursor', status: 'complete' }] };
+  const inventory = { extensions: [{ editor: 'vscode', id: 'fixture.extension', version: '2.1.313' }], coverage: [{ area: 'extensions:cursor', status: 'complete' }] };
   // Act
   const actual = matchRule(inventory, rule);
   // Assert
@@ -295,7 +295,7 @@ test('撤回済み Advisory を新規の脆弱性として追加しない', () =
 
 test('Cursor の版が unknown なら影響版一覧にないことだけで安全扱いしない', () => {
   // Arrange
-  const inventory = { extensions: [{ editor: 'cursor', id: 'anthropic.claude-code', version: 'unknown' }], coverage: [{ area: 'cursor-extensions', status: 'complete' }] };
+  const inventory = { extensions: [{ editor: 'cursor', id: 'fixture.extension', version: 'unknown' }], coverage: [{ area: 'cursor-extensions', status: 'complete' }] };
   // Act
   const actual = matchRule(inventory, rule);
   // Assert
@@ -335,9 +335,9 @@ test('現行 Node 修正済みと旧キャッシュ脆弱版を別々の証拠�
   assert.deepEqual(actual.runtimeEvidence.map(entry => entry.status), ['影響なし', '可能性高']);
 });
 
-test('公式 Cursor ルールは影響版だけでは配布元不明の被害可能性を高としない', () => {
+test('合成Cursorルールは影響版だけでは配布元不明の被害可能性を高としない', () => {
   // Arrange
-  const inventory = { extensions: [{ editor: 'cursor', id: 'anthropic.claude-code', version: '2.1.313', installedAt: '2026-10-29T10:00:00Z' }], coverage: [{ area: 'cursor-extensions', status: 'complete' }] };
+  const inventory = { extensions: [{ editor: 'cursor', id: 'fixture.extension', version: '2.1.313', installedAt: '2026-10-29T10:00:00Z' }], coverage: [{ area: 'cursor-extensions', status: 'complete' }] };
   const official = { ...rule, acceptedSources: ['gallery', 'Cursor marketplace'], installationWindow: { since: '2026-10-29T09:27:00Z', until: '2026-10-29T20:35:00Z' } };
   // Act
   const actual = matchRule(inventory, official);
@@ -345,9 +345,9 @@ test('公式 Cursor ルールは影響版だけでは配布元不明の被害可
   assert.equal(actual.status, '可能性あり');
 });
 
-test('公式 Cursor ルールの配布元と期間が一致する影響版は可能性高となる', () => {
+test('合成Cursorルールの配布元と期間が一致する影響版は可能性高となる', () => {
   // Arrange
-  const inventory = { extensions: [{ editor: 'cursor', id: 'anthropic.claude-code', version: '2.1.313', source: 'gallery', installedAt: '2026-10-29T10:00:00Z' }], coverage: [{ area: 'cursor-extensions', status: 'complete' }] };
+  const inventory = { extensions: [{ editor: 'cursor', id: 'fixture.extension', version: '2.1.313', source: 'gallery', installedAt: '2026-10-29T10:00:00Z' }], coverage: [{ area: 'cursor-extensions', status: 'complete' }] };
   const official = { ...rule, acceptedSources: ['gallery', 'Cursor marketplace'], installationWindow: { since: '2026-10-29T09:27:00Z', until: '2026-10-29T20:35:00Z' } };
   // Act
   const actual = matchRule(inventory, official);
@@ -357,7 +357,7 @@ test('公式 Cursor ルールの配布元と期間が一致する影響版は可
 
 test('Cursor のインストール日が攻撃期間外でもコピーや再導入を否定して安全扱いしない', () => {
   // Arrange
-  const inventory = { extensions: [{ editor: 'cursor', id: 'anthropic.claude-code', version: '2.1.313', source: 'gallery', installedAt: '2026-10-31T10:00:00Z' }], coverage: [{ area: 'cursor-extensions', status: 'complete' }] };
+  const inventory = { extensions: [{ editor: 'cursor', id: 'fixture.extension', version: '2.1.313', source: 'gallery', installedAt: '2026-10-31T10:00:00Z' }], coverage: [{ area: 'cursor-extensions', status: 'complete' }] };
   const official = { ...rule, acceptedSources: ['gallery'], installationWindow: { since: '2026-10-29T09:27:00Z', until: '2026-10-29T20:35:00Z' } };
   // Act
   const actual = matchRule(inventory, official);
@@ -391,8 +391,8 @@ test('未導入の悪意ある npm パッケージを npm 利用だけで関連�
   // Act
   const actual = matchInventory(inventory, news);
   // Assert
-  assert.equal(actual.newsAssessment[0].relevance, '関係なし');
-  assert.equal(actual.newsAssessment[0].needsReview, false);
+  assert.equal(actual.newsAssessment[0].relevance, '確認候補');
+  assert.equal(actual.newsAssessment[0].needsReview, true);
 });
 
 test('ロック抽出一覧があっても別のグローバル対象パッケージとの一致を見落とさない', () => {
@@ -407,13 +407,13 @@ test('ロック抽出一覧があっても別のグローバル対象パッケ�
   assert.deepEqual(actual.newsAssessment[0].matchedProducts, ['openclaw']);
 });
 
-test('Cursor があれば拡張未導入でも公式事件ニュースを IOC 確認対象に残す', () => {
+test('Cursor があれば拡張未導入でも合成の拡張ニュースを IOC 確認対象に残す', () => {
   // Arrange
   const inventory = { applications: [{ name: 'Cursor', version: '3.0.0' }], extensions: [] };
-  const news = { items: [{ id: 'CURSOR-INCIDENT', title: 'Cursor extension notice', affected: [{ name: 'anthropic.claude-code', ecosystem: 'VSCode', editor: 'cursor', versions: ['2.1.313'] }] }] };
+  const news = { items: [{ id: 'FIXTURE-EXTENSION-INCIDENT', title: 'Cursor extension notice', affected: [{ name: 'fixture.extension', ecosystem: 'VSCode', editor: 'cursor', versions: ['2.1.313'] }] }] };
   // Act
   const actual = matchInventory(inventory, news);
   // Assert
   assert.equal(actual.newsAssessment[0].relevance, '関係あり');
-  assert.deepEqual(actual.newsAssessment[0].matchedProducts, ['cursor（IOC 確認対象）']);
+  assert.deepEqual(actual.newsAssessment[0].matchedProducts, ['cursor']);
 });

@@ -50,7 +50,7 @@ for (const [kind, exit, status, findings] of [['complete', 0, 'complete', 0], ['
     assert.equal(evidence.match.findings.length, findings); assert.equal(evidence.queryCoverage, 'complete');
     assert.equal(evidence.collectionCoverage, kind === 'complete' ? 'complete' : 'partial');
     assert.equal(state.generation, receipt.generation); assert.equal(state.lastReport, receipt.reportPath);
-    assert.match(report.split('\n')[0], /^被害の有無:/); assert.match(report.split('\n')[1], /^要対応:/); assert.match(report.split('\n')[2], /^いちばん急ぐこと:/);
+    assert.match(report, /セキュリティ/); assert.match(report, /重要/);
     assert.equal(stderr.length, 0); assert.equal(report.includes('[object Object]'), false);
     assert.equal(report.includes('inventory.json'), false);
     for (const [, target] of report.matchAll(/\]\(([^)]+)\)/g)) if (!/^https?:/.test(target)) assert.equal((await fs.stat(path.join(receipt.evidenceDirectory, target))).isFile(), true);
@@ -66,7 +66,7 @@ test('不正CLIはstateを作らず64、helpは閉じたstdinでもscanせず0',
   const help = spawnSync(process.execPath, ['--import', fileURLToPath(new URL('./deny-network.mjs', import.meta.url)), fileURLToPath(new URL('../scripts/run-sweep.mjs', import.meta.url)), '--help'], { input: '', encoding: 'utf8', timeout: 5000 });
   // Assert
   assert.equal(code, 64); assert.equal(JSON.parse(out[0]).diagnostic.writeOutcome, 'none'); assert.equal(out.join('').includes('SENTINEL'), false); assert.equal(err.join('').includes('SENTINEL'), false);
-  assert.deepEqual(await fs.readdir(home), []); assert.equal(help.status, 0); assert.match(help.stdout, /使用法/); assert.equal(help.stderr, '');
+  assert.deepEqual(await fs.readdir(home), []); assert.equal(help.status, 0); assert.match(help.stdout, /Usage:/); assert.equal(help.stderr, '');
 });
 
 test('保存失敗は秘密例外を出さず1で終了し未commit stateを作らない', async t => {
@@ -101,31 +101,48 @@ test('source失敗・製品未対応をquery completeや全体completeへ変換�
   const code = await runCli([], { home, stages: fixtureStages, rules: {}, identityProvider, stdout: value => out.push(value), stderr: () => {} });
   // Assert
   assert.equal(code, 2); assert.equal(JSON.parse(out[0]).queryCoverage, 'partial'); assert.equal(JSON.parse(out[0]).runStatus, 'partial');
+  const evidence = JSON.parse(await fs.readFile(path.join(JSON.parse(out[0]).evidenceDirectory, 'evidence.json'), 'utf8'));
+  assert.equal(evidence.stageStatus.news, 'partial');
 });
 
-test('遅いnews完了を待たずpackage成功から詳細取得へ進む', async t => {
+test('newsとその保存が完了するまでinventoryを開始せず詳細へ全ニュースを渡す', async t => {
   // Arrange
   const home = await fixture(t), fixtureStages = stages('complete'), events = [];
-  let release;
-  const waitForDetails = new Promise(resolve => { release = resolve; });
-  fixtureStages.news = async () => { await waitForDetails; events.push('news'); return { sources: [{ name: 'CISA KEV', status: 'ok' }], items: [] }; };
-  fixtureStages.details = async () => { events.push('details'); release(); return { details: [], coverage: [] }; };
+  const originalInventory = fixtureStages.inventory;
+  fixtureStages.news = async () => { events.push('news-start'); await new Promise(resolve => setTimeout(resolve, 20)); events.push('news-end'); return { sources: [{ name: 'CISA KEV', status: 'ok' }], items: [{ id: 'CVE-2026-1234' }] }; };
+  fixtureStages.inventory = async options => {
+    const folders = (await fs.readdir(path.join(home, 'security-reports'))).filter(name => name.startsWith('mss-'));
+    const evidence = JSON.parse(await fs.readFile(path.join(home, 'security-reports', folders[0], 'evidence.json'), 'utf8'));
+    assert.equal(evidence.collectionCoverage, 'partial'); assert.equal(evidence.queryCoverage, 'partial');
+    assert.equal(evidence.stageStatus.inventory, 'pending'); assert.deepEqual(evidence.match.findings, []);
+    events.push('inventory'); return originalInventory(options);
+  };
+  fixtureStages.adaptive = async () => { events.push('adaptive'); return { items: [{ id: 'CVE-2026-5678' }], coverage: [] }; };
+  fixtureStages.mergeNews = (common, adaptive) => ({ ...common, items: [...(common.items || []), ...(adaptive.items || [])] });
+  fixtureStages.details = async (findings, deadline, request, options) => { events.push('details'); assert.deepEqual(options.news.items.map(item => item.id), ['CVE-2026-1234', 'CVE-2026-5678']); return { details: [], coverage: [] }; };
   // Act
   await runCli([], { home, stages: fixtureStages, rules: {}, identityProvider, stdout: () => {}, stderr: () => {} });
   // Assert
-  assert.deepEqual(events, ['details', 'news']);
+  assert.deepEqual(events, ['news-start', 'news-end', 'inventory', 'adaptive', 'details']);
 });
 
-test('保存が失敗した時点で別stageの終わらない本文も中止する', async t => {
+test('newsの途中保存が失敗すると保留本文を中止しinventoryを始めない', async t => {
   // Arrange
-  const home = await fixture(t), fixtureStages = stages('complete'); let cancelled = false;
-  fixtureStages.news = async ({ context }) => { await context.request('https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json'); return {}; };
+  const home = await fixture(t), fixtureStages = stages('complete'); let cancelled = false, localStarted = false, clock = 0;
+  fixtureStages.inventory = async () => { localStarted = true; return {}; };
+  fixtureStages.news = async ({ context }) => {
+    const request = context.request('https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json').catch(() => {});
+    await new Promise(resolve => setImmediate(resolve)); clock = 16000;
+    try { await context.checkpoint({ stage: 'news', value: { items: [], coverage: [] } }); }
+    finally { await request; }
+    return {};
+  };
   // Act
-  const code = await runCli([], { home, stages: fixtureStages, rules: {}, identityProvider,
+  const code = await runCli([], { home, stages: fixtureStages, rules: {}, identityProvider, monotonicNow: () => clock,
     fetchImpl: async () => new Response(new ReadableStream({ cancel() { cancelled = true; } })),
     onBoundary: async point => { if (point === 'report:write') throw Object.assign(new Error('SENTINEL'), { code: 'ENOSPC' }); }, stdout: () => {}, stderr: () => {} });
   // Assert
-  assert.equal(code, 1); assert.equal(cancelled, true);
+  assert.equal(code, 1); assert.equal(cancelled, true); assert.equal(localStarted, false);
 });
 
 test('状態の起動照合も同じmonotonic予算を消費し収集前の超過を拒否する', async t => {
@@ -136,6 +153,39 @@ test('状態の起動照合も同じmonotonic予算を消費し収集前の超�
   const code = await runCli(['--budget-ms', '12000'], { home, stages: fixtureStages, rules: {}, identityProvider, monotonicNow: () => { clock += 5000; return clock; }, stdout: value => out.push(value), stderr: () => {} });
   // Assert
   assert.equal(code, 1); assert.equal(JSON.parse(out[0]).code, 'MSS_DEADLINE'); assert.equal(collected, false); assert.deepEqual(await fs.readdir(home), []);
+});
+
+test('news uses the remaining global budget and saves an honest news-only final result', async t => {
+  // Arrange
+  const home = await fixture(t), fixtureStages = stages('complete'), out = []; let clock = 0, localStarted = false;
+  fixtureStages.news = async () => { clock = 120000; return { sources: [{ name: 'CISA KEV', status: 'ok' }], items: [] }; };
+  fixtureStages.inventory = async () => { localStarted = true; return {}; };
+  // Act
+  const exit = await runCli(['--budget-ms', '120000', '--language', 'EN'], { home, stages: fixtureStages, rules: {}, identityProvider, monotonicNow: () => clock, stdout: value => out.push(value), stderr: () => {} });
+  const receipt = JSON.parse(out[0]);
+  const evidence = JSON.parse(await fs.readFile(path.join(receipt.evidenceDirectory, 'evidence.json'), 'utf8'));
+  // Assert
+  assert.equal(exit, 2); assert.equal(localStarted, false);
+  assert.equal(receipt.collectionCoverage, 'partial'); assert.equal(receipt.queryCoverage, 'partial');
+  assert.equal(evidence.stageStatus.inventory, 'pending'); assert.deepEqual(evidence.match.findings, []);
+  assert.equal(receipt.canonicalLanguage, 'en'); assert.equal(receipt.translationStatus, 'not-required');
+});
+
+test('a failed news attempt is saved before inventory and remains a visible source failure', async t => {
+  // Arrange
+  const home = await fixture(t), fixtureStages = stages('complete'), events = [], out = [], err = [];
+  fixtureStages.news = async () => { events.push('news'); throw new Error('SENTINEL_SECRET'); };
+  const originalInventory = fixtureStages.inventory;
+  fixtureStages.inventory = async options => { events.push('inventory'); return originalInventory(options); };
+  // Act
+  const exit = await runCli(['--language', 'EN'], { home, stages: fixtureStages, rules: {}, identityProvider, stdout: value => out.push(value), stderr: value => err.push(value) });
+  const receipt = JSON.parse(out[0]);
+  // Assert
+  assert.equal(exit, 2); assert.deepEqual(events, ['news', 'inventory']);
+  assert.equal(receipt.queryCoverage, 'partial'); assert.equal(receipt.collectionCoverage, 'complete');
+  assert.equal(receipt.diagnostics[0].operation, 'news'); assert.equal(receipt.diagnostics[0].trace.module, 'sources');
+  assert.equal(out.join('').includes('SENTINEL'), false); assert.equal(err.join('').includes('SENTINEL'), false);
+  assert.match(err.join(''), /MSS_INTERNAL \(news\)/);
 });
 
 test('reportは別版の実物を昇格せずalias側の修正版を維持する', () => {

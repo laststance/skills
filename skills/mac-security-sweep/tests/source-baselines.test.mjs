@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fetchNews, fetchAdaptiveNews, mergeNews, parseMozillaBaseline, normalizeAdvisory } from '../scripts/fetch-news.mjs';
-import { SOURCES, MOZILLA_SOURCES, sourceRegistryCoverage } from '../scripts/source-registry.mjs';
+import { SOURCES, MOZILLA_SOURCES, NEWS_CATEGORIES, sourceRegistryCoverage } from '../scripts/source-registry.mjs';
 import { createRunContext } from '../scripts/runtime.mjs';
 import { matchInventory } from '../scripts/match.mjs';
 
@@ -31,11 +31,13 @@ test('GitHubのlabelとCVSS数値・未計算vectorを原方式付きで別々�
   assert.equal(item.severityEvidence[2].evaluated, false);
 });
 
-test('固定registryは元の15情報源とMozilla三製品を保持する', () => {
+test('固定registryは必須カテゴリの公式情報源を持ち単発Cursor記事を含まない', () => {
   // Arrange / Act
   const names = SOURCES.map(source => source.name);
   // Assert
-  assert.equal(names.length, 15);
+  assert.equal(names.includes('Cursor security notice'), false);
+  assert.deepEqual(NEWS_CATEGORIES.filter(value => value.required).map(value => value.id), ['macos', 'ios', 'mac-apps', 'homebrew', 'linux', 'php', 'tls', 'imagemagick', 'ruby', 'java', 'docker']);
+  assert.ok(NEWS_CATEGORIES.filter(value => value.required).every(category => SOURCES.some(source => source.primary && source.categories.includes(category.id))));
   assert.ok(names.includes('CISA KEV'));
   assert.ok(names.includes('GitHub Advisory malware'));
   assert.ok(names.includes('piyolog'));
@@ -161,13 +163,13 @@ test('転送先や例外に含まれる秘密を追跡・表示しない', async
   assert.equal(result.sources.filter(source => source.status === 'ok').length, 0);
 });
 
-test('GitHubの20ページ上限後は次のページへ進み前回取得済み告知を失わない', async () => {
+test('GitHubは全情報源の初回照会後に有限ページを進め次回も新着と未処理履歴を両方取得する', async () => {
   // Arrange
   const requested = [];
   const checkpoints = [];
   const fetchImpl = async address => {
     const url = new URL(address);
-    if (url.hostname !== 'api.github.com') return new Response('', { status: 503 });
+    if (url.hostname !== 'api.github.com' || url.pathname !== '/advisories') return new Response('', { status: 503 });
     if (url.searchParams.get('type') === 'malware') return new Response('[]');
     const page = Number(url.searchParams.get('after') || 1);
     requested.push(page);
@@ -183,31 +185,35 @@ test('GitHubの20ページ上限後は次のページへ進み前回取得済み
   await secondContext.close();
   // Assert
   assert.equal(first.sources.find(source => source.name === 'GitHub Advisory reviewed').status, 'partial');
-  assert.equal(first.items.length, 20);
-  assert.equal(second.items.length, 21);
-  assert.deepEqual(requested, Array.from({ length: 21 }, (_, index) => index + 1));
-  assert.equal(second.sourceContinuations['GitHub Advisory reviewed'], undefined);
-  assert.equal(second.sourceCursors['GitHub Advisory reviewed'], '2026-11-03T00:00:00.000Z');
-  assert.ok(checkpoints.some(value => value.value.sourceContinuations['GitHub Advisory reviewed']?.items.length === 19));
+  assert.equal(first.items.length, 3);
+  assert.equal(second.items.length, 5);
+  assert.deepEqual(requested, [1, 2, 3, 1, 4, 5]);
+  assert.equal(new URL(second.sourceContinuations['GitHub Advisory reviewed'].url).searchParams.get('after'), '6');
+  assert.equal(second.sourceCursors['GitHub Advisory reviewed'], undefined);
+  assert.ok(checkpoints.some(value => value.value.sourceContinuations['GitHub Advisory reviewed']?.items.length === 3));
 });
 
-test('過去期間の継続取得完了だけでは今回までのニュース取得を完全・最新にしない', async () => {
+test('過去期間が未完了でも今回の30日照会を先に成功させてから履歴を再開する', async () => {
   // Arrange
   const name = 'GitHub Advisory reviewed';
   const window = { since: '2026-10-20T00:00:00.000Z', until: '2026-11-01T00:00:00.000Z' };
   const address = new URL('https://api.github.com/advisories');
   address.search = new URLSearchParams({ type: 'reviewed', modified: `${window.since}..${window.until}`, sort: 'updated', direction: 'desc', per_page: '100', after: 'last-page' }).toString();
-  const context = createRunContext({ budgetMs: 120000, wallNow: () => NOW, fetchImpl: async url => new Response(String(url).includes('api.github.com') ? '[]' : '', { status: String(url).includes('api.github.com') ? 200 : 503 }) });
+  const requested = [];
+  const context = createRunContext({ budgetMs: 120000, wallNow: () => NOW, fetchImpl: async url => { requested.push(String(url)); return new Response(String(url).includes('api.github.com') ? '[]' : '', { status: String(url).includes('api.github.com') ? 200 : 503 }); } });
   // Act
   const result = await fetchNews({ context, previous: { sourceCursors: { [name]: window.since }, sourceContinuations: { [name]: { url: address.href, window, items: [] } } }, until: '2026-11-03T00:00:00Z' });
   await context.close();
   const source = result.sources.find(value => value.name === name);
   // Assert
-  assert.equal(source.status, 'partial');
-  assert.equal(source.freshness, 'stale');
+  assert.equal(source.status, 'ok');
+  assert.equal(source.freshness, 'fresh');
   assert.equal(source.windowComplete, true);
-  assert.equal(source.lastSuccessfulAt, '2026-11-01T00:00:00.000Z');
-  assert.deepEqual(source.missingWindow, { since: '2026-11-01T00:00:00.000Z', until: '2026-11-03T00:00:00.000Z' });
-  assert.equal(result.sourceCursors[name], '2026-11-01T00:00:00.000Z');
+  assert.equal(source.lastSuccessfulAt, '2026-11-03T00:00:00.000Z');
+  assert.equal(source.missingWindow, undefined);
+  const calls = requested.filter(url => url.includes('/advisories?') && url.includes('type=reviewed'));
+  assert.equal(new URL(calls[0]).searchParams.get('modified'), '2026-10-04T00:00:00.000Z..2026-11-03T00:00:00.000Z');
+  assert.equal(calls[1], address.href);
+  assert.equal(result.sourceCursors[name], '2026-11-03T00:00:00.000Z');
   assert.equal(result.sourceContinuations[name], undefined);
 });

@@ -23,7 +23,7 @@ test('探索page・新製品baseline・OSVページ・詳細・429が重なっ�
   }
   const stateRoot = path.join(home, '.local/state/mac-security-sweep'); await fs.mkdir(stateRoot, { recursive: true });
   await fs.writeFile(path.join(stateRoot, 'state.json'), JSON.stringify({ schemaVersion: 1, scanRoots: [{ path: '~/Projects', scope: 'personal' }], privateExtension: 'SENTINEL_PRIVATE' }));
-  const queried = new Set(), detailed = new Set(), pools = [], pages = [], progress = []; let run = 0, throttled = false, baselineRequests = 0;
+  const queried = new Set(), detailed = new Set(), pools = [], pages = [], progress = []; let run = 0, throttled = false, baselineRequests = 0, currentIndexRequests = 0;
   const filesystem = { ...fs, open: (...args) => { if (!within(home, args[0])) throw Object.assign(new Error('SENTINEL_DENIED'), { code: 'EACCES' }); return fs.open(...args); },
     opendir: (...args) => { if (!within(home, args[0])) throw Object.assign(new Error('SENTINEL_DENIED'), { code: 'EACCES' }); return fs.opendir(...args); } };
   const fetchImpl = async (address, options) => {
@@ -40,7 +40,7 @@ test('探索page・新製品baseline・OSVページ・詳細・429が重なっ�
     if (url.hostname === 'api.github.com') return Response.json([]);
     if (url.hostname === 'www.cisa.gov') return Response.json({ vulnerabilities: [] });
     if (url.hostname === 'socket.dev') return Response.json({ items: [] });
-    if (url.hostname === 'www.mozilla.org') { baselineRequests += 1; return new Response('<h3>Fixed in Firefox 130</h3><a href="/en-US/security/advisories/mfsa2024-01/">Security Vulnerabilities fixed in Firefox 130</a>'); }
+    if (url.hostname === 'www.mozilla.org') { if (url.pathname === '/en-US/security/advisories/') currentIndexRequests += 1; else baselineRequests += 1; return new Response('<h3>Fixed in Firefox 130</h3><a href="/en-US/security/advisories/mfsa2024-01/">Security Vulnerabilities fixed in Firefox 130</a>'); }
     return new Response('<rss><channel></channel></rss>');
   };
   const stages = {
@@ -69,7 +69,7 @@ test('探索page・新製品baseline・OSVページ・詳細・429が重なっ�
   }
   // Assert
   assert.deepEqual([...queried].sort(), ['example-0', 'example-1', 'example-2', 'example-3'], JSON.stringify(progress));
-  assert.equal(detailed.size, 8); assert.ok(pages.includes(1)); assert.equal(baselineRequests, 1);
+  assert.equal(detailed.size, 8); assert.ok(pages.includes(1)); assert.equal(baselineRequests, 1); assert.equal(currentIndexRequests, run + 1);
   assert.ok(run < 16);
   for (const metric of pools) { assert.ok(metric.http.peak <= 6); assert.ok(metric.commands.peak <= 4); assert.ok(Object.values(metric.hosts).every(host => host.peak <= 2)); }
   const state = JSON.parse(await fs.readFile(path.join(stateRoot, 'state.json'), 'utf8'));

@@ -11,8 +11,8 @@ test('悪性パッケージのロック一致でも実行や窃取を確定せ�
   // Assert
   assert.match(report.split('\n')[0], /IOCの確定 0 件/);
   assert.match(report, /悪性配布の疑い/);
-  assert.match(report, /ロック一致だけで隔離・失効を必須にしない/);
-  assert.match(report, /実行・窃取を確定しない/);
+  assert.match(report, /ロック一致だけで隔離・失効を必須にしません/);
+  assert.match(report, /実行・窃取を確定するには追加の証拠が必要/);
 });
 
 test('詳細取得へのリクエストにローカルパスや秘密の追加フィールドを送信しない', async () => {
@@ -82,7 +82,8 @@ test('重大告知をレポートの最初の判定へ表示する', () => {
   // Act
   const report = renderReport({ match: { findings } });
   // Assert
-  assert.ok(report.indexOf('OLD_CRITICAL') < report.indexOf('NEW_LOW'));
+  assert.ok(report.indexOf('next 16.3.5; critical') < report.indexOf('minor 1.0.0; low'));
+  assert.ok(report.includes('next 16.3.5; critical'));
   assert.match(report.split('\n')[1], /感染件数ではない/);
 });
 
@@ -118,7 +119,7 @@ test('依存の影響版だけでは侵害や全資格情報の漏えいと報�
   // Assert
   assert.match(report, /^被害の有無: 侵害を示すIOCの確定 0 件/);
   assert.match(report, /依存 1 種類／アドバイザリ 1 種類／依存と告知の一致 1 件/);
-  assert.match(report, /ロック記録だけで全資格情報のローテーションを必須としない/);
+  assert.match(report, /ロック記録だけで全資格情報のローテーションを必須としません/);
   assert.doesNotMatch(report, /最優先・5分・無料/);
 });
 
@@ -176,7 +177,7 @@ test('一致しなかったIOCと取得に成功した情報源もレポート�
   const report = renderReport(data);
   // Assert
   assert.match(report, /公式ハッシュと不一致 SHA256照合/);
-  assert.match(report, /CISA KEV \| ok \| 18 \| 1/);
+  assert.match(report, /CISA KEV \| 取得成功 \| 18 \| 1/);
   assert.match(report, /所要時間: 5\.0 秒/);
 });
 
@@ -187,5 +188,5 @@ test('旧Nodeが保管されていても現在の修正済みNodeを影響版と
   const report = renderReport(data);
   // Assert
   assert.match(report, /v24\.22\.1 \| この棚卸しで実行した現在のNode \| node-advisory: 影響なし/);
-  assert.match(report, /v24\.22\.0 \| 別用途・保管版（使用状況は未確認） \| node-advisory: 可能性高/);
+  assert.match(report, /v24\.22\.0 \| 別用途・保管版（使用状況は未確認） \| node-advisory: 影響する可能性が高い/);
 });

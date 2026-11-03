@@ -134,3 +134,28 @@ test('OSVに追加ページが残れば以前の一致を解消しない', () =>
   assert.equal(changes.resolved.length, 0);
   assert.equal(changes.unconfirmed.length, 1);
 });
+
+test('廃止したIOCルールの以前の陽性は観測日時を保って確認不能として残す', () => {
+  // Arrange
+  const previous = [{ id: 'retired-ioc-fixture', status: '確定', incident: true, evidence: ['/fixture/payload'],
+    observedAt: '2026-10-01T00:00:00.000Z', verifiedAt: '2026-09-30T00:00:00.000Z' }];
+  // Act
+  const changes = compareAssessments(previous, [], { coverage: [{ area: 'osv-query', status: 'complete' }] }, [{ area: 'ioc-rules', status: 'complete' }]);
+  // Assert
+  assert.deepEqual(changes.resolved, []);
+  assert.deepEqual(changes.unconfirmed.map(row => [row.id, row.observedAt]), [['retired-ioc-fixture', '2026-10-01T00:00:00.000Z']]);
+  assert.deepEqual(changes.snapshot, previous);
+});
+
+test('陽性の履歴は全履歴照会の時刻・完了範囲・情報源の競合を保持する', () => {
+  // Arrange
+  const finding = { id: 'package-history-fixture', status: '可能性あり', package: { name: 'fixture', ecosystem: 'Debian:12' }, version: '1:2.0-1~deb12u1',
+    observedAt: '2026-11-03T00:00:00.000Z', queriedAt: '2026-11-02T23:59:00.000Z', queryComplete: true,
+    historyScope: 'osv-all-records-for-exact-version', conflictingEvidence: true, reasonCode: 'advisory-conflict' };
+  // Act
+  const changes = compareAssessments([], [finding]);
+  // Assert
+  const actual = changes.snapshot[0];
+  assert.deepEqual([actual.observedAt, actual.queriedAt, actual.queryComplete, actual.historyScope, actual.conflictingEvidence, actual.reasonCode],
+    ['2026-11-03T00:00:00.000Z', '2026-11-02T23:59:00.000Z', true, 'osv-all-records-for-exact-version', true, 'advisory-conflict']);
+});

@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
+import { SOURCES, MOZILLA_SOURCES } from './source-registry.mjs';
 
 const DEFINITIONS = Object.freeze({
+  USAGE: ['引数の形式を確認できません。', 'node scripts/run-sweep.mjs --help で使用できる引数と範囲を確認してください。'],
+  TRANSLATION_PENDING: ['指定言語の翻訳が未完了です。', '保存済みの原文から翻訳だけを再開してください。再スキャンは不要です。'],
   CONFIG: ['設定の形式を確認できません。', '設定資料の型・範囲だけを確認し、既存の値は削除せず修正してください。'],
   STATE: ['継続状態を安全に読み取れません。', '状態を変更せず、対応するスキルの版と保存済みレポートを確認してください。'],
   BOUNDARY: ['許可された読み取り範囲を確認できません。', '設定した対象の実体と範囲を確認してください。リンク・認証領域は対象にできません。'],
@@ -28,11 +31,17 @@ const OPERATIONS = new Set(['config', 'state', 'read', 'list', 'write', 'lock', 
 export function diagnostic(kind, options = {}) {
   const key = Object.hasOwn(DEFINITIONS, kind) ? kind : 'INTERNAL';
   const [message, recovery] = DEFINITIONS[key];
+  const source = [...SOURCES, ...MOZILLA_SOURCES].find(item => item.id && item.id === options.sourceId);
   return { code: `MSS_${key}`, message, operation: OPERATIONS.has(options.operation) ? options.operation : 'runtime',
     cause: CAUSES.has(options.cause) ? options.cause : 'unknown', recovery,
     writeOutcome: ['none', 'partial', 'complete', 'unknown'].includes(options.writeOutcome) ? options.writeOutcome : 'none',
-    context: { runtime: `node-${process.versions.node.split('.')[0]}`, schema: 2 },
-    trace: key === 'INTERNAL' ? { id: randomUUID(), module: 'runtime' } : null,
+    context: { runtime: `node-${process.versions.node.split('.')[0]}`, schema: 2,
+      ...(source ? { sourceId: source.id, adapterSchema: source.schema } : {}),
+      ...(Number.isInteger(options.status) && options.status >= 100 && options.status <= 599 ? { status: options.status } : {}),
+      ...(Number.isInteger(options.attempts) && options.attempts >= 1 && options.attempts <= 2 ? { attempts: options.attempts } : {}),
+      ...(Number.isFinite(options.timeoutMs) && options.timeoutMs > 0 && options.timeoutMs <= 20000 ? { timeoutMs: options.timeoutMs } : {}),
+      ...(Number.isSafeInteger(options.retryAt) && options.retryAt > 0 ? { retryAt: options.retryAt } : {}) },
+    trace: key === 'INTERNAL' ? { id: randomUUID(), module: ['news','baseline'].includes(options.operation) ? 'sources' : ['inventory','discovery','packages','ioc'].includes(options.operation) ? 'collectors' : ['write','checkpoint','state','lock'].includes(options.operation) ? 'state-store' : options.operation === 'cli' ? 'runner' : 'runtime', stage: OPERATIONS.has(options.operation) ? options.operation : 'runtime', callsite: OPERATIONS.has(options.operation) ? `${options.operation}:boundary` : 'runtime:boundary' } : null,
     reference: `references/errors.md#mss_${key.toLowerCase()}` };
 }
 

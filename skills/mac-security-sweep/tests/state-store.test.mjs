@@ -32,7 +32,7 @@ test('GitHubの修正版文字列を含む実際のページ継続を保存し�
   const resumed = await createStateStore({ home, identityProvider });
   // Assert
   assert.equal(resumed.progressVerified, true);
-  assert.equal(resumed.state.sourceContinuations[name].items.length, 20);
+  assert.equal(resumed.state.sourceContinuations[name].items.length, 3);
   assert.equal(resumed.state.sourceContinuations[name].items[0].affected[0].fixed, '2.0.0');
   assert.deepEqual(resumed.state.sourceContinuations[name].items[0].fixed, [{ name: 'example', version: '2.0.0' }]);
   await resumed.close();

@@ -37,6 +37,7 @@ export function parseBrewAdvisory(data) {
   return { id: data.id, affected, upstream: (Array.isArray(data.upstream) ? data.upstream : []).filter(validAdvisoryId).slice(0, 50),
     aliases: (Array.isArray(data.aliases) ? data.aliases : []).filter(validAdvisoryId).slice(0, 50),
     severity: normalizeSeverity(data.severity || data.database_specific?.severity, 'Homebrew Advisory Database'),
+    published: Number.isFinite(Date.parse(data.published)) ? data.published : null,
     modified: Number.isFinite(Date.parse(data.modified)) ? data.modified : null,
     withdrawn: Number.isFinite(Date.parse(data.withdrawn)) ? data.withdrawn : null,
     sourceUrl: `https://github.com/Homebrew/advisory-database/blob/main/advisories/${data.id}.json` };
@@ -48,16 +49,16 @@ function restoreBrewRecord(value) {
   if (value.affected.some(entry => !/^[a-z0-9][a-z0-9@+_.-]{0,100}$/.test(entry.name || '') || !Array.isArray(entry.fixed) || entry.fixed.length > 100 || entry.fixed.some(version => !VERSION.test(version)))) return null;
   return { id: value.id, affected: value.affected.map(entry => ({ name: entry.name, fixed: entry.fixed, fix: entry.fix === 'patch' ? 'patch' : 'unknown' })),
     upstream: (Array.isArray(value.upstream) ? value.upstream : []).filter(validAdvisoryId).slice(0, 50), aliases: (Array.isArray(value.aliases) ? value.aliases : []).filter(validAdvisoryId).slice(0, 50),
-    severity: normalizeSeverity(value.severity, 'Homebrew Advisory Database'), modified: Number.isFinite(Date.parse(value.modified)) ? value.modified : null,
+    severity: normalizeSeverity(value.severity, 'Homebrew Advisory Database'), published: Number.isFinite(Date.parse(value.published)) ? value.published : null, modified: Number.isFinite(Date.parse(value.modified)) ? value.modified : null,
     withdrawn: Number.isFinite(Date.parse(value.withdrawn)) ? value.withdrawn : null,
     sourceUrl: `https://github.com/Homebrew/advisory-database/blob/main/advisories/${value.id}.json` };
 }
 
 /** 端末構成を送らず固定repository全体の公開snapshotを有限に取得する。adaptive段階が呼ぶ。 @example fetchHomebrewAdvisories(context, previous) */
-export async function fetchHomebrewAdvisories(context, previous = {}, { maxRecords = 80, onProgress = async () => {} } = {}) {
+export async function fetchHomebrewAdvisories(context, previous = {}, { maxRecords = 80, refresh = true, indexOnly = false, preferredFormulae = [], onProgress = async () => {} } = {}) {
   if (!Number.isSafeInteger(maxRecords) || maxRecords < 1 || maxRecords > 80) throw new SweepError('CONFIG', { cause: 'limit', operation: 'baseline' });
   const now = context.wallNow();
-  let tree = [], records = [], snapshotId = null, fetchedAt = null, pendingOrder = [];
+  let tree = [], records = [], snapshotId = null, fetchedAt = null, pendingOrder = [], verifiedThisRun = false;
   const attempted = new Set();
   const diagnostics = [];
   const fresh = previous.schemaVersion === 1 && Number.isFinite(Date.parse(previous.fetchedAt)) && now - Date.parse(previous.fetchedAt) >= 0 && now - Date.parse(previous.fetchedAt) < 86400000;
@@ -71,19 +72,23 @@ export async function fetchHomebrewAdvisories(context, previous = {}, { maxRecor
     if (Array.isArray(previous.pendingPaths) && previous.pendingPaths.length <= 10000) pendingOrder = previous.pendingPaths.filter(value => typeof value === 'string' && known.has(value));
   }
   try {
-    if (!snapshotId) {
+    if (refresh || !snapshotId) {
       const response = await context.request(TREE);
       if (!response.ok) throw new SweepError('HTTP', { cause: 'http', operation: 'baseline' });
       const data = boundedJson(await response.text(), { maxRecords: 200000 });
       if (!/^[a-f0-9]{40}$/.test(data.sha || '') || !Array.isArray(data.tree) || data.truncated === true) throw new SweepError('SOURCE', { cause: 'malformed', operation: 'baseline' });
       const candidates = data.tree.filter(entry => entry.type === 'blob' && entry.path?.startsWith('advisories/') && entry.path.endsWith('.json'));
       if (candidates.length > 10000 || candidates.some(entry => !PATH.test(entry.path) || !/^[a-f0-9]{40}$/.test(entry.sha || '') || entry.size > 2 * 1024 ** 2)) throw new SweepError('CAPACITY', { cause: 'limit', operation: 'baseline' });
+      // Cached records are reusable only when the freshly fetched tree has the same immutable identity.
+      if (snapshotId !== data.sha) records = [];
       tree = candidates.map(entry => ({ path: entry.path, sha: entry.sha })).sort((a, b) => a.path.localeCompare(b.path));
-      snapshotId = data.sha; fetchedAt = new Date(now).toISOString();
+      snapshotId = data.sha; fetchedAt = new Date(now).toISOString(); verifiedThisRun = true;
     }
     const completed = new Set(records.map(record => `advisories/${record.id}.json`));
     const byPath = new Map(tree.map(entry => [entry.path, entry]));
     pendingOrder = [...new Set([...pendingOrder, ...byPath.keys()])].filter(path => !completed.has(path));
+    const preferred = new Set(preferredFormulae.filter(value => typeof value === 'string' && /^[a-z0-9][a-z0-9@+_.-]{0,100}$/.test(value)));
+    pendingOrder.sort((a, b) => Number([...preferred].some(name => b.startsWith(`advisories/BREW-${name}-`))) - Number([...preferred].some(name => a.startsWith(`advisories/BREW-${name}-`))));
     const pending = pendingOrder.map(path => byPath.get(path));
     // 永続失敗を末尾へ回し、未試行の公開レコードが次回も先頭に進めるようにする。
     const remainingPaths = () => {
@@ -93,7 +98,7 @@ export async function fetchHomebrewAdvisories(context, previous = {}, { maxRecor
     let serializedBytes = Buffer.byteLength(JSON.stringify({ tree, records }));
     let cursor = 0;
     await Promise.all(Array.from({ length: 2 }, async () => {
-      while (cursor < Math.min(pending.length, maxRecords)) {
+      while (!indexOnly && cursor < Math.min(pending.length, maxRecords)) {
         const entry = pending[cursor++];
         attempted.add(entry.path);
         try {
@@ -123,7 +128,7 @@ export async function fetchHomebrewAdvisories(context, previous = {}, { maxRecor
   const queue = [...new Set([...pendingOrder, ...tree.map(entry => entry.path)])];
   const pendingPaths = [...queue.filter(path => !attempted.has(path)), ...queue.filter(path => attempted.has(path))].filter(path => !completed.has(path));
   const complete = snapshotId !== null && pendingPaths.length === 0 && diagnostics.length === 0;
-  return { records, diagnostics, status: complete ? 'complete' : 'partial', freshness: fresh || fetchedAt ? 'fresh' : previous.fetchedAt ? 'stale' : 'missing',
+  return { records, diagnostics, status: complete ? 'complete' : 'partial', freshness: verifiedThisRun || !refresh && fresh ? 'fresh' : fetchedAt || previous.fetchedAt ? 'stale' : 'missing',
     fetchedAt, coverage: [{ area: 'homebrew-advisory-database', status: complete ? 'complete' : 'partial', count: records.length, pending: pendingPaths.length,
       reason: '公式DBの収録済みpatch修正だけを比較。未収録・cask・custom tapを無脆弱性と判定しない' }],
     continuation: { schemaVersion: 1, snapshotId, fetchedAt, tree, records, pendingPaths } };

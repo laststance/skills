@@ -7,6 +7,7 @@ import { performance } from 'node:perf_hooks';
 import { createSafeIO, inspectAncestors, recheckAncestors, LIMITS, within } from './safe-io.mjs';
 import { SweepError, safeDiagnostic } from './diagnostics.mjs';
 import { createLocalityGuard } from './file-flags.mjs';
+import { SOURCE_PUBLIC_GETS, validateSourceRequest } from './source-request-policy.mjs';
 
 const FIXED_GETS = new Set([
   'https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json',
@@ -15,7 +16,6 @@ const FIXED_GETS = new Set([
   'https://opensourcemalware.com/rss.xml', 'https://support.apple.com/en-us/100100',
   'https://www.jpcert.or.jp/rss/jpcert.rdf', 'https://www.ipa.go.jp/security/rss/alert.rdf',
   'https://www.security-next.com/feed', 'https://piyolog.hatenadiary.jp/feed',
-  'https://cursor.com/blog/claude-code-extension-security-notice', 'https://www.cursor.com/blog/claude-code-extension-security-notice',
   'https://nodejs.org/en/feed/vulnerability.xml',
   'https://www.mozilla.org/en-US/security/known-vulnerabilities/firefox/',
   'https://www.mozilla.org/en-US/security/known-vulnerabilities/firefox-esr/',
@@ -26,7 +26,7 @@ const SYSTEM_TOOLS = Object.freeze({
   sw_vers: '/usr/bin/sw_vers', uname: '/usr/bin/uname', plutil: '/usr/bin/plutil', codesign: '/usr/bin/codesign',
   ps: '/bin/ps', sysctl: '/usr/sbin/sysctl', lsof: '/usr/sbin/lsof', sfltool: '/usr/bin/sfltool',
   crontab: '/usr/bin/crontab', spctl: '/usr/sbin/spctl', csrutil: '/usr/bin/csrutil', fdesetup: '/usr/bin/fdesetup',
-  firewall: '/usr/libexec/ApplicationFirewall/socketfilterfw', log: '/usr/bin/log', stat: '/usr/bin/stat',
+  firewall: '/usr/libexec/ApplicationFirewall/socketfilterfw', stat: '/usr/bin/stat',
 });
 const OPERATIONS = new Set([...Object.keys(SYSTEM_TOOLS), 'brew', 'docker', 'osv-scanner', 'node']);
 
@@ -93,7 +93,7 @@ export function validateCommand(operation, args, options = {}) {
   if (operation === 'codesign') return args.length === 3 && args[0] === '-dv' && args[1] === '--verbose=4' && path.isAbsolute(args[2]) && args[2].endsWith('.app');
   if (operation === 'sysctl') return joined === '-n kern.boottime';
   if (operation === 'ps') return ['-axo pid=,comm=', '-axo pid,comm', '-axo pid,ppid,comm'].includes(joined) || /^-p \d+ -o lstart=$/.test(joined);
-  if (operation === 'lsof') return ['-nP -iTCP -sTCP:LISTEN', '-nP -iTCP -sTCP:ESTABLISHED', '-nP -iTCP -sTCP:LISTEN -FpcnT', '-nP -iTCP -sTCP:ESTABLISHED -FpcnT', '-nP -iTCP:4444'].includes(joined) || /^-a -p \d+ -d (?:cwd,txt|cwd|txt) -Fn$/.test(joined);
+  if (operation === 'lsof') return ['-nP -iTCP -sTCP:LISTEN', '-nP -iTCP -sTCP:ESTABLISHED', '-nP -iTCP -sTCP:LISTEN -FpcnT', '-nP -iTCP -sTCP:ESTABLISHED -FpcnT'].includes(joined) || /^-a -p \d+ -d (?:cwd,txt|cwd|txt) -Fn$/.test(joined);
   if (operation === 'brew') return joined === 'info --json=v2 --installed';
   if (operation === 'sfltool') return joined === 'dumpbtm';
   if (operation === 'crontab') return joined === '-l';
@@ -107,9 +107,6 @@ export function validateCommand(operation, args, options = {}) {
   }
   if (operation === 'osv-scanner') return joined === '--version' || args.slice(0, 8).join(' ') === 'scan source --offline --no-resolve --no-call-analysis=all --all-packages --format=json --config=/dev/null'
     && args.length === 10 && args[8] === '--lockfile' && /^(?:[A-Za-z0-9._-]+:)?\/dev\/fd\/3$/.test(args[9]) && Number.isInteger(options.inputFd);
-  if (operation === 'log') return args.length === 11 && args.slice(0, 4).join(' ') === 'show --style json --start' && args[5] === '--end'
-    && /^@\d{10}$/.test(args[4]) && /^@\d{10}$/.test(args[6]) && args.slice(7, 10).join(' ') === '--timezone UTC --predicate'
-    && args[10] === 'eventMessage CONTAINS "134.209.82.225" OR eventMessage CONTAINS "svc-telemetry" OR eventMessage CONTAINS "com.apple.sysmond"';
   return false;
 }
 
@@ -154,20 +151,20 @@ export function executeCommand(file, args, { input, inputFd, signal, timeoutMs =
 export function validatePublicRequest(address, options = {}) {
   let url;
   try { url = new URL(address); } catch { return false; }
-  if (url.protocol !== 'https:' || url.username || url.password || url.hash) return false;
+  if (url.protocol !== 'https:' || url.username || url.password || url.hash || url.port) return false;
   const method = options.method || 'GET';
   if (method === 'POST' && url.href === 'https://api.osv.dev/v1/querybatch') {
     try {
       const body = JSON.parse(options.body);
       return Object.keys(body).join() === 'queries' && Array.isArray(body.queries) && body.queries.length <= 100 && body.queries.every(query =>
         Object.keys(query).every(key => ['package', 'version', 'page_token'].includes(key)) && query.package && Object.keys(query.package).sort().join() === 'ecosystem,name'
-        && /^[A-Za-z0-9@][A-Za-z0-9@._/+:\-]{0,249}$/.test(query.package.name) && /^(?:npm|PyPI|crates.io|Go|Maven|Packagist|RubyGems|NuGet|Pub|Hex|Hackage|Debian|Alpine|CRAN|VSCode|VSCode-OpenVSX)$/.test(query.package.ecosystem)
-        && typeof query.version === 'string' && /^[A-Za-z0-9][A-Za-z0-9._+!:\-]{0,119}$/.test(query.version)
+        && /^[A-Za-z0-9@][A-Za-z0-9@._/+:\-]{0,249}$/.test(query.package.name) && /^(?:npm|PyPI|crates.io|Go|Maven|Packagist|RubyGems|NuGet|Pub|Hex|Hackage|Debian(?::(?:10|11|12|13))?|Alpine(?::v3\.(?:18|19|20|21|22|23|24))?|CRAN|VSCode|VSCode-OpenVSX)$/.test(query.package.ecosystem)
+        && typeof query.version === 'string' && /^[A-Za-z0-9][A-Za-z0-9._+!~:\-]{0,119}$/.test(query.version)
         && (query.page_token === undefined || typeof query.page_token === 'string' && query.page_token.length <= 4096 && !/[\x00-\x1f]/.test(query.page_token)));
     } catch { return false; }
   }
   if (method !== 'GET' || options.body !== undefined) return false;
-  if (FIXED_GETS.has(url.href)) return true;
+  if (FIXED_GETS.has(url.href) || validateSourceRequest(address, options)) return true;
   if (url.hostname === 'api.osv.dev' && /^\/v1\/vulns\/[A-Za-z0-9][A-Za-z0-9._-]{2,120}$/.test(url.pathname) && !url.search) return options.authorizedIds?.has(url.pathname.split('/').at(-1)) === true;
   if (url.hostname === 'api.github.com' && url.pathname === '/advisories') {
     return [...url.searchParams].every(([key, value]) => ({ type: /^(reviewed|malware)$/, per_page: /^100$/, modified: /^(?:>=)?\d{4}-\d\d-\d\dT[\d:.]+Z(?:\.\.\d{4}-\d\d-\d\dT[\d:.]+Z)?$/, after: /^[A-Za-z0-9_=+\/-]{1,512}$/, before: /^[A-Za-z0-9_=+\/-]{1,512}$/, direction: /^(asc|desc)$/, sort: /^(updated|published)$/ })[key]?.test(value));
@@ -188,14 +185,14 @@ export function createRunContext(options = {}) {
   const workMs = Math.max(1, budgetMs - reserveMs);
   const controller = new AbortController();
   const signal = controller.signal;
-  const metrics = { commands: { peak: 0 }, scanner: { peak: 0 }, http: { peak: 0 }, hosts: {}, requests: 0, commandCount: 0 };
+  const metrics = { commands: { peak: 0 }, scanner: { peak: 0 }, http: { peak: 0 }, hosts: {}, requests: 0, commandCount: 0, networkBytes: 0, networkLimitBytes: 96 * 1024 * 1024 };
   const commands = createPool(4, signal, metrics.commands), scanners = createPool(2, signal, metrics.scanner), http = createPool(6, signal, metrics.http);
   const hosts = new Map(), pending = new Set(), tools = new Map(), attempts = new Map();
   const diagnostics = [];
   let githubRemaining = 50;
   const transport = { cooldowns: {} };
   for (const [host, value] of Object.entries(options.previousTransport?.cooldowns || {})) {
-    if (['api.github.com', 'api.osv.dev', ...[...FIXED_GETS].map(url => new URL(url).hostname)].includes(host) && Number.isFinite(value) && value > now() && value <= now() + 86400000) transport.cooldowns[host] = value;
+    if (['api.github.com', 'api.osv.dev', ...[...FIXED_GETS, ...SOURCE_PUBLIC_GETS].map(url => new URL(url).hostname)].includes(host) && Number.isFinite(value) && value > now() && value <= now() + 86400000) transport.cooldowns[host] = value;
   }
   const timer = setTimeout(() => controller.abort(), Math.max(1, workMs - (monotonic() - start)));
   timer.unref();
@@ -217,22 +214,27 @@ export function createRunContext(options = {}) {
   }
 
   async function request(address, requestOptions = {}) {
-    check();
+    const requestSignal = requestOptions.signal ? AbortSignal.any([signal, requestOptions.signal]) : signal;
+    const checkRequest = () => { check(); if (metrics.networkBytes >= metrics.networkLimitBytes) throw new SweepError('CAPACITY', { cause: 'limit', operation: 'http' }); if (requestSignal.aborted) throw new SweepError('DEADLINE', { cause: 'aborted', operation: 'news' }); };
+    checkRequest();
     if (!validatePublicRequest(address, requestOptions)) throw new SweepError('HTTP', { operation: 'http', cause: 'boundary' });
     const host = new URL(address).hostname;
+    let lastAttempt = 0;
+    const timeoutMs = Math.max(1, Math.min(requestOptions.timeoutMs || 20000, remainingMs()));
     if (!hosts.has(host)) { metrics.hosts[host] = { peak: 0 }; hosts.set(host, createPool(2, signal, metrics.hosts[host])); }
     return track(hosts.get(host)(() => http(async () => {
-      check();
+      checkRequest();
       if ((transport.cooldowns[host] || 0) > now()) throw new SweepError('HTTP', { cause: 'cooldown', operation: 'http' });
       let response;
       const requestKey = createHash('sha256').update(`${requestOptions.method || 'GET'}:${address}:${requestOptions.body || ''}`).digest('hex');
       for (let attempt = 0; attempt < 2; attempt += 1) {
-        check();
+        lastAttempt = attempt + 1;
+        checkRequest();
         if ((attempts.get(requestKey) || 0) >= 2 || attempts.size >= 10000 && !attempts.has(requestKey)) throw new SweepError('HTTP', { cause: 'limit', operation: 'http' });
         attempts.set(requestKey, (attempts.get(requestKey) || 0) + 1);
         if (host === 'api.github.com' && githubRemaining-- <= 0) throw new SweepError('HTTP', { cause: 'limit', operation: 'http' });
-        const timeout = AbortSignal.timeout(Math.max(1, Math.min(requestOptions.timeoutMs || 20000, remainingMs())));
-        const combined = AbortSignal.any([signal, timeout]);
+        const timeout = AbortSignal.timeout(Math.max(1, Math.floor(Math.min(requestOptions.timeoutMs || 20000, remainingMs()))));
+        const combined = AbortSignal.any([requestSignal, timeout]);
         let original;
         try {
           metrics.requests += 1;
@@ -247,7 +249,8 @@ export function createRunContext(options = {}) {
             // 応答本文の最後までslotと期限を保持する。中止時はreader自体をcancelする。
             const append = chunk => {
               bytes += chunk.length;
-              if (bytes > maxBytes) throw new SweepError('CAPACITY', { cause: 'limit', operation: 'http' });
+              metrics.networkBytes += chunk.length;
+              if (bytes > maxBytes || metrics.networkBytes > metrics.networkLimitBytes) throw new SweepError('CAPACITY', { cause: 'limit', operation: 'http' });
               chunks.push(Buffer.from(chunk));
             };
             if (reader) {
@@ -271,20 +274,47 @@ export function createRunContext(options = {}) {
           if (![502, 503, 504].includes(response.status) || attempt === 1) return response;
         } catch (error) {
           await original?.body?.cancel().catch(() => {});
-          if (signal.aborted || error instanceof SweepError || attempt === 1) throw error instanceof SweepError ? error : new SweepError('HTTP', { cause: combined.aborted ? 'timeout' : 'network', operation: 'http' });
+          if (requestSignal.aborted || error instanceof SweepError || attempt === 1) throw error instanceof SweepError ? error : new SweepError('HTTP', { cause: combined.aborted ? 'timeout' : 'network', operation: 'http' });
         }
       }
       return response;
-    })));
+    }))).catch(error => {
+      // Add only registry-bound transport context; never retain the URL, payload or exception message.
+      const prior = error instanceof SweepError ? error.diagnostic : null;
+      throw new SweepError(prior?.code?.slice(4) || 'HTTP', { cause: prior?.cause || 'network', operation: prior?.operation || 'http', sourceId: requestOptions.sourceId, timeoutMs, attempts: lastAttempt || 1, retryAt: transport.cooldowns[host] });
+    });
   }
 
   async function close() { clearTimeout(timer); controller.abort(); await Promise.allSettled([...pending]); }
-  return { home, platform: options.platform || process.platform, arch: options.arch || process.arch, config: options.config || {}, systemRoot: options.systemRoot,
+  const context = { home, platform: options.platform || process.platform, arch: options.arch || process.arch, config: options.config || {}, systemRoot: options.systemRoot,
     runId: options.runId || randomUUID(), startedAt: new Date(now()).toISOString(), wallNow: now, monotonicNow: monotonic, continuationVerified: options.continuationVerified === true,
     budgetMs, reserveMs, signal, remainingMs, check, metrics, diagnostics, transport, command, request, fetch: request,
     io: createSafeIO({ home, filesystem: options.filesystem, signal, beforeRead: options.beforeRead,
       localityGuard: options.localityGuard || createLocalityGuard({ signal, runStat: filename => command('stat', ['-f', '%d:%i:%f', filename], { timeoutMs: 1000, maxBytes: 1024 }) }) }),
     checkpoint: options.checkpoint || (async () => {}),
     record: (error, kind, operation) => { const item = safeDiagnostic(error, kind, operation); if (diagnostics.length < 1000) diagnostics.push(item); return item; },
-    close, stop: () => controller.abort(), drain: async () => { await Promise.allSettled([...pending]); } };
+    close, stop: () => controller.abort(), drain: async () => { while (pending.size) await Promise.allSettled([...pending]); } };
+
+  /** Bound initial public collection without resetting the global budget. The runner closes it before inventory.
+   * @example const phase = context.newsPhase(); await collect(phase.context); await phase.close();
+   */
+  context.newsPhase = () => {
+    const phaseController = new AbortController();
+    const phaseSignal = AbortSignal.any([signal, phaseController.signal]);
+    const phaseBudgetMs = Math.max(1, Math.floor(Math.min(180000, remainingMs() / 3)));
+    const phaseStart = monotonic();
+    const phaseTimer = setTimeout(() => phaseController.abort(), phaseBudgetMs);
+    phaseTimer.unref();
+    const phaseCheck = () => { check(); if (phaseSignal.aborted) throw new SweepError('DEADLINE', { cause: 'timeout', operation: 'news' }); };
+    const phaseRequest = (url, init = {}) => request(url, { ...init, signal: init.signal ? AbortSignal.any([phaseSignal, init.signal]) : phaseSignal });
+    return {
+      budgetMs: phaseBudgetMs,
+      context: { ...context, signal: phaseSignal, check: phaseCheck,
+        remainingMs: () => Math.max(0, Math.min(remainingMs(), phaseBudgetMs - (monotonic() - phaseStart))),
+        request: phaseRequest, fetch: phaseRequest,
+        command: async () => { throw new SweepError('BOUNDARY', { cause: 'boundary', operation: 'news' }); } },
+      close: async () => { clearTimeout(phaseTimer); phaseController.abort(); await context.drain(); },
+    };
+  };
+  return context;
 }

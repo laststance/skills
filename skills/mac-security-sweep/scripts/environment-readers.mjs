@@ -2,7 +2,7 @@ import path from 'node:path';
 import { boundedJson, readStatus, within, allowedProjectRoot } from './safe-io.mjs';
 import { SweepError, safeDiagnostic } from './diagnostics.mjs';
 import { cleanText, extensionSource, projectMcpServer, projectLaunchRuntimes, projectProcessFiles, parseLsof, safeVersion, safeIdentifier } from './inventory-projections.mjs';
-import { publicResolution } from './package-formats.mjs';
+import { publicResolution, validPackage } from './package-formats.mjs';
 
 const systemPath = (ctx, absolute) => ctx.systemRoot ? path.join(ctx.systemRoot, absolute) : absolute;
 const directoryEntries = value => value?.entries.filter(entry => entry.directory && !entry.symlink) || [];
@@ -566,39 +566,123 @@ export async function collectProtection(ctx, result) {
   xprotect.finish(result.protection.xprotect.length, { ...(result.protection.xprotect.length ? {} : { status: 'partial' }), reason: 'OSの配置差・権限制限を保持。版metadataだけでは最新性や過去の検知を断定しません。' });
 }
 
-/** 検証済み画像digestとpublic originを持つ既存SBOMを射影する。 @example projectSbom(data, knownDigests) */
+/** Parse one SBOM identity without turning a binary package into an assumed distro source.
+ * Called by {@link projectSbom} after image binding; unknown formats/provenance remain explicit.
+ * @example projectSbomComponent({purl:'pkg:deb/debian/openssl@3.0.14-1~deb12u2?arch=source&distro=debian-12', name:'openssl', version:'3.0.14-1~deb12u2', refs:[]})
+ */
+function projectSbomComponent(component) {
+  if (typeof component.purl !== 'string' || component.purl.length > 4096 || !Array.isArray(component.refs)) return null;
+  const parsed = /^pkg:([a-z]+)\/([^?#]+)@([^?#]+)(?:\?([^#]*))?$/.exec(component.purl);
+  if (!parsed) return null;
+  let fullName, version;
+  try { fullName = decodeURIComponent(parsed[2]); version = decodeURIComponent(parsed[3]); } catch { return null; }
+  if (version !== component.version || !/^[v0-9][A-Za-z0-9.+_!:~\-]{0,119}$/.test(version) || fullName.includes('..')) return null;
+  const parameters = new URLSearchParams(parsed[4] || ''), qualifiers = {};
+  for (const [key, value] of parameters) {
+    if (Object.hasOwn(qualifiers, key) || !['arch', 'distro', 'repository_url', 'upstream'].includes(key) || value.length > 4096) return null;
+    qualifiers[key] = value;
+  }
+  const type = parsed[1], distroType = ['deb', 'apk', 'rpm'].includes(type);
+  let name = type === 'maven' ? fullName.replace(/\/(?!.*\/)/, ':') : fullName;
+  let ecosystem = ({ npm: 'npm', pypi: 'PyPI', cargo: 'crates.io', gem: 'RubyGems', composer: 'Packagist', maven: 'Maven', nuget: 'NuGet', pub: 'Pub' })[type] || null;
+  let distribution = null, distributionRelease = null, sourcePackage = null, sourceVersion = null, distributionConflict = false;
+  const architecture = /^[A-Za-z0-9_-]{1,40}$/.test(qualifiers.arch || '') ? qualifiers.arch : null;
+  if (distroType) {
+    const pieces = fullName.split('/');
+    if (pieces.length !== 2 || !/^[a-z0-9][a-z0-9+.-]*$/.test(pieces[1])) return null;
+    [distribution, name] = pieces;
+    if (!['debian', 'ubuntu', 'alpine', 'redhat', 'rhel', 'centos', 'fedora', 'rocky', 'almalinux'].includes(distribution)) return null;
+    const declared = qualifiers.distro || '';
+    const debian = { buster: '10', bullseye: '11', bookworm: '12', trixie: '13' };
+    if (distribution === 'debian') distributionRelease = debian[declared] || /^(?:debian-)?(10|11|12|13)(?:\.\d+)?$/.exec(declared)?.[1] || null;
+    if (distribution === 'alpine') distributionRelease = /^(?:alpine-)?v?(3\.(?:18|19|20|21|22|23|24))(?:\.\d+)?$/.exec(declared)?.[1] || null;
+    distributionConflict = Boolean(declared && /^(?:debian|ubuntu|alpine|redhat|rhel|centos|fedora|rocky|almalinux)-/.test(declared) && !declared.startsWith(`${distribution}-`));
+    if (type === 'deb' && !['debian', 'ubuntu'].includes(distribution) || type === 'apk' && distribution !== 'alpine'
+      || type === 'rpm' && ['debian', 'ubuntu', 'alpine'].includes(distribution)) distributionConflict = true;
+    const properties = new Map();
+    for (const property of component.properties || []) {
+      if (!['syft:metadata:sourceName', 'syft:metadata:sourceVersion', 'syft:metadata:originPackage'].includes(property?.name)) continue;
+      if (properties.has(property.name) && properties.get(property.name) !== property.value) distributionConflict = true;
+      properties.set(property.name, property.value);
+    }
+    const upstream = /^([a-z0-9][a-z0-9+.-]*)(?:@([0-9][A-Za-z0-9.+_!:~\-]{0,119}))?$/.exec(qualifiers.upstream || '');
+    if (distribution === 'debian' && architecture === 'source') { sourcePackage = name; sourceVersion = version; }
+    else if (distribution === 'debian') {
+      sourcePackage = properties.get('syft:metadata:sourceName') || upstream?.[1] || null;
+      sourceVersion = properties.get('syft:metadata:sourceVersion') || upstream?.[2] || null;
+    } else if (distribution === 'alpine') {
+      sourcePackage = properties.get('syft:metadata:originPackage') || upstream?.[1] || null;
+      sourceVersion = version;
+    }
+    // Contradictory source names/versions cannot be resolved by taking one producer's preferred field.
+    if (upstream && sourcePackage && upstream[1] !== sourcePackage || upstream?.[2] && sourceVersion && upstream[2] !== sourceVersion) distributionConflict = true;
+    if (distribution === 'debian' && (properties.has('syft:metadata:sourceName') && properties.get('syft:metadata:sourceName') !== sourcePackage
+      || properties.has('syft:metadata:sourceVersion') && properties.get('syft:metadata:sourceVersion') !== sourceVersion)) distributionConflict = true;
+    if (!/^[a-z0-9][a-z0-9+.-]{0,199}$/.test(sourcePackage || '')) sourcePackage = null;
+    if (!/^[0-9][A-Za-z0-9.+_!:~\-]{0,119}$/.test(sourceVersion || '')) sourceVersion = null;
+    if (distributionRelease && sourcePackage && sourceVersion && !distributionConflict) ecosystem = distribution === 'debian' ? `Debian:${distributionRelease}` : distribution === 'alpine' ? `Alpine:v${distributionRelease}` : null;
+  }
+  if (!safeIdentifier(name) || name !== component.name && !(type === 'maven' && name.split(':').at(-1) === component.name)) return null;
+  const queryName = distroType ? sourcePackage : name, queryVersion = distroType ? sourceVersion : version;
+  const distributions = component.refs.filter(ref => ['distribution', 'distribution-intake', 'source-distribution'].includes(ref?.type));
+  if (qualifiers.repository_url) distributions.push({ type: 'distribution', url: qualifiers.repository_url });
+  // An explicit repository branch cannot contradict the package's declared release.
+  for (const reference of distroType ? distributions : []) {
+    try {
+      const url = new URL(reference.url), alpineRelease = /^\/alpine\/v(3\.\d+)(?:\/|$)/.exec(url.pathname)?.[1];
+      if (distribution === 'alpine' && alpineRelease && alpineRelease !== distributionRelease) distributionConflict = true;
+    } catch { /* Origin validation below rejects malformed references without retaining them. */ }
+  }
+  if (distributionConflict) ecosystem = null;
+  const supported = validPackage({ name: queryName, version: queryVersion, ecosystem });
+  // Every declared download origin must belong to the exact ecosystem. A private mirror is never overridden.
+  const publicOrigin = supported && distributions.length > 0 && distributions.every(ref => publicResolution(ref.url, ecosystem));
+  return { ecosystem, name: queryName || name, version: queryVersion || version, binaryName: distroType ? name : undefined, binaryVersion: distroType ? version : undefined,
+    publicRegistry: publicOrigin, explicitPrivate: !publicOrigin, origin: publicOrigin ? 'public' : distributions.length ? 'private' : 'unknown',
+    purlType: type, distribution, distributionRelease, architecture, sourcePackage, sourceVersion, distributionConflict,
+    provenanceStatus: !supported ? 'unsupported-identity' : publicOrigin ? 'verified-public-record' : 'unverified-origin',
+    recordId: safeIdentifier(component.id) || null };
+}
+
+/** Bind supported package records to an observed image and retain skipped/unverified coverage.
+ * The container reader calls this; a digest alone never proves complete image contents.
+ * @example projectSbom(data, new Set(['sha256:' + 'a'.repeat(64)]))
+ */
 export function projectSbom(data, knownDigests) {
   const digestPattern = /^sha256:[a-f0-9]{64}$/;
   const components = [], binding = [];
   if (data?.bomFormat === 'CycloneDX' && ['1.4', '1.5', '1.6'].includes(data.specVersion)) {
     for (const hash of data.metadata?.component?.hashes || []) if (/^SHA-?256$/i.test(hash.alg || '') && /^[a-f0-9]{64}$/.test(hash.content || '')) binding.push(`sha256:${hash.content}`);
     for (const property of data.metadata?.properties || []) if (property.name === 'container:image:Digest' && digestPattern.test(property.value || '')) binding.push(property.value);
-    for (const component of data.components || []) components.push({ purl: component.purl, name: component.name, version: component.version, refs: component.externalReferences || [], id: component['bom-ref'] });
+    if (!Array.isArray(data.components)) throw new SweepError('SBOM', { cause: 'malformed', operation: 'sbom' });
+    for (const component of data.components) components.push({ purl: component.purl, name: component.name, version: component.version, refs: component.externalReferences || [], properties: component.properties || [], id: component['bom-ref'] });
   } else if (/^SPDX-2\.[23]$/.test(data?.spdxVersion || '')) {
     const documentIds = new Set(data.documentDescribes || []);
-    for (const component of data.packages || []) {
-      if (documentIds.has(component.SPDXID)) for (const checksum of component.checksums || []) if (checksum.algorithm === 'SHA256' && /^[a-f0-9]{64}$/.test(checksum.checksumValue || '')) binding.push(`sha256:${checksum.checksumValue}`);
+    if (!Array.isArray(data.packages)) throw new SweepError('SBOM', { cause: 'malformed', operation: 'sbom' });
+    for (const component of data.packages) {
+      if (documentIds.has(component.SPDXID)) {
+        for (const checksum of component.checksums || []) if (checksum.algorithm === 'SHA256' && /^[a-f0-9]{64}$/.test(checksum.checksumValue || '')) binding.push(`sha256:${checksum.checksumValue}`);
+        continue;
+      }
       components.push({ purl: component.externalRefs?.find(ref => ref.referenceType === 'purl')?.referenceLocator, name: component.name, version: component.versionInfo, refs: [{ type: 'distribution', url: component.downloadLocation }], id: component.SPDXID });
     }
   } else throw new SweepError('SBOM', { cause: 'unsupported', operation: 'sbom' });
-  const imageDigest = binding.find(digest => knownDigests.has(digest));
+  const bindings = [...new Set(binding)];
+  const imageDigest = bindings.length === 1 && knownDigests.has(bindings[0]) ? bindings[0] : null;
   const packages = [];
+  let skippedPackages = 0, unsupportedPackages = 0, unknownOrigins = 0, distributionConflicts = 0;
   if (components.length > 15000) throw new SweepError('CAPACITY', { cause: 'limit', operation: 'sbom' });
   for (const component of components) {
-    if (typeof component.purl !== 'string' || !safeVersion(component.version)) continue;
-    const match = component.purl.match(/^pkg:(npm|pypi|cargo|gem|composer|maven|nuget|pub)\/([^?#]+)@([^?#]+)$/);
-    if (!match) continue;
-    let name, version;
-    try { name = decodeURIComponent(match[2]); version = decodeURIComponent(match[3]); } catch { continue; }
-    if (match[1] === 'maven') name = name.replace(/\/(?!.*\/)/, ':');
-    if (!safeIdentifier(name) || version !== component.version || name !== component.name && !(match[1] === 'maven' && name.split(':').at(-1) === component.name)) continue;
-    const ecosystem = ({ npm: 'npm', pypi: 'PyPI', cargo: 'crates.io', gem: 'RubyGems', composer: 'Packagist', maven: 'Maven', nuget: 'NuGet', pub: 'Pub' })[match[1]];
-    const distributions = component.refs.filter(ref => ['distribution', 'distribution-intake'].includes(ref.type));
-    // 同じcomponent内の非公開/不明な配布元を一つの公開URLで打ち消さない。
-    const publicOrigin = distributions.length > 0 && distributions.every(ref => publicResolution(ref.url, ecosystem));
-    packages.push({ ecosystem, name, version, publicRegistry: publicOrigin, explicitPrivate: !publicOrigin, origin: publicOrigin ? 'public' : distributions.length ? 'private' : 'unknown', recordId: safeIdentifier(component.id) || null, evidenceKind: imageDigest ? 'digest-bound-sbom' : 'unbound-sbom', imageDigest: imageDigest || null });
+    const projected = projectSbomComponent(component);
+    if (!projected) { skippedPackages += 1; continue; }
+    if (projected.provenanceStatus === 'unsupported-identity') unsupportedPackages += 1;
+    if (!projected.publicRegistry) unknownOrigins += 1;
+    if (projected.distributionConflict) distributionConflicts += 1;
+    packages.push({ ...projected, evidenceKind: imageDigest ? 'digest-bound-sbom' : 'unbound-sbom', imageDigest });
   }
-  return { imageDigest: imageDigest || null, packages, status: imageDigest ? 'complete' : 'partial', bound: Boolean(imageDigest) };
+  return { imageDigest, packages, status: imageDigest && !skippedPackages && !unsupportedPackages && !unknownOrigins && !distributionConflicts ? 'complete' : 'partial',
+    bound: Boolean(imageDigest), componentCount: components.length, skippedPackages, unsupportedPackages, unknownOrigins, distributionConflicts,
+    historyScope: 'supported-records-only' };
 }
 
 /** 全既知local socketと既存SBOMを調べる。remote context・exec/pull/buildは使わない。 @example await collectContainersAndSsh(ctx, result); */
@@ -639,10 +723,17 @@ export async function collectContainersAndSsh(ctx, result) {
     if (!data) continue;
     try {
       const projection = projectSbom(data, knownDigests);
-      result.sboms.push({ path: file, imageDigest: projection.imageDigest, bound: projection.bound, status: projection.status, packageCount: projection.packages.length });
+      result.sboms.push({ path: file, imageDigest: projection.imageDigest, bound: projection.bound, status: projection.status, packageCount: projection.packages.length, componentCount: projection.componentCount, skippedPackages: projection.skippedPackages, unsupportedPackages: projection.unsupportedPackages, unknownOrigins: projection.unknownOrigins, distributionConflicts: projection.distributionConflicts, historyScope: projection.historyScope });
+      if (projection.status !== 'complete') sbom.issue(new SweepError('SBOM', { cause: 'unsupported', operation: 'sbom' }));
       if (!projection.bound) sbom.issue(new SweepError('SBOM', { cause: 'mismatch', operation: 'sbom' }));
       else result.sbomPackages.push(...projection.packages.map(item => ({ ...item, evidence: file })));
     } catch (error) { sbom.issue(error, 'SBOM'); }
+  }
+  // A supplied SBOM proves its listed records only; omitted image content remains a separate unknown scope.
+  for (const imageDigest of knownDigests) {
+    const bound = result.sboms.filter(item => item.imageDigest === imageDigest);
+    result.coverage.push({ area: 'container-image-interior', status: 'partial', imageDigest, count: bound.reduce((total, item) => total + item.packageCount, 0),
+      reasonCode: bound.length ? 'image-sbom-records-only' : 'image-sbom-missing', reason: bound.length ? 'SBOM掲載パッケージだけを確認。画像内部全体の完全性は未確認。' : '画像digestは観測済みだが、結合できる既存SBOMがなく内容は未確認。' });
   }
   sbom.finish(result.sboms.length, { reason: '既存のCycloneDX/SPDXを画像digestと照合。未結合SBOM・由来未確認のpackageは照会や画像内部の確認完了に使いません。' });
 }

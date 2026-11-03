@@ -7,110 +7,24 @@
  * node scripts/fetch-news.mjs --since 2026-10-17T00:00:00Z --until 2026-10-31T00:00:00Z
  * ```
  */
+import { assertMarkupBudget } from './markup-budget.mjs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { createHash } from 'node:crypto';
-import { SOURCES, MOZILLA_SOURCES, identifyProducts, sourceRegistryCoverage } from './source-registry.mjs';
+import { plain, iso, publicLink, item } from './news-format.mjs';
+export { plain } from './news-format.mjs';
+import { SOURCES, MOZILLA_SOURCES, NEWS_CATEGORIES, identifyProducts, sourceRegistryCoverage } from './source-registry.mjs';
 import { createRunContext, validatePublicRequest } from './runtime.mjs';
 import { boundedJson, LIMITS } from './safe-io.mjs';
 import { SweepError, safeDiagnostic, causeClass } from './diagnostics.mjs';
 import { fetchHomebrewAdvisories } from './homebrew-advisories.mjs';
 import { normalizeSeverity, validAdvisoryId } from './assessment.mjs';
+import { parseOfficialIndex, parseDockerAnnouncements, openSslPaths, parseOpenSslCve, parseRedHatList, parseAlpineSnapshot } from './source-adapters.mjs';
+import { discoverIocs } from './ioc-discovery.mjs';
 
 const DAY = 86_400_000;
 const MAX_BYTES = 6 * 1024 * 1024;
 
 
-
-/**
- * XML/HTML の説明を表示用テキストへ縮約する。フィード解析から呼び出す。
- * @param value - 公開フィードの未信頼文字列。
- * @returns タグ・制御文字を除いた短い文字列。
- * @example
- * plain('<b>更新</b>')
- */
-export function plain(value) {
-  return String(value ?? '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&#(x[\da-f]+|\d+);/gi, (_, n) => {
-      const code = n[0].toLowerCase() === 'x' ? parseInt(n.slice(1), 16) : Number(n);
-      // 不正な符号位置で解析全体を停止させない。
-      return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : '';
-    })
-    .replace(/&(amp|lt|gt|quot|apos|nbsp);/g, (_, key) => ({ amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' })[key])
-    .replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-/**
- * ニュースの日時を比較可能にする。解析器と期間判定から呼び出す。
- * @returns 有効な ISO 日時。不明な日時は null。
- * @example
- * iso('30 Oct 2026')
- */
-function iso(value) {
-  const date = new Date(value);
-  return value && Number.isFinite(date.getTime()) ? date.toISOString() : null;
-}
-
-/**
- * 一覧内リンクを安全な参照 URL に制限する。記事はここでは追加取得しない。
- * @returns HTTP(S) の参照 URL。不正な値は null。
- * @example
- * publicLink('https://support.apple.com/en-us/100100')
- */
-function publicLink(value, base) {
-  try {
-    const url = new URL(plain(value), base);
-    // 認証付き URL や実行スキームをレポートへ残さない。
-    if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) return null;
-    for (const key of [...url.searchParams.keys()]) {
-      if (/^utm_|token|secret|password|key|auth/i.test(key)) url.searchParams.delete(key);
-    }
-    return url.href;
-  } catch { return null; }
-}
-
-/**
- * 製品名の候補を抽出する。脆弱性や影響バージョンの確定には使わない。
- * @returns 原文に現れる製品・エコシステムの候補。
- * @example
- * productHints('Chrome and npm security update')
- */
-function productHints(text) {
-  const rules = [
-    ['macOS', /\bmacos\b|mac os|マック/i], ['Safari', /\bsafari\b/i],
-    ['Chrome', /\bchrome\b|chromium/i], ['Cursor', /\bcursor\b/i],
-    ['Visual Studio Code', /vs code|visual studio code|vscode/i], ['Claude Code', /claude code/i],
-    ['Node.js', /node\.js|node2shell|\bnodejs\b|brotli/i], ['npm', /\bnpm\b/i],
-    ['Python', /\bpython\b|\bpypi\b|\bpip\b/i], ['Rust', /\brust\b|\bcargo\b/i],
-    ['Go', /\bgolang\b|\bgo packages?\b/i], ['Docker', /\bdocker\b/i],
-    ['OpenClaw', /\bopenclaw\b/i], ['GitHub', /\bgithub\b/i], ['1Password', /1password/i],
-    ['Next.js', /next\.js/i], ['React', /\breact\b/i], ['PHP', /\bphp\b|laravel/i],
-  ];
-  return rules.filter(([, pattern]) => pattern.test(text)).map(([name]) => name);
-}
-
-/**
- * 異なる情報源を共通のデータ形式へまとめる。各フィード解析器から呼び出す。
- * @returns 人が根拠を再確認できるニュース項目。
- * @example
- * item(source, { title: '公開情報', url: source.url })
- */
-function item(source, fields) {
-  const title = plain(fields.title).slice(0, 350);
-  const url = publicLink(fields.url, source.url) ?? source.url;
-  const summary = plain(fields.summary).slice(0, 450);
-  return {
-    id: fields.id ?? createHash('sha256').update(`${source.name}:${url}:${title}`).digest('hex').slice(0, 20),
-    title, url, source: source.name, publishedAt: iso(fields.publishedAt),
-    updatedAt: iso(fields.updatedAt), products: productHints(`${title} ${summary}`),
-    affected: [], fixed: [], iocs: [], summary, needsReview: true,
-    ...fields, title, url, summary,
-    publishedAt: iso(fields.publishedAt), updatedAt: iso(fields.updatedAt),
-  };
-}
 
 /**
  * RSS/Atom/RDF の限定的な構造を抽出する。DTD や埋め込み処理は実行しない。
@@ -121,6 +35,7 @@ function item(source, fields) {
  * parseXmlFeed('<rss><channel>…</channel></rss>', source)
  */
 export function parseXmlFeed(text, source) {
+  assertMarkupBudget(text);
   if (typeof text !== 'string' || Buffer.byteLength(text) > MAX_BYTES) throw new SweepError('CAPACITY', { cause: 'limit', operation: 'news' });
   if (!/<(?:rss\b|feed\b|rdf:RDF\b)/i.test(text)) throw new SweepError('SOURCE', { cause: 'malformed', operation: 'news' });
   const blocks = [...text.matchAll(/<(item|entry)\b[^>]*>([\s\S]*?)<\/\1>/gi)].map(match => match[2]);
@@ -144,9 +59,14 @@ export function parseXmlFeed(text, source) {
  * @example
  * await fetchPublic('https://api.github.com/advisories', Date.now() + 180000)
  */
-async function fetchPublic(address, context) {
-  const response = await context.request(address, { maxBytes: MAX_BYTES });
-  if (!response.ok) throw new SweepError('HTTP', { operation: 'news', cause: response.status === 429 ? 'cooldown' : 'http' });
+async function fetchPublic(address, context, options = {}) {
+  let response;
+  try { response = await context.request(address, { maxBytes: MAX_BYTES, ...options }); }
+  catch (error) {
+    if (error instanceof SweepError) throw error;
+    throw new SweepError('HTTP', { operation: 'news', cause: 'network', sourceId: options.sourceId });
+  }
+  if (!response.ok) throw new SweepError('HTTP', { operation: 'news', cause: response.status === 429 ? 'cooldown' : 'http', sourceId: options.sourceId, status: response.status, retryAt: context.transport?.cooldowns?.[new URL(address).hostname] });
   const text = await response.text();
   return { text, link: response.headers.get('link'), url: String(address), bytes: Buffer.byteLength(text) };
 }
@@ -158,6 +78,7 @@ async function fetchPublic(address, context) {
  * parseApple(html, source)
  */
 export function parseApple(text, source) {
+  assertMarkupBudget(text);
   const rows = [...text.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)];
   const releases = rows.flatMap(([, row]) => {
     const cells = [...row.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map(match => match[1]);
@@ -169,105 +90,129 @@ export function parseApple(text, source) {
 }
 
 /**
- * Cursor の公式インシデント告知で明示された指標だけを構造化する。
- * 取得した本文に対象版と IOC があるときだけ、既知の照合ルールを有効にする。
- * @returns 公式告知に結び付いた照合候補。
- * @example
- * parseCursor(html, source)
- */
-function parseCursor(text, source) {
-  const body = plain(text);
-  if (!body.includes('2.1.313') || !body.includes('svc-telemetry') || !body.includes('com.apple.sysmond')) throw new SweepError('SOURCE', { cause: 'malformed', operation: 'news' });
-  const versions = body.includes('2.1.312') ? ['2.1.312', '2.1.313'] : ['2.1.313'];
-  const paths = ['~/.config/.smt', '~/.config/.smtk', '~/Library/LaunchAgents/com.apple.sysmond.plist'];
-  return [item(source, {
-    id: 'CURSOR-CLAUDE-CODE-2026-10-29', title: 'Cursor marketplace の改変 Claude Code 拡張による SSH バックドア',
-    url: source.url, publishedAt: '2026-10-29T09:27:00Z', updatedAt: '2026-10-30T18:30:00Z',
-    products: ['Cursor', 'Claude Code'],
-    affected: [{ ecosystem: 'VSCode', name: 'anthropic.claude-code', versions, editor: 'cursor', source: 'Cursor marketplace', installationWindow: { since: '2026-10-29T09:27:00Z', until: '2026-10-29T20:35:00Z' } }],
-    iocs: [
-      ...paths.filter(value => body.includes(value) || body.includes(value.replace('~/', ''))).map(value => ({ type: 'path', value, specificity: 'high' })),
-      { type: 'ip', value: '134.209.82.225', specificity: 'high' },
-      { type: 'sha256', value: 'ecb58cb29078d9646ad1dcdbe51526f2d9cfea06be5fb2ab183e8ecc3ab6bf15', context: 'extension.js', specificity: 'high' },
-      { type: 'content-marker', value: 'svc-telemetry', context: 'extension.js のみ。SSH 鍵の内容は読み取らない', specificity: 'supporting' },
-    ].filter(ioc => body.replaceAll('[.]', '.').includes(ioc.value) || (ioc.type === 'path' && body.includes(ioc.value.replace('~/', '')))),
-    summary: 'Cursor 公式は対象版と配布時間帯を公表。影響する拡張の削除だけでは永続化が残る可能性がある。現在のクリーンな版だけで過去の感染を否定しない。',
-    needsReview: false, fixed: [], evidence: '公式告知の明示的な対象版・配布時間帯・IOC。公式の対処スクリプトは取得・実行しない。',
-  })];
-}
-
-/**
  * 1 情報源を取得し、取得範囲と欠落を明示する。並列実行の各ワーカーから呼び出す。
  * @returns ニュースと成功/部分取得/失敗の記録。
  * @example
  * await fetchSource(source, window, deadline)
  */
-async function fetchSource(source, window, context, continuation, cachedItems = [], onProgress = async () => {}) {
+async function fetchSource(source, window, context, continuation, cachedItems = [], onProgress = async () => {}, maxPages = 1) {
   const started = context.monotonicNow();
-  const record = { name: source.name, url: source.url, schema: source.schema, baselineKind: source.baseline, baselineComplete: false, status: 'ok', itemCount: 0, window, bytes: 0, pages: 0 };
-  let entries = [...cachedItems];
+  const record = { name: source.name, sourceId: source.id, categories: source.categories, primary: source.primary, url: source.url,
+    schema: source.schema, baselineKind: source.baseline, baselineComplete: false, status: 'ok', itemCount: 0, window, bytes: 0, pages: 0,
+    fetchedAt: null, contentFetched: false, freshness: 'missing' };
+  let entries = [...cachedItems], pendingDetails = [], homebrew = null;
+  const read = async (address, options = {}) => {
+    const response = await fetchPublic(address, context, { sourceId: source.id, schema: source.schema, ...options });
+    record.bytes += response.bytes; record.pages++;
+    record.fetchedAt = new Date(context.wallNow()).toISOString(); record.freshness = 'fresh';
+    return response;
+  };
   try {
-    if (source.kind === 'github') {
+    if (source.kind === 'github' || source.kind === 'github-repository' || source.kind === 'redhat') {
       const url = new URL(source.url);
-      // API は日付単位で取得し、正確な時刻の範囲は取得後に絞る。
-      url.search = new URLSearchParams({ type: source.advisoryType, modified: `${window.since}..${window.until}`, sort: 'updated', direction: 'desc', per_page: '100' }).toString();
-      let next = continuation ?? url.href;
-      // API の継続リンクを保持し、次回は同じ先頭ページの再取得を避ける。
-      while (next && record.pages < 20) {
+      url.search = new URLSearchParams(source.kind === 'github' ? { type: source.advisoryType, modified: `${window.since}..${window.until}`, sort: 'updated', direction: 'desc', per_page: '100' }
+        : source.kind === 'github-repository' ? { state: 'published', sort: 'updated', direction: 'desc', per_page: '100' }
+          : { after: new Date(Date.parse(window.since) - DAY).toISOString().slice(0, 10), before: new Date(Date.parse(window.until) + DAY).toISOString().slice(0, 10), per_page: '100', page: '1' }).toString();
+      let next = continuation || url.href;
+      const visited = new Set();
+      while (next && record.pages < maxPages) {
+        if (visited.has(next)) throw new SweepError('SOURCE', { cause: 'boundary', operation: 'news' });
+        visited.add(next); record.nextPageUrl = next;
+        const response = await read(next);
+        let page;
+        if (source.kind === 'redhat') page = parseRedHatList(response.text, source);
+        else {
+          const payload = boundedJson(response.text);
+          if (!Array.isArray(payload) || payload.length > 100) throw new SweepError('SOURCE', { cause: 'malformed', operation: 'news' });
+          page = payload.map(value => normalizeAdvisory(value, source));
+        }
+        if (entries.length + page.length > 5000) throw new SweepError('CAPACITY', { cause: 'limit', operation: 'news' });
+        entries = [...new Map([...entries, ...page.map(value => ({ ...value, fetchedAt: record.fetchedAt }))].map(value => [value.id, value])).values()];
+        record.contentFetched = true;
+        next = response.link?.match(/<([^>]+)>;\s*rel="next"/)?.[1] || null;
+        if (source.kind === 'redhat' && page.length === 100) { const address = new URL(response.url); address.searchParams.set('page', String(Number(address.searchParams.get('page') || '1') + 1)); next = address.href; }
+        // Repository lists have no modified filter: stop only after reaching the requested lower boundary.
+        if (source.kind === 'github-repository' && page.length && page.every(value => value.updatedAt && value.updatedAt < window.since)) next = null;
+        if (next && !validContinuation(next, source, window)) throw new SweepError('SOURCE', { cause: 'boundary', operation: 'news' });
         record.nextPageUrl = next;
-        const response = await fetchPublic(next, context);
-        record.bytes += response.bytes; record.pages += 1;
-        const payload = boundedJson(response.text);
-        if (!Array.isArray(payload)) throw new SweepError('SOURCE', { cause: 'malformed', operation: 'news' });
-        if (payload.length > 100 || entries.length + payload.length > 20000) throw new SweepError('CAPACITY', { cause: 'limit', operation: 'news' });
-        entries.push(...payload.map(advisory => normalizeAdvisory(advisory, source)));
-        entries = [...new Map(entries.map(entry => [entry.id, entry])).values()];
-        next = response.link?.match(/<([^>]+)>;\s*rel="next"/)?.[1];
-        if (next && (!validatePublicRequest(next) || new URL(next).searchParams.get('type') !== source.advisoryType)) throw new SweepError('SOURCE', { cause: 'boundary', operation: 'news' });
-        record.nextPageUrl = next ?? null;
-        await onProgress({ record: { ...record, status: next ? 'partial' : 'ok' }, items: [...entries], cachedItems: [...entries] });
       }
-      if (next) { record.status = 'partial'; record.reason = '20 ページ上限。継続カーソルから次回再開'; }
+      if (next) { record.status = 'partial'; record.reasonCode = 'SOURCE_PAGE_LIMIT'; }
+    } else if (source.kind === 'homebrew') {
+      homebrew = await fetchHomebrewAdvisories(context, {}, { indexOnly: true });
+      record.pages = 1; record.fetchedAt = homebrew.fetchedAt; record.freshness = homebrew.freshness;
+      record.status = homebrew.freshness === 'fresh' ? 'partial' : 'error'; record.reasonCode = 'SOURCE_DETAILS_PENDING';
+      record.contentFetched = homebrew.continuation.tree.length === 0 && homebrew.status === 'complete';
+      if (homebrew.diagnostics.length) record.diagnostic = homebrew.diagnostics[0];
     } else {
-      const response = await fetchPublic(source.url, context);
-      record.bytes = response.bytes; record.pages = 1;
+      const response = await read(source.url);
       if (source.kind === 'kev') {
         const data = boundedJson(response.text);
-        if (!Array.isArray(data.vulnerabilities)) throw new SweepError('SOURCE', { cause: 'malformed', operation: 'news' });
-        entries = data.vulnerabilities.map(value => item(source, { id: value.cveID, title: value.vulnerabilityName, url: `https://www.cisa.gov/known-exploited-vulnerabilities-catalog?field_cve=${encodeURIComponent(value.cveID)}`, publishedAt: value.dateAdded, products: [value.vendorProject, value.product], summary: value.shortDescription, evidence: 'publishedAt は KEV 掲載日。脆弱性の初公開日ではない', requiredAction: value.requiredAction }));
+        if (!Array.isArray(data.vulnerabilities) || data.vulnerabilities.length > 5000) throw new SweepError('SOURCE', { cause: 'malformed', operation: 'news' });
+        entries = data.vulnerabilities.map(value => item(source, { id: value.cveID, title: value.vulnerabilityName,
+          url: `https://www.cisa.gov/known-exploited-vulnerabilities-catalog?field_cve=${encodeURIComponent(value.cveID)}`,
+          publishedAt: value.dateAdded, products: [value.vendorProject, value.product], summary: value.shortDescription,
+          aliases: [value.cveID], knownExploited: true, dateSemantics: 'kev-added', requiredAction: value.requiredAction }));
       } else if (source.kind === 'jsonfeed') {
         const data = boundedJson(response.text);
-        if (!Array.isArray(data.items)) throw new SweepError('SOURCE', { cause: 'malformed', operation: 'news' });
+        if (!Array.isArray(data.items) || data.items.length > 5000) throw new SweepError('SOURCE', { cause: 'malformed', operation: 'news' });
         entries = data.items.map(value => item(source, { title: value.title, url: value.url ?? value.id, publishedAt: value.date_published, updatedAt: value.date_modified, summary: value.summary ?? value.content_text ?? value.content_html }));
       } else if (source.kind === 'apple') entries = parseApple(response.text, source);
-      else if (source.kind === 'cursor') entries = parseCursor(response.text, source);
+      else if (source.kind === 'docker') entries = parseDockerAnnouncements(response.text, source);
+      else if (source.kind === 'alpine') entries = parseAlpineSnapshot(response.text, source);
+      else if (source.kind === 'openssl') { pendingDetails = openSslPaths(response.text, source); record.reasonCode = 'SOURCE_DETAILS_PENDING'; record.status = 'partial'; }
+      else if (['openjdk', 'oracle', 'ruby-security', 'mozilla-index'].includes(source.kind)) entries = parseOfficialIndex(response.text, source);
       else entries = parseXmlFeed(response.text, source);
-      if (['xml', 'jsonfeed'].includes(source.kind)) record.limit = 'フィードの掲載件数に依存。過去記事の完全取得を保証しない';
+      record.contentFetched = source.kind !== 'openssl';
+      if (['xml', 'jsonfeed'].includes(source.kind)) record.limit = 'Feed retention and update dates are provider-dependent; older omissions remain unknown.';
     }
   } catch (error) {
     record.status = entries.length ? 'partial' : 'error';
-    // HTTP 本文や例外の URL を出さず、固定した診断だけを残す。
-    record.diagnostic = safeDiagnostic(error, 'SOURCE', 'news');
-    record.reason = record.diagnostic.message;
+    const detail = safeDiagnostic(error, 'SOURCE', 'news');
+    record.diagnostic = { ...detail, context: { ...detail.context, sourceId: source.id, adapterSchema: source.schema } };
+    record.reasonCode = record.diagnostic.code;
   }
-  const dated = entries.map(entry => entry.updatedAt ?? entry.publishedAt).filter(Boolean).sort();
-  record.oldestAvailableAt = dated[0] ?? null;
-  record.newestAvailableAt = dated.at(-1) ?? null;
-  record.undatedCount = entries.filter(entry => !entry.publishedAt && !entry.updatedAt).length;
-  const inWindow = entries.filter(entry => {
-    const date = entry.updatedAt ?? entry.publishedAt;
-    // 日付不明を黙って捨てず、確認対象として残す。
-    return !date || (date >= window.since && date <= window.until);
-  });
-  if (record.limit && record.oldestAvailableAt && record.oldestAvailableAt > window.since) {
-    record.historicalCoverage = 'partial';
-    record.reason = [record.reason, 'フィード最古日が期間開始より新しいため、以前の記事は手動補完が必要'].filter(Boolean).join('。');
-  }
+  if (entries.length > 5000) { entries = entries.slice(0, 5000); record.status = 'partial'; record.reasonCode = 'SOURCE_ITEM_LIMIT'; }
+  entries = entries.map(value => ({ ...value, fetchedAt: Object.hasOwn(value, 'fetchedAt') ? value.fetchedAt : record.fetchedAt }));
+  recordItemDates(record, entries, window);
+  if (record.limit && record.oldestAvailableAt && record.oldestAvailableAt > window.since) { record.historicalCoverage = 'partial'; record.reasonCode ||= 'SOURCE_RETENTION_GAP'; }
+  const inWindow = entries.filter(entry => !entry.updatedAt && !entry.publishedAt || (entry.updatedAt || entry.publishedAt) >= window.since && (entry.updatedAt || entry.publishedAt) <= window.until);
   record.itemCount = inWindow.length; record.elapsedMs = context.monotonicNow() - started;
-  record.baselineComplete = record.status === 'ok' && ['apple', 'kev', 'cursor'].includes(source.kind);
-  return { record, items: inWindow, cachedItems: entries,
-    securityReleases: source.kind === 'apple' ? entries.slice(0, 120) : [],
-    knownExploitedIds: source.kind === 'kev' ? entries.map(entry => entry.id) : [] };
+  record.baselineComplete = record.status === 'ok' && ['apple', 'kev'].includes(source.kind);
+  record.windowComplete = record.status === 'ok' && record.historicalCoverage !== 'partial';
+  record.lastSuccessfulAt = record.contentFetched ? record.fetchedAt : null;
+  const result = { record, items: inWindow, cachedItems: entries, pendingDetails, homebrew,
+    historicalAdvisories: source.kind === 'github-repository' ? entries : [],
+    securityReleases: source.kind === 'apple' ? entries.slice(0, 120) : [], knownExploitedIds: source.kind === 'kev' ? entries.map(entry => entry.id) : [] };
+  await onProgress(result);
+  return result;
+}
+
+/** Keep unknown dates separate from a verified empty time window, including deferred detail results.
+ * {@link fetchSource} and its bounded progress snapshots call this after collecting source items.
+ * @example recordItemDates(record, entries, { since, until })
+ */
+function recordItemDates(record, entries, window) {
+  const dated = entries.map(entry => entry.updatedAt || entry.publishedAt).filter(Boolean).sort();
+  record.oldestAvailableAt = dated[0] || null; record.newestAvailableAt = dated.at(-1) || null;
+  record.datedCount = dated.length; record.undatedCount = entries.length - dated.length;
+  record.datedItemCount = dated.filter(date => date >= window.since && date <= window.until).length;
+  if (record.undatedCount) {
+    record.historicalCoverage = 'partial'; record.windowComplete = false;
+    if (record.status === 'ok') record.status = 'partial';
+    record.reasonCode ||= 'SOURCE_UNDATED_ITEMS';
+  }
+}
+
+/** Accept only a source-bound pagination cursor; restored state never authorizes another repository.
+ * @example validContinuation(nextUrl, source, window)
+ */
+function validContinuation(address, source, window) {
+  if (!validatePublicRequest(address)) return false;
+  const url = new URL(address);
+  if (source.kind === 'github') return url.pathname === '/advisories' && url.searchParams.get('type') === source.advisoryType && url.searchParams.get('modified') === `${window.since}..${window.until}`;
+  if (source.kind === 'github-repository') return [new URL(source.url).pathname, `/repositories/${source.repositoryId}/security-advisories`].includes(url.pathname);
+  return source.kind === 'redhat' && url.origin === 'https://access.redhat.com' && url.pathname === '/hydra/rest/securitydata/cve.json'
+    && url.searchParams.get('after') === new Date(Date.parse(window.since) - DAY).toISOString().slice(0, 10) && url.searchParams.get('before') === new Date(Date.parse(window.until) + DAY).toISOString().slice(0, 10);
 }
 
 /**
@@ -276,6 +221,7 @@ async function fetchSource(source, window, context, continuation, cachedItems = 
  */
 export function normalizeAdvisory(advisory, source) {
   if (!advisory || !validAdvisoryId(advisory.ghsa_id) || advisory.vulnerabilities && (!Array.isArray(advisory.vulnerabilities) || advisory.vulnerabilities.length > 1000)) throw new SweepError('SOURCE', { cause: 'malformed', operation: 'news' });
+  const patchedVersion = value => typeof value.first_patched_version === 'string' ? plain(value.first_patched_version).slice(0, 120) : typeof value.first_patched_version?.identifier === 'string' ? plain(value.first_patched_version.identifier).slice(0, 120) : typeof value.patched_versions === 'string' ? plain(value.patched_versions).slice(0, 120) : null;
   const severityEvidence = [normalizeSeverity(advisory.severity, source.name)];
   for (const [key, type] of [['cvss_v3', 'CVSS_V3'], ['cvss_v4', 'CVSS_V4']]) {
     const cvss = advisory.cvss_severities?.[key] || (key === 'cvss_v3' ? advisory.cvss : null);
@@ -289,14 +235,15 @@ export function normalizeAdvisory(advisory, source) {
           advisoryType: source.advisoryType === 'malware' || advisory.type === 'malware' ? 'malware' : 'reviewed',
           publishedAt: advisory.published_at, updatedAt: advisory.updated_at,
           products: (advisory.vulnerabilities ?? []).map(value => value.package?.name).filter(Boolean),
-          affected: (advisory.vulnerabilities ?? []).map(value => ({ ecosystem: value.package?.ecosystem, name: value.package?.name, range: value.vulnerable_version_range, fixed: value.first_patched_version })),
-          fixed: (advisory.vulnerabilities ?? []).filter(value => value.first_patched_version).map(value => ({ name: value.package?.name, version: value.first_patched_version })),
+          affected: (advisory.vulnerabilities ?? []).map(value => ({ ecosystem: plain(value.package?.ecosystem).slice(0, 40), name: plain(value.package?.name).slice(0, 250), range: plain(value.vulnerable_version_range).slice(0, 500), fixed: patchedVersion(value) })),
+          fixed: (advisory.vulnerabilities ?? []).filter(value => value.first_patched_version || value.patched_versions).map(value => ({ name: value.package?.name, version: patchedVersion(value) })),
           severity: normalizeSeverity(severityEvidence, source.name), severityEvidence, aliases: [advisory.cve_id, ...(advisory.identifiers || []).map(value => value.value)].filter(validAdvisoryId), withdrawnAt: iso(advisory.withdrawn_at), needsReview: false,
   });
 }
 
 /** Mozillaの明示的なFixed in見出しとMFSAリンクだけを読む。adaptive履歴取得が呼ぶ。 @example parseMozillaBaseline(html, MOZILLA_SOURCES[0]) */
 export function parseMozillaBaseline(text, source) {
+  assertMarkupBudget(text);
   if (typeof text !== 'string' || Buffer.byteLength(text) > MAX_BYTES) throw new SweepError('SOURCE', { cause: 'limit', operation: 'baseline' });
   const headings = [...text.matchAll(/<h[23]\b[^>]*>([\s\S]*?)<\/h[23]>/gi)];
   if (headings.length > 5000) throw new SweepError('CAPACITY', { cause: 'limit', operation: 'baseline' });
@@ -385,7 +332,8 @@ export async function fetchAdaptiveNews(inventory, options = {}) {
             : source?.baselineComplete ? '更新履歴baselineを確認。CVE影響開始版・実行条件の網羅は未確認' : '差分フィードまたは取得未完了。導入製品の過去の全脆弱性baselineは未確認' });
     }
     const homebrewPresent = (inventory.homebrew?.formulae || inventory.homebrewFormulae || []).length + (inventory.homebrew?.casks || inventory.homebrewCasks || []).length > 0;
-    const homebrew = homebrewPresent ? await fetchHomebrewAdvisories(context, previous.homebrew, { ...options.homebrewOptions, onProgress: saveAdaptive }) : { records: [], coverage: [], status: 'not-applicable' };
+    const currentBrew = options.commonNews?.homebrew;
+    const homebrew = homebrewPresent ? await fetchHomebrewAdvisories(context, currentBrew?.continuation || previous.homebrew, { refresh: !currentBrew?.fetchedAt, preferredFormulae: (inventory.homebrew?.formulae || inventory.homebrewFormulae || []).map(value => value.name), ...options.homebrewOptions, onProgress: saveAdaptive }) : currentBrew || { records: [], coverage: [], status: 'not-applicable' };
     const result = { schemaVersion: 2, fetchedAt: new Date(context.wallNow()).toISOString(), items: [], sources: sources.sort((a, b) => a.name.localeCompare(b.name)),
       securityUpdates: updates.sort((a, b) => a.productId.localeCompare(b.productId) || a.fixedVersion.localeCompare(b.fixedVersion)), products, productCoverage, homebrew,
       continuation: { baselines, pendingProductIds: pendingProductIds.sort(), homebrew: homebrew.continuation },
@@ -400,7 +348,7 @@ export function mergeNews(common = {}, adaptive = {}) {
   return { ...common, schemaVersion: 2, sources: [...(common.sources || []), ...(adaptive.sources || [])],
     items: [...new Map([...(common.items || []), ...(adaptive.items || [])].map(value => [value.id, value])).values()],
     securityUpdates: adaptive.securityUpdates || [], productCoverage: adaptive.productCoverage || [], products: adaptive.products || [],
-    homebrew: adaptive.homebrew || {}, baselines: adaptive.baselines || {}, adaptiveContinuation: adaptive.continuation || {} };
+    homebrew: adaptive.homebrew || common.homebrew || {}, baselines: adaptive.baselines || {}, adaptiveContinuation: adaptive.continuation || {} };
 }
 
 /**
@@ -423,83 +371,160 @@ export async function fetchNews(options = {}) {
       catch (error) { if (error.code !== 'ENOENT') throw new SweepError('STATE', { cause: causeClass(error), operation: 'state' }); }
     }
     if (!state || typeof state !== 'object' || Array.isArray(state) || state.schemaVersion !== undefined && ![1, 2].includes(state.schemaVersion)) throw new SweepError('STATE', { cause: 'future-schema', operation: 'state' });
-    const previous = iso(state.newsFallbackSince ?? state.lastRunAt ?? state.lastSuccessfulAt);
-    const since = iso(options.since) ?? (previous && previous <= until ? previous : new Date(new Date(until).getTime() - 14 * DAY).toISOString());
+    // Current discovery is independent of lastRunAt and old continuation windows.
+    const since = iso(options.since) || new Date(Date.parse(until) - 30 * DAY).toISOString();
     if (since > until) throw new SweepError('CONFIG', { cause: 'malformed', operation: 'news' });
-    const window = { since, until };
-    const results = [];
-    const progress = new Map();
-    const saveProgress = async result => {
-      progress.set(result.record.name, result);
-      const records = SOURCES.map(source => progress.get(source.name)?.record || { name: source.name, url: source.url, status: 'partial', itemCount: 0, window, reason: '今回の取得は未完了' });
-      const cursors = {};
-      for (const record of records) {
-        const saved = iso(state.sourceCursors?.[record.name]);
-        if (record.windowComplete === true || record.status === 'ok' && record.historicalCoverage !== 'partial') cursors[record.name] = record.window.until;
-        else if (saved) cursors[record.name] = saved;
+    const window = { since, until }, progress = new Map(), continuationQueues = new Map();
+    let iocDiscovery = { rules: [], candidates: [], coverage: [{ area: 'ioc-discovery', status: 'partial', reasonCode: 'IOC_DISCOVERY_NOT_STARTED' }], pendingArticles: [] };
+    const sourceCursors = {};
+    const assemble = () => {
+      const sources = SOURCES.map(source => progress.get(source.name)?.record || { name: source.name, sourceId: source.id, categories: source.categories, primary: source.primary,
+        url: source.url, schema: source.schema, status: 'partial', contentFetched: false, freshness: 'missing', itemCount: 0, window, reasonCode: 'SOURCE_NOT_STARTED' });
+      const items = [...new Map([...progress.values()].flatMap(value => value.items).map(value => [`${value.sourceId}:${value.id}`, value])).values()]
+        .sort((a, b) => String(b.updatedAt || b.publishedAt).localeCompare(String(a.updatedAt || a.publishedAt)) || a.id.localeCompare(b.id));
+      const sourceContinuations = {};
+      for (const source of SOURCES) {
+        const queue = continuationQueues.get(source.name) || [];
+        if (queue.length) sourceContinuations[source.name] = { ...queue[0], backlog: queue.slice(1, 3) };
+        const record = progress.get(source.name)?.record, saved = iso(state.sourceCursors?.[source.name]);
+        if (record?.windowComplete && !queue.length) sourceCursors[source.name] = until;
+        else if (saved) sourceCursors[source.name] = saved;
       }
-      await context.checkpoint({ stage: 'news', value: { schemaVersion: 2, fetchedAt: new Date(context.wallNow()).toISOString(), window,
-        sources: records, items: [...new Map([...progress.values()].flatMap(value => value.items).map(value => [value.id, value])).values()],
-        sourceCursors: cursors, sourceContinuations: Object.fromEntries([...progress.values()].filter(value => value.record.nextPageUrl).map(value => [value.record.name, { url: value.record.nextPageUrl, window: value.record.window, items: value.cachedItems }])),
-        securityReleases: [...progress.values()].flatMap(value => value.securityReleases || []), knownExploitedIds: [...progress.values()].flatMap(value => value.knownExploitedIds || []) } });
+      const categoryCoverage = NEWS_CATEGORIES.map(category => {
+        const records = sources.filter(source => source.primary !== false && source.categories?.includes(category.id));
+        const fetched = records.filter(source => source.contentFetched === true && source.freshness === 'fresh');
+        const fresh = fetched.filter(source => source.datedCount > 0 || source.itemCount === 0 && source.undatedCount === 0 && source.windowComplete === true);
+        const undatedCount = fetched.reduce((total, source) => total + (source.undatedCount || 0), 0);
+        return { category: category.id, required: category.required, status: fresh.length ? 'fresh' : 'partial', sourceIds: records.map(source => source.sourceId),
+          fetchedAt: fresh.map(source => source.fetchedAt).filter(Boolean).sort().at(-1) || null,
+          undatedCount, datedItemCount: fetched.reduce((total, source) => total + (source.datedItemCount || 0), 0),
+          windowStatus: fresh.length && records.every(source => source.windowComplete === true) ? 'complete' : 'partial',
+          reasonCode: fresh.length ? undatedCount ? 'PRIMARY_SOURCE_FETCHED_WITH_UNDATED_ITEMS' : 'PRIMARY_SOURCE_FETCHED'
+            : undatedCount ? 'PRIMARY_SOURCE_UNDATED_ITEMS' : 'PRIMARY_SOURCE_UNAVAILABLE' };
+      });
+      return { schemaVersion: 2, fetchedAt: new Date(context.wallNow()).toISOString(), window, sources, items, categoryCoverage,
+        sourceRegistry: sourceRegistryCoverage(context.wallNow()), sourceCursors: { ...sourceCursors }, sourceContinuations, iocDiscovery,
+        historicalAdvisories: [...progress.values()].flatMap(value => value.historicalAdvisories || []),
+        advisoryHistoryCoverage: SOURCES.filter(value => value.kind === 'github-repository').map(source => ({ sourceId: source.id, status: 'partial', fetchedAt: progress.get(source.name)?.record.fetchedAt || null, reasonCode: 'BOUNDED_REPOSITORY_HISTORY' })),
+        securityReleases: [...progress.values()].flatMap(value => value.securityReleases || []),
+        knownExploitedIds: [...progress.values()].flatMap(value => value.knownExploitedIds || []),
+        homebrew: progress.get('Homebrew Advisory Database')?.homebrew || {}, elapsedMs: context.monotonicNow() - started };
+    };
+    const saveProgress = async result => {
+      // Aggregate limits include continuation items, so a page cap cannot hide unbounded private state.
+      let count = 0, bytes = 0;
+      for (const [name, value] of progress) if (name !== result.record.name) {
+        count += value.cachedItems.length; bytes += Buffer.byteLength(JSON.stringify(value.cachedItems));
+      }
+      const retained = [];
+      for (const entry of result.cachedItems) {
+        const size = Buffer.byteLength(JSON.stringify(entry));
+        if (count + retained.length >= 10000 || bytes + size > 16 * 1024 ** 2) {
+          result.record.status = 'partial'; result.record.windowComplete = false; result.record.reasonCode = 'NEWS_AGGREGATE_LIMIT'; break;
+        }
+        retained.push(entry); bytes += size;
+      }
+      if (retained.length !== result.cachedItems.length) {
+        const ids = new Set(retained.map(value => value.id)); result.items = result.items.filter(value => ids.has(value.id)); result.historicalAdvisories = (result.historicalAdvisories || []).filter(value => ids.has(value.id)); result.cachedItems = retained;
+        result.record.itemCount = result.items.length;
+      }
+      recordItemDates(result.record, result.cachedItems, window);
+      progress.set(result.record.name, result);
+      await context.checkpoint({ stage: 'news', value: assemble() });
     };
     let cursor = 0;
-    // 初回の共通取得は4worker、HTTP全体とhost別の上限はshared contextが所有する。
+    // Every fixed source gets its first bounded request before any optional deep collection.
     await Promise.all(Array.from({ length: 4 }, async () => {
       while (cursor < SOURCES.length) {
         const source = SOURCES[cursor++];
+        const result = await fetchSource(source, window, context, undefined, [], async () => {}, 1);
         const saved = iso(state.sourceCursors?.[source.name]);
-        let sourceWindow = { since: !options.since && saved && saved < since ? saved : since, until };
-        let continuation;
-        let cachedItems = [];
+        if (!result.record.fetchedAt && saved) { result.record.lastSuccessfulAt = saved; result.record.freshness = 'stale'; }
         const pending = state.sourceContinuations?.[source.name];
-        if (!options.since && source.kind === 'github' && pending?.url) {
-          try {
-            const candidate = new URL(pending.url);
-            const pendingSince = iso(pending.window?.since), pendingUntil = iso(pending.window?.until);
-            if (validatePublicRequest(candidate.href) && candidate.searchParams.get('type') === source.advisoryType && pendingSince && pendingUntil && pendingSince <= pendingUntil && pendingUntil <= until
-              && candidate.searchParams.get('modified') === `${pendingSince}..${pendingUntil}`) {
-              continuation = candidate.href; sourceWindow = { since: pendingSince, until: pendingUntil };
-              cachedItems = restoreItems(pending.items, source);
-            }
-          } catch { /* 不正な継続先は取得せず、固定URLから再開する。 */ }
-        }
-        const result = await fetchSource(source, sourceWindow, context, continuation, cachedItems, saveProgress);
-        result.record.lastSuccessfulAt = result.record.status === 'ok' ? sourceWindow.until : saved;
-        result.record.freshness = result.record.status === 'ok' ? 'fresh' : saved ? 'stale' : 'missing';
-        result.record.windowComplete = result.record.status === 'ok' && result.record.historicalCoverage !== 'partial';
-        // 過去windowの再開完了後も、今回までの未取得区間を最新・完全と表示しない。
-        if (sourceWindow.until < until) {
-          result.record.status = 'partial'; result.record.freshness = result.record.lastSuccessfulAt ? 'stale' : 'missing';
-          result.record.recentCoverage = 'partial'; result.record.missingWindow = { since: sourceWindow.until, until };
-          result.record.reason = [result.record.reason, '過去windowを継続取得。今回までの追加期間は次回取得が必要'].filter(Boolean).join('。');
-        }
-        results.push(result);
+        const history = options.since ? [] : [pending, ...(Array.isArray(pending?.backlog) ? pending.backlog : [])].filter(value => {
+          const start = iso(value?.window?.since), end = iso(value?.window?.until);
+          try { return start && end && start <= end && end <= until && validContinuation(value.url, source, { since: start, until: end }); } catch { return false; }
+        }).map(value => ({ url: value.url, window: { since: iso(value.window.since), until: iso(value.window.until) }, items: restoreItems(value.items, source) }));
+        const jobs = [...(result.record.nextPageUrl ? [{ url: result.record.nextPageUrl, window, items: result.cachedItems }] : []), ...history];
+        continuationQueues.set(source.name, [...new Map(jobs.map(value => [`${value.url}:${value.window.since}:${value.window.until}`, value])).values()].slice(0, 3));
         await saveProgress(result);
       }
     }));
-    const sources = results.map(result => result.record).sort((a, b) => SOURCES.findIndex(source => source.name === a.name) - SOURCES.findIndex(source => source.name === b.name));
-    const items = [...new Map(results.flatMap(result => result.items).map(entry => [entry.id, entry])).values()].sort((a, b) => String(b.updatedAt ?? b.publishedAt).localeCompare(String(a.updatedAt ?? a.publishedAt)) || a.id.localeCompare(b.id));
-    const sourceCursors = {};
-    for (const source of sources) {
-      const saved = iso(state.sourceCursors?.[source.name]);
-      if (source.windowComplete === true || source.status === 'ok' && source.historicalCoverage !== 'partial') sourceCursors[source.name] = source.window.until;
-      else if (saved) sourceCursors[source.name] = saved;
+    // Deep current pages have a separate finite quota; old history follows a successful fresh attempt.
+    for (const source of SOURCES.filter(value => ['github', 'github-repository', 'redhat'].includes(value.kind))) {
+      const current = progress.get(source.name), queue = continuationQueues.get(source.name) || [];
+      if (!current?.record.contentFetched || !queue.length) continue;
+      const oldIndex = queue.length > 1 ? 1 : queue.findIndex(value => value.window.until < until);
+      const [job] = queue.splice(oldIndex >= 0 ? oldIndex : 0, 1);
+      const result = await fetchSource(source, job.window, context, job.url, job.items, async () => {}, 2);
+      if (result.record.nextPageUrl) queue.unshift({ url: result.record.nextPageUrl, window: job.window, items: result.cachedItems });
+      if (!result.record.nextPageUrl && result.record.windowComplete) {
+        for (let index = queue.length - 1; index >= 0; index--) if (queue[index].window.since === job.window.since && queue[index].window.until === job.window.until) queue.splice(index, 1);
+      }
+      continuationQueues.set(source.name, queue);
+      if (job.window.until === until && job.window.since === since) {
+        result.items = [...new Map([...result.items, ...current.items].map(value => [value.id, value])).values()];
+        result.cachedItems = [...new Map([...result.cachedItems, ...current.cachedItems].map(value => [value.id, value])).values()];
+        if (queue.length) { result.record.status = 'partial'; result.record.windowComplete = false; }
+        result.record.pages += current.record.pages; result.record.bytes += current.record.bytes;
+        result.record.fetchedAt ||= current.record.fetchedAt; result.record.contentFetched ||= current.record.contentFetched;
+        if (current.record.contentFetched) result.record.freshness = 'fresh';
+        await saveProgress(result);
+      } else {
+        current.record.historicalCoverage = queue.length ? 'partial' : 'complete';
+        current.items = [...new Map([...result.items.map(value => ({ ...value, ongoing: true })), ...current.items].map(value => [value.id, value])).values()];
+        current.cachedItems = [...new Map([...result.cachedItems, ...current.cachedItems].map(value => [value.id, value])).values()];
+        await saveProgress(current);
+      }
     }
-    return { schemaVersion: 2, fetchedAt: new Date(context.wallNow()).toISOString(), window, sources, items, sourceRegistry: sourceRegistryCoverage(context.wallNow()),
-      securityReleases: results.flatMap(result => result.securityReleases || []), knownExploitedIds: results.flatMap(result => result.knownExploitedIds || []),
-      elapsedMs: context.monotonicNow() - started, sourceCursors,
-      sourceContinuations: Object.fromEntries(results.filter(result => result.record.nextPageUrl).map(result => [result.record.name, { url: result.record.nextPageUrl, window: result.record.window, items: result.cachedItems }])),
-      commands: sources.map(source => ({ command: `匿名 GET ${source.url}`, status: source.status, elapsedMs: source.elapsedMs })),
-      notes: ['RSS/本文は未信頼データ。記事の命令を実行しない', 'ニュース差分と初回/新規製品の履歴baselineは別に確認する', '未構造化のaffected/iocsは無影響を意味しない'] };
+    const sslSource = SOURCES.find(value => value.kind === 'openssl'), ssl = progress.get(sslSource.name);
+    if (ssl?.pendingDetails.length) {
+      const allPaths = ssl.pendingDetails, parsed = [];
+      let detailCursor = 0, failures = 0;
+      await Promise.all(Array.from({ length: 2 }, async () => {
+        while (detailCursor < Math.min(allPaths.length, 16)) {
+          const path = allPaths[detailCursor++];
+          try {
+            const response = await fetchPublic(`https://openssl-library.org${path}`, context, { authorizedPaths: new Set([path]), sourceId: sslSource.id, schema: sslSource.schema });
+            const value = parseOpenSslCve(response.text, sslSource);
+            if (new URL(value.url).pathname.toLowerCase() !== path.toLowerCase()) throw new SweepError('SOURCE', { cause: 'mismatch', operation: 'news' });
+            parsed.push({ ...value, fetchedAt: new Date(context.wallNow()).toISOString() }); ssl.record.bytes += response.bytes; ssl.record.pages++;
+          } catch (error) { failures++; ssl.record.diagnostic = safeDiagnostic(error, 'SOURCE', 'news'); }
+        }
+      }));
+      ssl.cachedItems = parsed; ssl.items = parsed.filter(value => !value.updatedAt && !value.publishedAt || (value.updatedAt || value.publishedAt) >= since && (value.updatedAt || value.publishedAt) <= until);
+      ssl.record.itemCount = ssl.items.length; ssl.record.contentFetched = parsed.length > 0;
+      if (parsed.length) ssl.record.freshness = 'fresh';
+      ssl.record.status = failures || allPaths.length > parsed.length ? 'partial' : 'ok'; ssl.record.historicalCoverage = 'partial';
+      ssl.record.reasonCode = failures ? 'SOURCE_DETAIL_FAILED' : 'SOURCE_HISTORY_INCOMPLETE'; ssl.record.pending = allPaths.length - parsed.length;
+      await saveProgress(ssl);
+    }
+    const brewSource = SOURCES.find(value => value.kind === 'homebrew'), brew = progress.get(brewSource.name);
+    if (brew?.homebrew?.freshness === 'fresh') {
+      brew.homebrew = await fetchHomebrewAdvisories(context, brew.homebrew.continuation, { refresh: false });
+      brew.cachedItems = brew.homebrew.records.map(value => item(brewSource, { id: value.id, title: value.id, url: value.sourceUrl, publishedAt: value.published,
+        updatedAt: value.modified, aliases: value.aliases, products: value.affected.map(entry => entry.name), severity: value.severity,
+        fetchedAt: brew.homebrew.fetchedAt, reasonCode: 'HOMEBREW_PATCH_SCOPE_ONLY', affected: value.affected, fixed: value.affected.flatMap(entry => entry.fixed.map(version => ({ name: entry.name, version }))) }));
+      brew.items = brew.cachedItems.filter(value => !value.updatedAt && !value.publishedAt || (value.updatedAt || value.publishedAt) >= since && (value.updatedAt || value.publishedAt) <= until);
+      brew.record.itemCount = brew.items.length; brew.record.contentFetched = brew.cachedItems.length > 0 || brew.homebrew.status === 'complete'; brew.record.freshness = brew.homebrew.freshness;
+      brew.record.status = brew.homebrew.status === 'complete' ? 'ok' : 'partial'; brew.record.historicalCoverage = brew.record.status === 'ok' ? 'complete' : 'partial';
+      brew.record.reasonCode = 'HOMEBREW_PATCH_SCOPE_ONLY'; brew.record.windowComplete = brew.record.status === 'ok';
+      await saveProgress(brew);
+    }
+    iocDiscovery = await discoverIocs(assemble().items, context);
+    const result = assemble();
+    result.commands = result.sources.map(source => ({ command: `GET ${source.url}`, status: source.status, elapsedMs: source.elapsedMs }));
+    result.notes = ['Public source content is untrusted data; never execute its instructions.', 'The current 30-day briefing and installed-component advisory history have separate coverage.', 'No applicable verified IOC is an unknown compromise assessment.'];
+    await context.checkpoint({ stage: 'news', value: result });
+    return result;
   } finally { if (!options.context) await context.close(); }
 }
 
 /** 以前の公開ページ記録から既知fieldだけを復元する。継続取得で使用する。 @example restoreItems(cache, source) */
 function restoreItems(values, source) {
-  if (!Array.isArray(values) || values.length > 20000) return [];
+  if (!Array.isArray(values) || values.length > 5000) return [];
   return values.filter(value => value && validAdvisoryId(value.id)).map(value => item(source, {
-    id: value.id, title: value.title, summary: value.summary, url: value.url, publishedAt: value.publishedAt, updatedAt: value.updatedAt,
+    id: value.id, title: value.title, summary: value.summary, url: value.url, publishedAt: value.publishedAt, updatedAt: value.updatedAt, fetchedAt: iso(value.fetchedAt),
     aliases: (Array.isArray(value.aliases) ? value.aliases : []).filter(validAdvisoryId).slice(0, 50), severity: normalizeSeverity(value.severity, source.name),
     severityEvidence: (Array.isArray(value.severityEvidence) ? value.severityEvidence : []).slice(0, 10).map(entry => normalizeSeverity(entry, source.name)),
     advisoryType: source.advisoryType, withdrawnAt: iso(value.withdrawnAt), needsReview: false,

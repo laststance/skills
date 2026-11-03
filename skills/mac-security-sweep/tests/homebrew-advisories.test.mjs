@@ -88,7 +88,7 @@ test('公開treeから取得したblobだけを受理し未取得レコードを
   assert.equal(second.status, 'complete');
   assert.equal(second.records.length, 2);
   assert.equal(second.continuation.pendingPaths.length, 0);
-  assert.equal(requested.filter(url => url.includes('/git/trees/')).length, 1);
+  assert.equal(requested.filter(url => url.includes('/git/trees/')).length, 2);
   assert.ok(requested.every(url => !url.includes('/Users/') && !url.includes('installed')));
 });
 

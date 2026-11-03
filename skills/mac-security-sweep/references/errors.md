@@ -1,6 +1,14 @@
 # 安全な診断コード
 
-診断はcode・日本語の状態/復旧・operation・有限cause・writeOutcome・Node major/schema・参照先を持つ。未知の例外だけ生成trace IDを付ける。元のmessage/stack/cause/stdout/stderrや入力値を表示しない。
+診断にはcode、状態と復旧方法、operation、分類済みの原因、保存状況、Node major、schema、参照先を記録する。説明文はレポートの言語に合わせる。情報取得の失敗には固定registryのsourceId、adapter schema、HTTP status、試行回数、取得制限、実測した再試行可能時刻を付ける。未知の例外には診断IDと固定のmodule・stage・callsiteを付ける。元のmessage/stack/cause/stdout/stderrや入力値は表示しない。
+
+## MSS_USAGE
+
+引数の値・重複・範囲が不正。`node scripts/run-sweep.mjs --help` を確認する。調査や保存を始める前に終了値64で拒否する。設定ファイルの編集は不要。
+
+## MSS_TRANSLATION_PENDING
+
+指定言語の訳文が未保存、未確認、または原文との対応を検証できない。原文を保ち、[翻訳の復旧手順](recovery.md#翻訳だけを再開する)を使う。再スキャンは不要。
 
 writeOutcome: none=保存前の拒否、partial=部分保存確認、complete=保存確認、unknown=次回の世代照合が必要。これだけで未確認領域を安全とは判断しない。
 

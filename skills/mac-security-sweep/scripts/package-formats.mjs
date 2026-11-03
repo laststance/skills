@@ -27,6 +27,7 @@ export const FORMAT_CAPABILITIES = Object.freeze(DEFINITIONS.map(([id, files, sc
   discovery: true, parsing: id !== 'bun-binary', origin: 'record-bound-only', query: id === 'swift' ? 'privacy-excluded' : id === 'bun-binary' ? 'unsupported' : 'proven-public-only', reference, verifiedAt: '2026-11-03' })));
 export const LOCKFILE_NAMES = new Set(DEFINITIONS.flatMap(([, files]) => files));
 const ECOSYSTEMS = new Set(DEFINITIONS.map(([, , , ecosystem]) => ecosystem).filter(Boolean));
+const DISTRO_ECOSYSTEM = /^(?:Debian:(?:10|11|12|13)|Alpine:v3\.(?:18|19|20|21|22|23|24))$/;
 const PUBLIC_HOSTS = {
   npm: new Set(['registry.npmjs.org', 'registry.yarnpkg.com']),
   PyPI: new Set(['pypi.org', 'files.pythonhosted.org']),
@@ -41,8 +42,11 @@ export function identifyFormat(filename) { return FORMAT_CAPABILITIES.find(forma
 
 /** 名前の構文と固定版をecosystem別に検証する。送信直前にも再確認する。 @example validPackage({name:'org.example:core',version:'1.2.3',ecosystem:'Maven'}) */
 export function validPackage(pkg) {
-  if (!pkg || !ECOSYSTEMS.has(pkg.ecosystem) || typeof pkg.name !== 'string' || pkg.name.length > 200 || pkg.name.includes('..') || typeof pkg.version !== 'string') return false;
-  if (!/^[v0-9][A-Za-z0-9.+_!:\-]{0,119}$/.test(pkg.version)) return false;
+  const distro = DISTRO_ECOSYSTEM.test(pkg?.ecosystem || '');
+  if (!pkg || !ECOSYSTEMS.has(pkg.ecosystem) && !distro || typeof pkg.name !== 'string' || pkg.name.length > 200 || pkg.name.includes('..') || typeof pkg.version !== 'string') return false;
+  if (!(distro ? /^[0-9][A-Za-z0-9.+_!:\-~]{0,119}$/ : /^[v0-9][A-Za-z0-9.+_!:\-]{0,119}$/).test(pkg.version)) return false;
+  // OSV accepts distro source identities; release-specific comparison belongs to its ecosystem implementation.
+  if (distro) return /^[a-z0-9][a-z0-9+.-]*$/.test(pkg.name);
   const names = {
     npm: /^(?:@[a-z0-9_.-]+\/)?[A-Za-z0-9_.-]+$/, PyPI: /^[A-Za-z0-9][A-Za-z0-9_.-]*$/,
     'crates.io': /^[A-Za-z0-9][A-Za-z0-9_-]*$/, Go: /^[A-Za-z0-9][A-Za-z0-9._~+/-]*$/,
@@ -57,7 +61,10 @@ export function publicResolution(value, ecosystem) {
   if (typeof value !== 'string' || value.length > 4096) return false;
   try {
     const url = new URL(value);
-    return url.protocol === 'https:' && !url.username && !url.password && !url.search && !url.port && PUBLIC_HOSTS[ecosystem]?.has(url.hostname) === true;
+    const distroHosts = /^Debian:/.test(ecosystem) ? ['deb.debian.org', 'security.debian.org', 'archive.debian.org']
+      : /^Alpine:/.test(ecosystem) ? ['dl-cdn.alpinelinux.org', 'dl-1.alpinelinux.org'] : [];
+    return url.protocol === 'https:' && !url.username && !url.password && !url.search && !url.port
+      && (PUBLIC_HOSTS[ecosystem]?.has(url.hostname) === true || DISTRO_ECOSYSTEM.test(ecosystem) && distroHosts.includes(url.hostname));
   } catch { return false; }
 }
 

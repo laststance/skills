@@ -17,7 +17,7 @@ const digest = value => createHash('sha256').update(JSON.stringify(value)).diges
 
 /** installed-global例外だけを保つ。lock/SBOM記録はこの関数を使わない。 @example allowGlobalPackage({name:'example',version:'1.0.0',ecosystem:'npm'}) */
 export function allowGlobalPackage(pkg, { queryUnknownGlobals = true } = {}) {
-  if (!validPackage(pkg) || pkg.private === true || pkg.explicitPrivate === true || pkg.publicRegistry === false || ['private', 'git', 'local'].includes(pkg.origin)) return false;
+  if (!validPackage(pkg) || /^(?:Debian|Alpine):/.test(pkg.ecosystem) || pkg.private === true || pkg.explicitPrivate === true || pkg.publicRegistry === false || ['private', 'git', 'local'].includes(pkg.origin)) return false;
   const source = typeof pkg.source === 'string' ? pkg.source : pkg.source?.type || '';
   if (/(?:^|[:+/\s])(?:local|file|link|workspace|git|private)(?:[:+/\s]|$)/i.test(pkg.sourceType || source)) return false;
   const references = [pkg.resolved, pkg.registry, /^https?:/.test(source) ? source : null].filter(Boolean);
@@ -58,6 +58,7 @@ export async function queryOsv(packages, options = {}) {
   const age = now() - Date.parse(previous.cycleStartedAt);
   const continuationVerified = options.continuationVerified === true || context.continuationVerified === true;
   const resume = continuationVerified && age >= 0 && age < DAY && Array.isArray(previous.pendingPackageKeys) && (previous.pendingPackageKeys.length > 0 || options.holdForDetails === true);
+  const cycleStartedAt = resume ? previous.cycleStartedAt : new Date(now()).toISOString();
   const oldList = resume && Array.isArray(previous.queries) ? previous.queries : [];
   if (oldList.length > 15000 || oldList.some(query => Array.isArray(query?.vulns) && query.vulns.length > 5000) || oldList.reduce((count, query) => count + (Array.isArray(query?.vulns) ? query.vulns.length : 0), 0) > MAX_FINDINGS) {
     if (owned) await context.close();
@@ -71,7 +72,9 @@ export async function queryOsv(packages, options = {}) {
     const usable = old?.fingerprint === fingerprint;
     const vulns = (usable && Array.isArray(old.vulns) ? old.vulns : []).map(projectedVuln).filter(Boolean);
     const token = usable && typeof old.pageToken === 'string' && old.pageToken.length <= 4096 && !/[\x00-\x1f]/.test(old.pageToken) ? old.pageToken : null;
-    states.set(key, { key, fingerprint, pageToken: token, vulns, complete: usable && old.complete === true });
+    const timestamp = usable ? Date.parse(old.queriedAt) : NaN;
+    const queriedAt = Number.isFinite(timestamp) && timestamp >= Date.parse(previous.cycleStartedAt) && timestamp <= now() ? iso(old.queriedAt) : null;
+    states.set(key, { key, fingerprint, pageToken: token, vulns, queriedAt, historyScope: 'osv-all-records-for-exact-version', complete: usable && old.complete === true && Boolean(queriedAt) });
   }
   const preferred = (Array.isArray(previous.pendingPackageKeys) ? previous.pendingPackageKeys : []).filter(key => states.has(key) && !states.get(key).complete);
   let queue = [...new Set([...preferred, ...[...states.keys()].sort().filter(key => !states.get(key).complete)])];
@@ -79,12 +82,19 @@ export async function queryOsv(packages, options = {}) {
   const coverage = [];
   let pages = 0, overflow = false;
   const continuation = () => ({ schemaVersion: 2, queries: [...states.values()].map(state => ({ ...state, vulns: state.vulns.map(vuln => ({ ...vuln })) })).sort((a, b) => a.key.localeCompare(b.key)),
-    pendingPackageKeys: queue.filter(key => !states.get(key).complete), cycleStartedAt: resume ? previous.cycleStartedAt : new Date(now()).toISOString() });
+    pendingPackageKeys: queue.filter(key => !states.get(key).complete), cycleStartedAt });
   const findings = () => [...states.values()].flatMap(state => {
     const pkg = unique.get(state.key);
     return state.vulns.map(vuln => ({ ...vuln, package: { name: pkg.name, ecosystem: pkg.ecosystem }, version: pkg.version,
       evidence: [...(pkg.evidence || [])], occurrences: pkg.occurrences || [], evidenceKind: pkg.evidenceKind || 'lock-declaration',
+      queriedAt: state.queriedAt, queryComplete: state.complete, historyScope: state.historyScope,
       advisoryType: /^MAL-/.test(vuln.id) ? 'malware' : 'vulnerability', sourceUrl: `https://osv.dev/vulnerability/${vuln.id}` }));
+  });
+  const queryAssessments = () => [...states.values()].map(state => {
+    const pkg = unique.get(state.key);
+    return { package: { name: pkg.name, ecosystem: pkg.ecosystem }, version: pkg.version, queriedAt: state.queriedAt,
+      complete: state.complete, status: state.vulns.length ? 'affected' : state.complete ? 'no-known-match' : 'unknown',
+      advisoryIds: state.vulns.map(item => item.id), historyScope: state.historyScope };
   });
   try {
     while (queue.length && pages < maxPages && now() < deadline && !context.signal.aborted) {
@@ -126,6 +136,7 @@ export async function queryOsv(packages, options = {}) {
             const merged = new Map([...state.vulns, ...projected].map(vuln => [vuln.id, vuln]));
             const total = [...states.values()].reduce((sum, item) => sum + item.vulns.length, 0) - state.vulns.length + merged.size;
             if (merged.size > 5000 || total > MAX_FINDINGS) { overflow = true; blocked.add(key); continue; }
+            state.queriedAt = new Date(now()).toISOString();
             state.vulns = [...merged.values()].sort((a, b) => a.id.localeCompare(b.id));
             state.pageToken = result.next_page_token || null;
             state.complete = !state.pageToken;
@@ -142,7 +153,7 @@ export async function queryOsv(packages, options = {}) {
       // 処理した未完了項目を後ろへ回す。一部失敗が他のqueryを止めない。
       const selected = new Set(keys);
       queue = [...queue.filter(key => !selected.has(key) && !states.get(key).complete), ...keys.filter(key => !states.get(key).complete)];
-      await options.onProgress?.({ findings: findings(), continuation: continuation(), coverage: [{ area: 'osv-query', status: queue.length ? 'partial' : 'complete', count: [...states.values()].filter(state => state.complete).length, total: states.size }] });
+      await options.onProgress?.({ findings: findings(), queryAssessments: queryAssessments(), continuation: continuation(), coverage: [{ area: 'osv-query', status: queue.length ? 'partial' : 'complete', count: [...states.values()].filter(state => state.complete).length, total: states.size }] });
     }
     const pendingPackageKeys = queue.filter(key => !states.get(key).complete);
     const successfulKeys = [...states.values()].filter(state => state.complete).map(state => state.key);
@@ -150,7 +161,7 @@ export async function queryOsv(packages, options = {}) {
     if (overflow) coverage.push({ area: 'osv-capacity', status: 'partial', diagnostic: safeDiagnostic(new SweepError('CAPACITY', { cause: 'limit', operation: 'packages' })) });
     coverage.push({ area: 'osv-query', status: pendingPackageKeys.length ? 'partial' : 'complete', count: successfulKeys.length, total: states.size, deferred: pendingPackageKeys.length > 0,
       reason: '現在の由来と一致する24時間以内の未完了照会だけ再開。全ページ成功を完了とする' });
-    return { findings: findings(), coverage, queried: succeeded.size, successfulKeys, continuation: continuation() };
+    return { findings: findings(), coverage, queried: succeeded.size, successfulKeys, queryAssessments: queryAssessments(), continuation: continuation() };
   } finally { if (owned) await context.close(); }
 }
 
@@ -275,15 +286,21 @@ export async function scanPackages(inventory, options = {}) {
         recordId: digest(['global', index, pkg.ecosystem, pkg.name, pkg.version, evidence]), sourceIdentity: digest([pkg.ecosystem, pkg.name, pkg.version, evidence, origin, eligible]),
         evidenceKind: 'installed-metadata', evidenceScope: 'host', path: evidence, location: evidence, originException: unknown && eligible, optional: false, platform: context.platform });
     }
+    let unassessedSbomPackages = 0;
     // SBOMには由来不明global例外を適用せず、検証済み画像との結合だけを扱う。
     for (const pkg of inventory.sbomPackages || []) {
-      if (!validPackage(pkg) || !/^sha256:[a-f0-9]{64}$/.test(pkg.imageDigest || '')) continue;
-      records.push({ name: pkg.name, version: pkg.version, ecosystem: pkg.ecosystem, origin: pkg.origin === 'public' ? 'public' : 'unknown',
-        queryEligible: pkg.publicRegistry === true && pkg.origin === 'public' && !pkg.explicitPrivate,
+      if (!validPackage(pkg) || !/^sha256:[a-f0-9]{64}$/.test(pkg.imageDigest || '')) { unassessedSbomPackages += 1; continue; }
+      const distro = /^(?:Debian|Alpine):/.test(pkg.ecosystem);
+      const identityVerified = !distro || pkg.provenanceStatus === 'verified-public-record' && !pkg.distributionConflict && pkg.sourcePackage === pkg.name && pkg.sourceVersion === pkg.version
+        && pkg.ecosystem === (pkg.distribution === 'debian' ? `Debian:${pkg.distributionRelease}` : pkg.distribution === 'alpine' ? `Alpine:v${pkg.distributionRelease}` : null);
+      records.push({ name: pkg.name, version: pkg.version, ecosystem: pkg.ecosystem, origin: identityVerified && pkg.origin === 'public' ? 'public' : 'unknown',
+        queryEligible: identityVerified && pkg.publicRegistry === true && pkg.origin === 'public' && !pkg.explicitPrivate,
+        ...(distro ? { binaryName: pkg.binaryName, binaryVersion: pkg.binaryVersion, distribution: pkg.distribution, distributionRelease: pkg.distributionRelease, architecture: pkg.architecture, sourcePackage: pkg.sourcePackage, sourceVersion: pkg.sourceVersion, provenanceStatus: pkg.provenanceStatus, distributionConflict: Boolean(pkg.distributionConflict), purlType: pkg.purlType } : {}),
         recordId: digest(['sbom', pkg.recordId, pkg.name, pkg.version]), sourceIdentity: pkg.imageDigest,
         evidenceKind: 'digest-bound-sbom', evidenceScope: 'image', digestBound: true, imageDigest: pkg.imageDigest,
-        path: typeof pkg.evidence === 'string' ? pkg.evidence : null, location: typeof pkg.evidence === 'string' ? pkg.evidence : null, optional: false, platform: 'unknown' });
+        path: typeof pkg.evidence === 'string' ? pkg.evidence : null, location: typeof pkg.evidence === 'string' ? pkg.evidence : null, optional: false, platform: distro ? 'linux' : 'unknown' });
     }
+    coverage.push({ area: 'sbom-packages', status: unassessedSbomPackages ? 'partial' : 'complete', count: (inventory.sbomPackages || []).length - unassessedSbomPackages, unsupported: unassessedSbomPackages, reasonCode: unassessedSbomPackages ? 'sbom-package-identity-unknown' : 'sbom-supported-records' });
     if (records.length > 15000) throw new SweepError('CAPACITY', { cause: 'limit', operation: 'packages' });
     const packageMap = new Map();
     for (const record of records) {
@@ -306,7 +323,7 @@ export async function scanPackages(inventory, options = {}) {
         completedPackageKeys, cycleStartedAt: query.cycleStartedAt, catalogSignature: digest(packages.map(queryFingerprint)), findingCache: [] };
     };
     const onProgress = async progress => context.checkpoint({ stage: 'packages', value: { schemaVersion: 2, scannedAt: new Date(started).toISOString(),
-      packages, records, findings: progress.findings, coverage: [...coverage, ...progress.coverage], commands,
+      packages, records, findings: progress.findings, queryAssessments: progress.queryAssessments, coverage: [...coverage, ...progress.coverage], commands,
       continuation: wrapContinuation(progress.continuation) } });
     const response = options.offline ? { findings: [], coverage: [{ area: 'osv-query', status: 'partial', reason: 'offline指定のため公開照会は未実施' }], successfulKeys: [],
       continuation: { queries: [], pendingPackageKeys: packages.map(packageKey), cycleStartedAt: new Date(started).toISOString() } }
@@ -328,7 +345,7 @@ export async function scanPackages(inventory, options = {}) {
       coverage.push(material.coverage, ...material.details);
       for (const finding of findings) finding.installationEvidence = material.observations.get(packageKey({ ...finding.package, version: finding.version })) || [];
     }
-    return { schemaVersion: 2, scannedAt: new Date(started).toISOString(), elapsedMs: context.wallNow() - started, packages, records, findings, coverage, commands,
+    return { schemaVersion: 2, scannedAt: new Date(started).toISOString(), elapsedMs: context.wallNow() - started, packages, records, findings, queryAssessments: response.queryAssessments || [], coverage, commands,
       continuation: wrapContinuation(response.continuation) };
   } finally { if (owned) await context.close(); }
 }
