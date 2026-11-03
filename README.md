@@ -8,7 +8,7 @@
 
 Agent skills for AI coding assistants. Install via [skills.sh](https://skills.sh).
 
-## 🛡️ mac-security-sweep — 最新の脆弱性情報を収集し、実行したMacに被害がないか確認します
+## 🛡️ mac-security-sweep — 最新の脆弱性情報を収集、実行したMacに被害がないか確認
 
 ### インストール
 
