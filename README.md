@@ -24,89 +24,9 @@ npx skills add -g laststance/skills --skill mac-security-sweep
 
 ### mac-security-sweep 動作の流れ
 
-![mac-security-sweepの5段階。名前と版を読む、公開の注意報を調べる、照合する、侵害の根拠と未確認範囲を分ける、日本語レポートを保存する。](docs/mac-security-sweep/walkthrough.gif)
+![mac-security-sweep 動作の流れ](docs/mac-security-sweep/walkthrough.gif)
 
-[⏯ MP4動画をダウンロード](https://github.com/laststance/skills/raw/refs/heads/main/docs/mac-security-sweep/walkthrough.mp4) · [🖼 静止画](docs/mac-security-sweep/walkthrough-poster.png) · [👆 自分のペースで進めるHTML](docs/mac-security-sweep/walkthrough.html)
-
-MP4はダウンロード後、お使いの動画プレーヤーで再生・一時停止できます。HTMLはリポジトリを取得してブラウザで開くと、「前へ・次へ・再生」で操作できます。図を見るだけでMacのスキャンが始まることはありません。
-
-**ここからは読むだけの説明です。** 動画の `example 1.0.0` と `GHSA-fixture-positive` は、[同梱の合成テストを実行した結果](skills/mac-security-sweep/references/examples/positive-partial/report.md)に基づきます。実在の脆弱性や、誰かのMacの監査結果ではありません。理解しやすい順に見せており、実際にはニュース取得と棚卸しなどの一部を並列に進めます。
-
-### ① Macの中にあるものの「名前と版」を読む
-
-まず、何を使っているMacなのかを調べます。アプリ、アプリに同梱されたNode/Electronなどの実行基盤、ブラウザやエディタの拡張、開発プロジェクトの依存関係、OSの保護設定などが対象です。
-
-たとえば依存関係の記録から、`名前: example / 版: 1.0.0 / 種類: npm` が分かります。この時点で分かるのは**「記録にその版がある」こと**です。実際に入っているか、動いているかも、それぞれ確認できた根拠を分けて残します。
-
-プロジェクトの既定の探索先は `~/Projects`、`~/repository`、`~/work`。別の場所は `scanRoots` で指定できます。ホーム全体を無制限に読む構成ではありません。見つからない、権限が足りない、形式に対応していない、という違いも残します。[対象と制限の一覧](skills/mac-security-sweep/references/capabilities.md)
-
-### ② そのソフトに関係する「公開の注意報」を調べる
-
-手元の一覧とは別に、インターネットから公開情報を集めます。情報源にはそれぞれ役割があります。
-
-| 情報 | 何を知るために使うか |
-|---|---|
-| Apple・Node.js・Mozillaなどの公式情報 | 製品の更新、対象の版、修正版を確認する。検出した製品に応じて対象を選ぶ。 |
-| OSV・GitHub Advisory・Homebrewの脆弱性DB | パッケージの名前・版に関係する告知を探す。 |
-| CISA KEV | 実際に悪用が確認された脆弱性を優先するための材料にする。 |
-| IPA・JPCERT/CC・セキュリティニュースなど | 新しい事案を見つけ、一次資料を確認する入口にする。 |
-
-ニュースに出てこなかった古い問題も取りこぼしにくくするため、新しいニュースの収集と、導入済み製品の既知情報の確認を分けています。記事の見出しだけで「この版は危険」と決めず、版や配布元が分からなければ確認候補として残します。[情報源と取得方法](skills/mac-security-sweep/references/sources.md)
-
-### ③ 「手元の名前と版」と「告知の対象」を突き合わせる
-
-動画の例では、手元の記録にも告知の対象にも `example 1.0.0` がありました。そこで**優先して確認する対象が1件**できます。
-
-さらに、名前が同じでも配布元や版の体系が違わないか、同じ問題を別の告知IDで二重に数えていないかを確認します。レポートに出る「一致1件」は、感染件数ではなく**対象と告知の組み合わせ**です。
-
-### ④ 侵害の根拠と、調べきれなかった範囲を分ける
-
-次に、その事案に固有のファイルの指紋（ハッシュ）やプロセスなど、確認できる侵害の手掛かりを調べます。この手掛かりを **IOC** と呼びます。怪しいIPへ試しに接続したり、記事に載った修復スクリプトを実行したりはしません。
-
-| 分かったこと | そこから言えること |
-|---|---|
-| 影響版の記録がある | 実物・利用状況・攻撃が届く条件を優先して確認する。 |
-| 事案固有の悪性ファイルのハッシュが一致 | そのファイルの存在が確認できた。実行や情報窃取は別に確かめる。 |
-| IOCの確定が0件 | 今回の方法・時点・権限では確定しなかった。過去の侵害まで否定する材料にはならない。 |
-| 読めない場所や取得できない情報がある | 未確認として残し、追加で何を確認するか示す。 |
-
-動画の例は、**優先確認1対象・IOCの確定0件・未確認範囲1件**です。この3つは別々の数字です。
-
-### ⑤ 日本語で「分かったこと・未確認・次の行動」を残す
-
-レポートの先頭は、**被害の有無／要対応／いちばん急ぐこと**の3行です。続いて、対象と版、告知のURL、判断の根拠、未確認の理由、優先する対策を載せます。
-
-動画の例の要点を短くすると、「侵害は未確認。優先確認は1対象。まず実際の利用状況を確認して更新を計画する」です。**更新、削除、停止、認証の変更は自動で行いません。** 対策は理由と手順を提案し、実行するかは本人が決めます。
-
-| 調査の状態 | 読み方 |
-|---|---|
-| `complete` | 今回対象にした確認が完了した。所見ゼロやMac全体の安全という意味ではない。 |
-| `complete-with-exclusions` | 方針による対象外を明示したうえで、対象の確認が完了した。 |
-| `partial` | 時間切れ・取得失敗・未対応などで、未確認が残っている。得られた結果は保存される。 |
-
-レポートと証拠は `~/security-reports/`、再開用の状態は `~/.local/state/mac-security-sweep/state.json` に保存します。次に実行すると未処理の探索・照会などを再開し、前回からの変化を「新規／継続／解消／今回は確認不能」に分けます。取得できなかっただけの対象を「解消」にしません。
-
-### 秘密保護と、調査の限界
-
-- `.env`、秘密鍵、トークン、Cookie、認証ストアの秘密値を表示・保存しません。認証ファイルは場所や存在などのメタデータだけを扱い、`authorized_keys`も本文・行数・鍵文字列を読みません。
-- パッケージ照会は、許可した名前・版・ecosystemを送ります。続きのページ用tokenや取得済み結果の公開告知IDも使用します。ファイル本文、Macの棚卸し一覧、ローカルパス、Git URLを照会へアップロードしません。
-- private/local/Git/workspace由来と、由来不明のlockレコードは外部照会から除外します。**由来不明のインストール済みglobalは既定で照会候補になる例外**があり、`queryUnknownGlobals: false` で除外できます。
-- macOS・既存のNode 22以上が前提です。OSV-Scannerがあればオフライン解析に使い、不在なら対応形式をNodeで静的に読みます。ツールを自動インストールしません。
-- 対応する製品・形式・配置は有限です。権限が必要な領域、未取得期間、未対応形式は未確認として残します。他の物理Intel/Rosetta Macや古いmacOSでの実機確認状況も、[検証記録](skills/mac-security-sweep/references/verification.md)で区別しています。
-
-重い処理は、コマンド全体4・scanner 2・HTTP全体6・同一host 2の同時上限を共有します。設定した時間内に終わらない分は持ち越します。**調査が途中でも、得られた根拠と残りを一緒に読める**のが、このスキルの使い方です。
-
-### 実際に使うとき
-
-未導入の場合に**自分でターミナルへ入力するインストールコマンド**です。実行場所は任意。スキルを導入する操作で、Macのセキュリティ巡回はまだ始まりません。
-
-```bash
-npx skills add -g laststance/skills --skill mac-security-sweep
-```
-
-導入後、対応するエージェントのチャットで **Codexなら `$mac-security-sweep`、Claude Codeなら `/mac-security-sweep`、OpenClawなら `mac-security-sweep を実行`** と依頼すると巡回を開始します。読み込みだけを確かめたい場合は「読み込み確認のみ」と付けます。
-
-最初の時間制限つき実行は[3手順のクイックスタート](skills/mac-security-sweep/references/quickstart.md)、探索先や照会方針の変更は[設定ガイド](skills/mac-security-sweep/references/configuration.md)を参照してください。
+[MP4動画をダウンロード](https://github.com/laststance/skills/raw/refs/heads/main/docs/mac-security-sweep/walkthrough.mp4) · [静止画](docs/mac-security-sweep/walkthrough-poster.png) · [操作できるHTML](docs/mac-security-sweep/walkthrough.html)
 
 
 ## Installation
