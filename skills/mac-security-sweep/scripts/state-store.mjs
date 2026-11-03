@@ -13,9 +13,9 @@ const GENERATION = /^mss-[a-f0-9-]{36}-\d{6}$/;
 const HASH = /^[a-f0-9]{64}$/;
 const digest = value => createHash('sha256').update(value).digest('hex');
 
-/** 再現可能なhashのためobject keyを整列する。保存時だけ呼び、配列の観測順は保つ。 @example stableJson({b:2,a:1}) */
-export function stableJson(value) {
-  return `${JSON.stringify(value, (_, entry) => entry && !Array.isArray(entry) && typeof entry === 'object' ? Object.fromEntries(Object.keys(entry).sort().map(key => [key, entry[key]])) : entry, 2)}\n`;
+/** 再現可能なhashのためobject keyを整列する。証拠は字下げを省き、配列の観測順と全fieldを保つ。 @example stableJson({b:2,a:1}, 0) */
+export function stableJson(value, space = 2) {
+  return `${JSON.stringify(value, (_, entry) => entry && !Array.isArray(entry) && typeof entry === 'object' ? Object.fromEntries(Object.keys(entry).sort().map(key => [key, entry[key]])) : entry, space)}\n`;
 }
 
 /** 私有保存先を逐次作成し、祖先・所有者・Git境界を確認する。監査対象は変更しない。 @example privateDirectory(root, {home}) */
@@ -266,7 +266,8 @@ export async function createStateStore({ home, profile, runId = randomUUID(), fi
     const directory = path.join(reportRoot, id);
     const reportPath = path.join(directory, 'report.md');
     const continuation = projectProgress({ ...state, ...nextState, lastReport: reportPath });
-    const content = { evidence: stableJson(evidence), continuation: stableJson(continuation), report: `${report}\n` };
+    // 大量の証拠を字下げで膨らませない。容量・構造上限と保存する内容は変えない。
+    const content = { evidence: stableJson(evidence, 0), continuation: stableJson(continuation), report: `${report}\n` };
     if (Object.values(content).some(value => Buffer.byteLength(value) > LIMITS.state)) throw new SweepError('CAPACITY', { cause: 'limit', operation: 'checkpoint' });
     boundedJson(content.evidence, { maxRecords: LIMITS.stateRecords });
     boundedJson(content.continuation, { maxRecords: LIMITS.stateRecords });

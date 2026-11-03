@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { acquireLock, createStateStore, privateDirectory } from '../scripts/state-store.mjs';
+import { acquireLock, createStateStore, privateDirectory, stableJson } from '../scripts/state-store.mjs';
 import { fetchNews } from '../scripts/fetch-news.mjs';
 import { createRunContext } from '../scripts/runtime.mjs';
 
@@ -88,6 +88,59 @@ test('同じrunの複数checkpointがreport-backed generation鎖として再開�
   assert.notEqual(first.generation, second.generation); assert.equal(resumed.state.generation, second.generation); assert.equal(resumed.state.lastRunStatus, 'complete');
   assert.equal(JSON.parse(await fs.readFile(path.join(second.evidenceDirectory, 'commit.json'))).previous, first.generation);
   await resumed.close();
+});
+
+test('字下げだけで32MiBを超える大量の証拠も全記録を保存して再開できる', async t => {
+  // Arrange
+  const home = await fixture(t), store = await createStateStore({ home, identityProvider });
+  const values = Object.fromEntries(Array.from({ length: 40 }, (_, index) => [`field${index}`, 'observed']));
+  const evidence = { news: { items: Array.from({ length: 24000 }, (_, id) => ({ id, projection: { details: { source: { record: { values } } } } })) } };
+  assert.ok(Buffer.byteLength(stableJson(evidence)) > 33554432);
+  // Act
+  const saved = await store.commit({ evidence, report: 'partial', nextState: { lastRunStatus: 'partial' } });
+  await store.close();
+  const bytes = await fs.readFile(path.join(saved.evidenceDirectory, 'evidence.json'));
+  const resumed = await createStateStore({ home, identityProvider });
+  // Assert
+  assert.ok(bytes.length < 33554432);
+  assert.deepEqual(JSON.parse(bytes), evidence);
+  assert.equal(resumed.progressVerified, true);
+  assert.equal(resumed.state.generation, saved.generation);
+  await resumed.close();
+});
+
+test('旧版の字下げ付き証拠も元のhashで検証し次の世代へ続ける', async t => {
+  // Arrange
+  const home = await fixture(t), store = await createStateStore({ home, identityProvider });
+  const saved = await store.commit({ evidence: { observed: 1 }, report: 'legacy', nextState: { lastRunStatus: 'partial' } });
+  await store.close();
+  const evidencePath = path.join(saved.evidenceDirectory, 'evidence.json'), markerPath = path.join(saved.evidenceDirectory, 'commit.json');
+  const legacy = '{\n  "observed": 1\n}\n';
+  const marker = JSON.parse(await fs.readFile(markerPath));
+  marker.evidence.hash = createHash('sha256').update(legacy).digest('hex');
+  await fs.writeFile(evidencePath, legacy);
+  await fs.writeFile(markerPath, JSON.stringify(marker));
+  // Act
+  const resumed = await createStateStore({ home, identityProvider });
+  const next = await resumed.commit({ evidence: { observed: 2 }, report: 'current', nextState: { lastRunStatus: 'partial' } });
+  await resumed.close();
+  // Assert
+  assert.equal(await fs.readFile(evidencePath, 'utf8'), legacy);
+  assert.equal(JSON.parse(await fs.readFile(path.join(next.evidenceDirectory, 'commit.json'))).previous, saved.generation);
+  assert.deepEqual(JSON.parse(await fs.readFile(path.join(next.evidenceDirectory, 'evidence.json'))), { observed: 2 });
+});
+
+test('証拠そのものが32MiBを超えた場合は保存済み世代を進めず拒否する', async t => {
+  // Arrange
+  const home = await fixture(t), store = await createStateStore({ home, identityProvider });
+  const saved = await store.commit({ evidence: { observed: 1 }, report: 'saved', nextState: { lastRunStatus: 'partial' } });
+  const priorState = await fs.readFile(saved.statePath, 'utf8');
+  const oversized = { records: Array.from({ length: 600 }, () => 'x'.repeat(60000)) };
+  // Act / Assert
+  await assert.rejects(store.commit({ evidence: oversized, report: 'too large', nextState: { lastRunStatus: 'complete' } }), error => error.diagnostic.code === 'MSS_CAPACITY');
+  assert.equal(await fs.readFile(saved.statePath, 'utf8'), priorState);
+  assert.equal(await fs.readFile(saved.reportPath, 'utf8'), 'saved\n');
+  await store.close();
 });
 
 test('不正JSONとfuture stateを変更せずwork前に拒否する', async t => {
