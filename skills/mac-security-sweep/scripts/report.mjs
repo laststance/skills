@@ -22,7 +22,7 @@ const TEXT = Object.freeze({
     iocLimit: '不一致は、記載した指標を今回観測できなかったことを示します。過去の侵害や、調べていないマルウェアの不在は証明しません。',
     noOngoing: '前回の陽性記録と、期間外で継続する告知はありません。',
     notRechecked: '前回の陽性記録・今回は再確認できず', lastObserved: '前回の観測',
-    zeroNews: '今回の取得期間に該当する記事は0件でした。', missingNews: 'このカテゴリの最新情報を取得できていません。',
+    zeroNews: '取得済みの情報では、期間内と確認できた記事は0件です。', missingNews: 'このカテゴリの最新情報を取得できていません。',
     noGaps: '処理上の未確認項目はありません。判定の対象は、このレポートに記載した範囲です。',
     noActions: '今回の結果から追加の対策は提案しません。未確認項目があれば、その確認を先に進めてください。',
     evidenceLimit: '調査対象は変更していません。脆弱性の対象条件への一致と、侵害・窃取の成立は別の判定です。',
@@ -55,7 +55,7 @@ const TEXT = Object.freeze({
     iocLimit: 'A nonmatch means that the specified indicator was not observed by this check. It does not establish the absence of past compromise or other malware.',
     noOngoing: 'No previous positive records or ongoing advisories outside the discovery window are listed.',
     notRechecked: 'Previously positive; not rechecked in this run', lastObserved: 'Previous observation',
-    zeroNews: 'The successful query returned no articles within this discovery window.', missingNews: 'Current information for this category was not retrieved.',
+    zeroNews: 'No in-window articles were confirmed in the retrieved records.', missingNews: 'Current information for this category was not retrieved.',
     noGaps: 'No processing gaps are recorded. Assessments apply only to the scope described in this report.',
     noActions: 'No additional action is proposed from these results. Resolve any unassessed items before drawing broader conclusions.',
     evidenceLimit: 'The inspected system was not modified. Matching affected conditions does not establish successful exploitation or data theft.',
@@ -336,13 +336,21 @@ function categoryNewsCounts(items, receipt, window) {
   return { undatedCount, datedItemCount, uncertainItemCount, impreciseCount, unclassifiedCount };
 }
 
-/** Keep timing and product-classification uncertainty separate from a confirmed empty result. @example categoryCountNotes({undatedCount:0,uncertainItemCount:1,impreciseCount:1,unclassifiedCount:0}, 'en') */
-function categoryCountNotes(counts, language) {
+/** Keep timing and product-classification uncertainty separate from a confirmed empty result.
+ * Category rows count retained news; source receipts count the full retrieved listing, including older entries.
+ * @example categoryCountNotes({uncertainItemCount:1,unclassifiedCount:0}, 'en', 'source')
+ */
+function categoryCountNotes(counts, language, scope = 'category') {
   const ja = language === 'ja', notes = [];
   if (counts.undatedCount) notes.push(undatedNewsText(counts.undatedCount, language));
   if (counts.impreciseCount) notes.push(ja ? `${counts.impreciseCount}件は年月のみ判明しています。` : `${counts.impreciseCount} ${counts.impreciseCount === 1 ? 'article is' : 'articles are'} dated only to the month.`);
   if (counts.uncertainItemCount) notes.push(ja ? `${counts.uncertainItemCount}件は日付の精度が足りず、期間内か確定できません。` : `${counts.uncertainItemCount} ${counts.uncertainItemCount === 1 ? 'article lacks' : 'articles lack'} enough date precision to confirm whether they fall within the discovery window.`);
-  if (counts.unclassifiedCount) notes.push(ja ? `${counts.unclassifiedCount}件は製品・OSの分類が未確認で、その他のニュースに保持しています。` : `${counts.unclassifiedCount} ${counts.unclassifiedCount === 1 ? 'article has' : 'articles have'} unconfirmed product or OS classification and ${counts.unclassifiedCount === 1 ? 'remains' : 'remain'} in general news.`);
+  if (counts.unclassifiedCount) {
+    // A source-list count does not establish how many articles survived discovery-window filtering.
+    if (scope === 'source') notes.push(ja ? `取得した一覧全体（期間外を含む）の${counts.unclassifiedCount}件は、製品・OSの分類が未確認です。`
+      : `The retrieved source listing includes ${counts.unclassifiedCount} ${counts.unclassifiedCount === 1 ? 'article' : 'articles'} with unconfirmed product or OS classification; this count includes entries outside the discovery window.`);
+    else notes.push(ja ? `${counts.unclassifiedCount}件は製品・OSの分類が未確認で、その他のニュースに保持しています。` : `${counts.unclassifiedCount} ${counts.unclassifiedCount === 1 ? 'article has' : 'articles have'} unconfirmed product or OS classification and ${counts.unclassifiedCount === 1 ? 'remains' : 'remain'} in general news.`);
+  }
   return notes.join(' ');
 }
 
@@ -538,7 +546,9 @@ export function renderReport(data) {
     const fresh = receipt?.status === 'fresh';
     const counts = categoryNewsCounts(categoryItems, receipt, news.window);
     const uncertainty = categoryCountNotes(counts, language);
-    const description = [!fresh && (!uncertainty || receipt?.reasonCode === 'PRIMARY_SOURCE_UNAVAILABLE') ? t.missingNews : '', uncertainty, fresh && !uncertainty && counts.datedItemCount === 0 ? t.zeroNews : ''].filter(Boolean).join(' ');
+    const incompleteWindow = fresh && receipt?.windowStatus === 'partial' && !uncertainty
+      ? (ja ? '収集期間全体を確認できていません。' : 'The full discovery window has not been checked.') : '';
+    const description = [!fresh && (!uncertainty || receipt?.reasonCode === 'PRIMARY_SOURCE_UNAVAILABLE') ? t.missingNews : '', uncertainty, fresh && !uncertainty && counts.datedItemCount === 0 ? t.zeroNews : '', incompleteWindow].filter(Boolean).join(' ');
     lines.push(`| ${escapeReportText(category.labels[language])} | ${label(fresh ? 'fresh' : 'partial', language)} | ${counts.datedItemCount ?? t.unknown} | ${escapeReportText(receipt?.fetchedAt || t.unknown)} | ${description} |`);
   }
   lines.push('');
@@ -564,7 +574,7 @@ export function renderReport(data) {
     ...(news.sources || []).map(source => {
       const recovery = source.diagnostic ? localizeDiagnostic(source.diagnostic, language) : null;
       const detail = [source.historicalCoverage === 'partial' ? (ja ? '過去期間に不足あり' : 'Historical period incomplete') : '',
-        categoryCountNotes(source, language),
+        categoryCountNotes(source, language, 'source'),
         Number.isSafeInteger(source.datedItemCount) && source.datedItemCount >= 0 ? `${t.windowCount}: ${source.datedItemCount}.` : '',
         source.reasonCode || '', recovery?.code || '', recovery?.message || '', recovery?.recovery || '',
         source.cooldownUntil ? `${ja ? '再試行可能時刻' : 'Retry after'}: ${source.cooldownUntil}` : '',

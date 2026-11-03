@@ -59,18 +59,18 @@ No previous positive records or ongoing advisories outside the discovery window 
 
 | Classification | Status | Confirmed in-window articles | Retrieved | Recorded basis |
 |---|---|---|---|---|
-| macOS | Retrieved in this run | 0 | 2026-11-03T00:00:00.000Z | The successful query returned no articles within this discovery window. |
-| iOS / iPadOS | Retrieved in this run | 0 | 2026-11-03T00:00:00.000Z | The successful query returned no articles within this discovery window. |
-| Mac applications | Retrieved in this run | 0 | 2026-11-03T00:00:00.000Z | The successful query returned no articles within this discovery window. |
-| Homebrew | Retrieved in this run | 0 | 2026-11-03T00:00:00.000Z | The successful query returned no articles within this discovery window. |
-| Linux | Retrieved in this run | 0 | 2026-11-03T00:00:00.000Z | The successful query returned no articles within this discovery window. |
-| PHP | Retrieved in this run | 0 | 2026-11-03T00:00:00.000Z | The successful query returned no articles within this discovery window. |
-| TLS / OpenSSL | Retrieved in this run | 0 | 2026-11-03T00:00:00.000Z | The successful query returned no articles within this discovery window. |
-| ImageMagick | Retrieved in this run | 0 | 2026-11-03T00:00:00.000Z | The successful query returned no articles within this discovery window. |
-| Ruby | Retrieved in this run | 0 | 2026-11-03T00:00:00.000Z | The successful query returned no articles within this discovery window. |
-| Java / JDK | Retrieved in this run | 0 | 2026-11-03T00:00:00.000Z | The successful query returned no articles within this discovery window. |
-| Docker / containers | Retrieved in this run | 0 | 2026-11-03T00:00:00.000Z | The successful query returned no articles within this discovery window. |
-| Incidents / malware | Retrieved in this run | 0 | 2026-11-03T00:00:00.000Z | The successful query returned no articles within this discovery window. |
+| macOS | Retrieved in this run | 0 | 2026-11-03T00:00:00.000Z | No in-window articles were confirmed in the retrieved records. |
+| iOS / iPadOS | Retrieved in this run | 0 | 2026-11-03T00:00:00.000Z | No in-window articles were confirmed in the retrieved records. |
+| Mac applications | Retrieved in this run | 0 | 2026-11-03T00:00:00.000Z | No in-window articles were confirmed in the retrieved records. |
+| Homebrew | Retrieved in this run | 0 | 2026-11-03T00:00:00.000Z | No in-window articles were confirmed in the retrieved records. |
+| Linux | Retrieved in this run | 0 | 2026-11-03T00:00:00.000Z | No in-window articles were confirmed in the retrieved records. |
+| PHP | Retrieved in this run | 0 | 2026-11-03T00:00:00.000Z | No in-window articles were confirmed in the retrieved records. |
+| TLS / OpenSSL | Retrieved in this run | 0 | 2026-11-03T00:00:00.000Z | No in-window articles were confirmed in the retrieved records. |
+| ImageMagick | Retrieved in this run | 0 | 2026-11-03T00:00:00.000Z | No in-window articles were confirmed in the retrieved records. |
+| Ruby | Retrieved in this run | 0 | 2026-11-03T00:00:00.000Z | No in-window articles were confirmed in the retrieved records. |
+| Java / JDK | Retrieved in this run | 0 | 2026-11-03T00:00:00.000Z | No in-window articles were confirmed in the retrieved records. |
+| Docker / containers | Retrieved in this run | 0 | 2026-11-03T00:00:00.000Z | No in-window articles were confirmed in the retrieved records. |
+| Incidents / malware | Retrieved in this run | 0 | 2026-11-03T00:00:00.000Z | No in-window articles were confirmed in the retrieved records. |
 | General | Retrieved in this run | 1 | 2026-11-03T00:00:00.000Z |  |
 
 ## Coverage gaps and limits

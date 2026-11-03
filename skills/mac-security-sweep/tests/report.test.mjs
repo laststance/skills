@@ -279,14 +279,14 @@ test('fresh empty categories are distinct from missing categories and every requ
   // Act
   const report = renderReport(data);
   // Assert
-  assert.match(report, /PHP \| Retrieved in this run \| 0 \| 2026-11-03T00:00:00Z \| The successful query returned no articles/);
+  assert.match(report, /PHP \| Retrieved in this run \| 0 \| 2026-11-03T00:00:00Z \| No in-window articles were confirmed in the retrieved records/);
   assert.match(report, /Ruby \| Partial \| 0 \| Unassessed \| Current information/);
   for (const category of ['macOS', 'iOS / iPadOS', 'Mac applications', 'Homebrew', 'Linux', 'PHP', 'TLS / OpenSSL', 'ImageMagick', 'Ruby', 'Java / JDK', 'Docker / containers']) assert.ok(report.includes(`| ${category} |`), category);
 });
 
 for (const [language, categoryName, explanation, zeroMessage, missingMessage] of [
-  ['JA', 'Docker / コンテナ', '公開日・更新日が不明な記事が24件あり、収集期間内の記事か判定できません。', '今回の取得期間に該当する記事は0件でした。', 'このカテゴリの最新情報を取得できていません。'],
-  ['EN', 'Docker / containers', 'Publication and update dates are unavailable for 24 articles; whether they fall within the discovery window is unconfirmed.', 'The successful query returned no articles within this discovery window.', 'Current information for this category was not retrieved.'],
+  ['JA', 'Docker / コンテナ', '公開日・更新日が不明な記事が24件あり、収集期間内の記事か判定できません。', '取得済みの情報では、期間内と確認できた記事は0件です。', 'このカテゴリの最新情報を取得できていません。'],
+  ['EN', 'Docker / containers', 'Publication and update dates are unavailable for 24 articles; whether they fall within the discovery window is unconfirmed.', 'No in-window articles were confirmed in the retrieved records.', 'Current information for this category was not retrieved.'],
 ]) {
   for (const status of ['fresh', 'partial']) test(`${language} categories with ${status} retrieval and undated articles do not claim an empty discovery window`, () => {
     // Arrange
@@ -340,7 +340,7 @@ test('month-only news keeps its date uncertainty through local matching and neve
     assert.doesNotMatch(report, /2026-10-01/);
     assert.match(categoryRow, language === 'JA' ? /1件は日付の精度が足りず、期間内か確定できません/ : /1 article lacks enough date precision/);
     assert.match(sourceRow, language === 'JA' ? /1件は年月のみ判明/ : /1 article is dated only to the month/);
-    assert.doesNotMatch(categoryRow, /該当する記事は0件|successful query returned no articles/);
+    assert.doesNotMatch(categoryRow, /期間内と確認できた記事は0件|No in-window articles were confirmed/);
   }
 });
 
@@ -354,7 +354,7 @@ test('unclassified fetched articles remain visible without proving zero articles
   const categoryRow = report.split('\n').find(line => line.startsWith('| macOS |'));
   // Assert
   assert.match(categoryRow, /1 article has unconfirmed product or OS classification and remains in general news/);
-  assert.doesNotMatch(categoryRow, /successful query returned no articles/);
+  assert.doesNotMatch(categoryRow, /No in-window articles were confirmed/);
   assert.match(report, /Unclassified product update/);
 });
 
@@ -369,7 +369,32 @@ test('older category receipts count only dated in-window articles and preserve u
   // Assert
   assert.match(categoryRow, /Retrieved in this run \| 0 \|/);
   assert.match(categoryRow, /dates are unavailable for 1 article/);
-  assert.doesNotMatch(categoryRow, /successful query returned no articles/);
+  assert.doesNotMatch(categoryRow, /No in-window articles were confirmed/);
+});
+
+test('source listing counts include older entries without claiming they were all retained as general news', () => {
+  // Arrange
+  const news = { categoryCoverage: [{ category: 'mac-apps', status: 'fresh', datedItemCount: 20, unclassifiedCount: 0 }],
+    sources: [{ name: 'Mozilla Security', status: 'ok', itemCount: 1008, unclassifiedCount: 1008 }] };
+  // Act / Assert
+  for (const language of ['JA', 'EN']) {
+    const report = renderReport({ locale: resolveLanguage({ explicit: language }), news });
+    const sourceRow = report.split('\n').find(line => line.startsWith('| Mozilla Security |'));
+    assert.match(sourceRow, language === 'JA' ? /取得した一覧全体（期間外を含む）の1008件/ : /source listing includes 1008 articles/);
+    if (language === 'EN') assert.match(sourceRow, /this count includes entries outside the discovery window/);
+    assert.doesNotMatch(sourceRow, /その他のニュースに保持|remain in general news/);
+  }
+});
+
+test('zero confirmed articles and an incomplete discovery window are explained together in the category row', () => {
+  // Arrange
+  const news = { categoryCoverage: [{ category: 'tls', status: 'fresh', datedItemCount: 0, undatedCount: 0, windowStatus: 'partial' }] };
+  // Act / Assert
+  for (const language of ['JA', 'EN']) {
+    const report = renderReport({ locale: resolveLanguage({ explicit: language }), news });
+    const row = report.split('\n').find(line => line.startsWith('| TLS / OpenSSL |'));
+    assert.match(row, language === 'JA' ? /取得済みの情報では、期間内と確認できた記事は0件です。 収集期間全体を確認できていません。/ : /No in-window articles were confirmed in the retrieved records\. The full discovery window has not been checked\./);
+  }
 });
 
 test('a requested Spanish report remains pending even after local collection finishes', () => {
