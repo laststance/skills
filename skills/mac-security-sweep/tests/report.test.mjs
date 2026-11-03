@@ -4,6 +4,19 @@ import { renderReport, safeSourceUrl, escapeReportText } from '../scripts/report
 import { normalizeLanguage, resolveLanguage, localizeDiagnostic } from '../scripts/locale.mjs';
 import { matchRule, matchSecurityReleases } from '../scripts/match.mjs';
 
+test('CISA exploited-vulnerability highlights retain their public CVE source link without accepting arbitrary query values', () => {
+  // Arrange
+  const url = 'https://www.cisa.gov/known-exploited-vulnerabilities-catalog?field_cve=CVE-2026-1234';
+  const item = { id: 'CVE-2026-1234', title: 'Known exploited fixture', url, sourceId: 'cisa-kev', categories: ['incidents'], knownExploited: true };
+  // Act
+  const report = renderReport({ locale: resolveLanguage({ explicit: 'EN' }), news: { items: [item] }, finishedAt: '2026-11-03T00:00:00Z' });
+  // Assert
+  assert.ok(report.includes('[Source](https://www.cisa.gov/known-exploited-vulnerabilities-catalog?field%5Fcve=CVE-2026-1234)'));
+  assert.equal(safeSourceUrl(`${url}&token=fixture`), null);
+  assert.equal(safeSourceUrl(`${url}&field_cve=CVE-2026-5678`), null);
+  assert.equal(safeSourceUrl('https://www.cisa.gov/known-exploited-vulnerabilities-catalog?field_cve=private-value'), null);
+});
+
 test('English product assessments show product names and observed versions instead of internal Japanese rule titles', () => {
   // Arrange
   const inventory = { generatedAt: '2026-11-03T00:00:00Z', host: { osVersion: '27.2' }, runtimes: [
@@ -27,6 +40,21 @@ test('an explicit language overrides the conversation and saved preference', () 
   const locale = resolveLanguage(options);
   // Assert
   assert.deepEqual(locale, { requestedLanguage: 'en', canonicalLanguage: 'en', translationStatus: 'not-required' });
+});
+
+test('English findings retain mixed work and personal scope plus the exact distribution identity', () => {
+  // Arrange
+  const data = { locale: resolveLanguage({ explicit: 'EN' }), finishedAt: '2026-11-03T00:00:00Z', match: { findings: [{
+    id: 'CVE-2026-1234', advisoryId: 'CVE-2026-1234', status: '影響なし', version: '3.0.14-1~deb12u2', scope: '仕事 / 個人・その他',
+    package: { name: 'openssl', ecosystem: 'Debian:12', distribution: 'debian', distributionRelease: '12', architecture: 'arm64', sourcePackage: 'openssl', sourceVersion: '3.0.14-1~deb12u2' },
+    queriedAt: '2026-11-03T00:00:00Z', reasonCode: 'fixed-version', sources: ['https://www.debian.org/security/2026/dsa-1234'],
+  }] } };
+  // Act
+  const report = renderReport(data);
+  // Assert
+  assert.match(report, /Work \/ Personal \/ other/);
+  assert.match(report, /Debian:12 \/ debian \/ 12 \/ arm64 \/ openssl \/ 3\.0\.14-1\\~deb12u2/);
+  assert.doesNotMatch(report, /仕事|個人・その他/);
 });
 
 test('conversation language overrides a previous run and an unsupported native language requires translation', () => {
@@ -223,7 +251,7 @@ test('advisory titles and package names cannot inject headings, images, HTML or 
   assert.equal(escapeReportText('https://evil.example www.evil.example person@evil.example'), 'https&#58;//evil.example www&#46;evil.example person&#64;evil.example');
 });
 
-test('source links reject credentials, nonstandard ports, unsupported hosts and query strings', () => {
+test('source links reject credentials, nonstandard ports, unsupported hosts and unreviewed query values', () => {
   // Arrange
   const rejected = ['http://osv.dev/test', 'https://osv.dev:8443/test', 'https://user:password@osv.dev/test', 'https://evil.example/test',
     'https://osv.dev.evil.example/test', 'file:///private/file', 'javascript:alert(1)', 'data:text/html,hi', 'https://osv.dev/test?token=secret', 'https://osv.dev/\n#safe'];

@@ -119,8 +119,10 @@ export function safeSourceUrl(value) {
     const url = new URL(value);
     const hosts = new Set([...EXTRA_REFERENCE_HOSTS, ...(registry.SOURCE_REFERENCE_HOSTS || []), ...(registry.SOURCES || []).map(source => new URL(source.url).hostname)]);
     if (url.protocol !== 'https:' || url.username || url.password || url.port || !hosts.has(url.hostname)) return null;
-    // Queries can carry unreviewed tracking or credentials; report links use canonical item URLs.
-    if (url.search) return null;
+    // CISA's fixed public CVE filter is an identifier; arbitrary query values remain forbidden.
+    const cisaFilter = url.hostname === 'www.cisa.gov' && url.pathname === '/known-exploited-vulnerabilities-catalog'
+      && [...url.searchParams.keys()].length === 1 && /^CVE-\d{4}-\d{4,}$/.test(url.searchParams.get('field_cve') || '');
+    if (url.search && !cisaFilter) return null;
     return url.href.replace(/[()[\]*_!]/g, character => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
   } catch { return null; }
 }
@@ -210,9 +212,11 @@ function findingTable(findings, details, language) {
     const detail = detailFor(finding, details);
     const severity = normalizeSeverity(detail?.severity || finding.severity);
     const fixed = finding.fixed || detail?.fixed?.filter(value => value.name === finding.package?.name && (!value.ecosystem || value.ecosystem === finding.package?.ecosystem)).map(value => value.version).join(', ');
-    const scope = language === 'en' ? ({ '仕事': 'Work', '個人・その他': 'Personal / other', '端末': 'Host' }[finding.scope] || finding.package?.ecosystem || t.scopeUnknown) : finding.scope || '端末';
+    const scope = language === 'en' ? (finding.scope || '').split(' / ').filter(Boolean)
+      .map(value => ({ '仕事': 'Work', '個人・その他': 'Personal / other', '端末': 'Host' }[value] || t.scopeUnknown)).join(' / ') || t.scopeUnknown : finding.scope || '端末';
     const source = [...(finding.sources || []), ...(detail?.references || []).map(value => typeof value === 'string' ? value : value.url)].find(safeSourceUrl);
-    const bounds = [finding.distribution, finding.release, finding.historyScope, finding.assessmentBasis,
+    const bounds = [finding.package?.ecosystem, finding.distribution || finding.package?.distribution, finding.release || finding.package?.distributionRelease,
+      finding.package?.architecture, finding.package?.sourcePackage, finding.package?.sourceVersion, finding.historyScope, finding.assessmentBasis,
       finding.verifiedAt ? `${language === 'ja' ? 'ルール確認' : 'Rule verified'}: ${finding.verifiedAt}` : '',
       finding.fetchedAt || finding.queriedAt || finding.observedAt].filter(value => typeof value === 'string' && value).map(value => escapeReportText(value)).join(' / ');
     const identifiers = [...new Set([finding.advisoryId || finding.id, ...(finding.aliases || [])].filter(Boolean))].map(value => escapeReportText(value)).join(' / ');

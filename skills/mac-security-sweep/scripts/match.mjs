@@ -80,6 +80,7 @@ function matchVersionRule(inventory, rule, result) {
   let candidates = [], complete = false;
   // 製品の識別子を説明用タイトルと分離し、レポートの言語が変わっても保持する。
   result.product = rule.kind === 'os' ? 'macOS' : rule.runtimeName || (rule.applicationNames || []).join(' / ');
+  result.scope = '端末';
   if (['runtime-component', 'runtime'].includes(rule.kind)) {
     candidates = (inventory.runtimes || []).filter(runtime => runtime.name === rule.runtimeName)
       .map(runtime => ({ version: rule.kind === 'runtime' ? runtime.version : runtime[rule.component], runtimeVersion: runtime.version,

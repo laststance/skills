@@ -12,6 +12,8 @@ export { extractLockfile, validPackage } from './package-formats.mjs';
 const ADVISORY_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{2,120}$/;
 const DAY = 86400000;
 const MAX_FINDINGS = 30000;
+const MAX_METADATA_RECORDS = 1000000;
+const PARSED_STATUSES = new Set(['complete', 'complete-with-exclusions', 'partial', 'unsupported']);
 const iso = value => typeof value === 'string' && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : null;
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
@@ -77,7 +79,11 @@ export async function queryOsv(packages, options = {}) {
     states.set(key, { key, fingerprint, pageToken: token, vulns, queriedAt, historyScope: 'osv-all-records-for-exact-version', complete: usable && old.complete === true && Boolean(queriedAt) });
   }
   const preferred = (Array.isArray(previous.pendingPackageKeys) ? previous.pendingPackageKeys : []).filter(key => states.has(key) && !states.get(key).complete);
-  let queue = [...new Set([...preferred, ...[...states.keys()].sort().filter(key => !states.get(key).complete)])];
+  // 初回の有限照会枠では実物metadataとSBOMを先に確認する。再開時は保留queueの順序を維持する。
+  const metadataFirst = ['installed-metadata', 'digest-bound-sbom'].flatMap(kind => [...unique]
+    .filter(([key, pkg]) => !states.get(key).complete && pkg.occurrences?.some(record => record.queryEligible && record.evidenceKind === kind))
+    .map(([key]) => key).sort());
+  let queue = [...new Set([...preferred, ...metadataFirst, ...[...states.keys()].sort().filter(key => !states.get(key).complete)])];
   const attempted = new Set(), succeeded = new Set(), blocked = new Set(), restarted = new Set();
   const coverage = [];
   let pages = 0, overflow = false;
@@ -204,6 +210,64 @@ export async function inspectInstallations(findings, inventory, options = {}) {
   } finally { if (owned) await context.close(); }
 }
 
+/** globalの許可判定とページidentityを同じ射影から作る。{@link scanPackages}が現metadataだけを渡す。
+ * @example globalRecord({name:'example',version:'1.0.0',ecosystem:'npm'}, 0, true, 'darwin')
+ */
+function globalRecord(pkg, index, queryUnknownGlobals, platform) {
+  if (!validPackage(pkg)) return null;
+  const legacyEligible = allowGlobalPackage(pkg, { queryUnknownGlobals: true });
+  const eligible = allowGlobalPackage(pkg, { queryUnknownGlobals });
+  const publicOrigin = pkg.publicRegistry === true || [pkg.registry, pkg.resolved].some(reference => publicResolution(reference, pkg.ecosystem));
+  const origin = ['private', 'git', 'local'].includes(pkg.origin) ? pkg.origin : !legacyEligible ? 'private' : publicOrigin ? 'public' : 'unknown';
+  const evidence = typeof pkg.evidence === 'string' && path.isAbsolute(pkg.evidence) ? pkg.evidence : null;
+  return { name: pkg.name, version: pkg.version, ecosystem: pkg.ecosystem, origin, queryEligible: eligible, policyExcluded: !eligible,
+    ...(!eligible ? { exclusion: origin === 'unknown' ? 'unknown-global-opt-out' : 'non-public-origin' } : {}),
+    recordId: digest(['global', index, pkg.ecosystem, pkg.name, pkg.version, evidence]), sourceIdentity: digest([pkg.ecosystem, pkg.name, pkg.version, evidence, origin, eligible]),
+    evidenceKind: 'installed-metadata', evidenceScope: 'host', path: evidence, location: evidence, originException: origin === 'unknown' && eligible, optional: false, platform };
+}
+
+/** SBOMの画像・配布元を再検証し、global例外を適用しない。{@link scanPackages}のページ生成とidentity計算が呼ぶ。
+ * @example sbomRecord({name:'example',version:'1.0.0',ecosystem:'npm',imageDigest:'sha256:'+'a'.repeat(64)})
+ */
+function sbomRecord(pkg) {
+  if (!validPackage(pkg) || !/^sha256:[a-f0-9]{64}$/.test(pkg.imageDigest || '')) return null;
+  const distro = /^(?:Debian|Alpine):/.test(pkg.ecosystem);
+  const identityVerified = !distro || pkg.provenanceStatus === 'verified-public-record' && !pkg.distributionConflict && pkg.sourcePackage === pkg.name && pkg.sourceVersion === pkg.version
+    && pkg.ecosystem === (pkg.distribution === 'debian' ? `Debian:${pkg.distributionRelease}` : pkg.distribution === 'alpine' ? `Alpine:v${pkg.distributionRelease}` : null);
+  return { name: pkg.name, version: pkg.version, ecosystem: pkg.ecosystem, origin: identityVerified && pkg.origin === 'public' ? 'public' : 'unknown',
+    queryEligible: identityVerified && pkg.publicRegistry === true && pkg.origin === 'public' && !pkg.explicitPrivate,
+    ...(distro ? { binaryName: pkg.binaryName, binaryVersion: pkg.binaryVersion, distribution: pkg.distribution, distributionRelease: pkg.distributionRelease, architecture: pkg.architecture, sourcePackage: pkg.sourcePackage, sourceVersion: pkg.sourceVersion, provenanceStatus: pkg.provenanceStatus, distributionConflict: Boolean(pkg.distributionConflict), purlType: pkg.purlType } : {}),
+    recordId: digest(['sbom', pkg.recordId, pkg.name, pkg.version]), sourceIdentity: pkg.imageDigest,
+    evidenceKind: 'digest-bound-sbom', evidenceScope: 'image', digestBound: true, imageDigest: pkg.imageDigest,
+    path: typeof pkg.evidence === 'string' ? pkg.evidence : null, location: typeof pkg.evidence === 'string' ? pkg.evidence : null, optional: false, platform: distro ? 'linux' : 'unknown' };
+}
+
+/** 秘密の追加fieldを除いてmetadataを束縛し、過去ページの未確認も現在の入力から集計する。{@link scanPackages}が呼ぶ。
+ * @example metadataSummary([['global', [], value => value]], context)
+ */
+function metadataSummary(groups, context) {
+  const hash = createHash('sha256');
+  const counts = { unverifiedGlobals: 0, excludedGlobals: 0, unknownGlobals: 0, invalidGlobals: 0, unassessedSbomPackages: 0 };
+  for (const [name, values, project] of groups) {
+    hash.update(name);
+    for (let index = 0; index < values.length; index += 1) {
+      context.check();
+      // 任意の追加fieldや生の配布URLはhash入力にも含めない。
+      const record = project(values[index], index);
+      hash.update(JSON.stringify(record));
+      if (name === 'global') {
+        if (!record) counts.invalidGlobals += 1;
+        else {
+          if (record.origin === 'unknown') counts.unknownGlobals += 1;
+          if (record.originException) counts.unverifiedGlobals += 1;
+          if (!record.queryEligible) counts.excludedGlobals += 1;
+        }
+      } else if (!record || !record.queryEligible) counts.unassessedSbomPackages += 1;
+    }
+  }
+  return { signature: hash.digest('hex'), ...counts };
+}
+
 /** lock/globalの由来を維持し、最小payloadへ接続する。CLIと巡回本体が共有する。 @example await scanPackages(inventory,{context,continuation}) */
 export async function scanPackages(inventory, options = {}) {
   const context = options.context || options.ctx || createRunContext({ home: options.home, config: { scanRoots: options.projectRoots || inventory.scanRoots || [], queryUnknownGlobals: options.queryUnknownGlobals ?? true },
@@ -213,8 +277,8 @@ export async function scanPackages(inventory, options = {}) {
   const coverage = [], commands = [], records = [], parsedFiles = [];
   const roots = approvedRoots(inventory, context);
   const previous = options.continuation || options.previous || {};
-  const maxLockfiles = options.maxLockfiles ?? 400, maxPackages = options.maxPackages ?? 15000;
-  if (![maxLockfiles, maxPackages].every(number => Number.isSafeInteger(number) && number > 0 && number <= 15000)) { if (owned) await context.close(); throw new SweepError('CONFIG', { cause: 'limit', operation: 'packages' }); }
+  const maxLockfiles = options.maxLockfiles ?? 400, maxPackages = options.maxPackages ?? 15000, maxRecords = options.maxRecords ?? 15000;
+  if (![maxLockfiles, maxPackages, maxRecords].every(number => Number.isSafeInteger(number) && number > 0 && number <= 15000)) { if (owned) await context.close(); throw new SweepError('CONFIG', { cause: 'limit', operation: 'packages' }); }
   const lockfiles = (inventory.lockfiles || []).map(lock => typeof lock === 'string' ? { path: lock } : lock).filter(lock => typeof lock.path === 'string' && path.isAbsolute(lock.path));
   const pendingFirst = new Set(previous.pendingLockfiles || []);
   lockfiles.sort((a, b) => Number(pendingFirst.has(b.path)) - Number(pendingFirst.has(a.path)) || a.path.localeCompare(b.path));
@@ -222,6 +286,47 @@ export async function scanPackages(inventory, options = {}) {
   const pendingLockfiles = [];
   let processed = 0, revalidated = 0;
   try {
+    const globals = inventory.globalPackages || [], sboms = inventory.sbomPackages || [];
+    if (globals.length > MAX_METADATA_RECORDS || sboms.length > MAX_METADATA_RECORDS) throw new SweepError('CAPACITY', { cause: 'limit', operation: 'packages' });
+    const allowUnknownGlobals = options.queryUnknownGlobals ?? context.config.queryUnknownGlobals ?? true;
+    const projectGlobal = (pkg, index) => globalRecord(pkg, index, allowUnknownGlobals, context.platform);
+    const { signature, unverifiedGlobals, excludedGlobals, unknownGlobals, invalidGlobals, unassessedSbomPackages } = metadataSummary([['global', globals, projectGlobal], ['sbom', sboms, sbomRecord]], context);
+    const oldPage = previous.recordPage;
+    const verified = options.continuationVerified === true || context.continuationVerified === true;
+    const pageAge = started - Date.parse(oldPage?.cycleStartedAt);
+    const offsets = ['globalOffset', 'nextGlobalOffset', 'sbomOffset', 'nextSbomOffset', 'pendingGlobals', 'pendingSboms'];
+    const pageValid = verified && oldPage?.schemaVersion === 1 && oldPage.metadataSignature === signature && pageAge >= 0 && pageAge < DAY
+      && offsets.every(key => Number.isSafeInteger(oldPage[key]) && oldPage[key] >= 0 && oldPage[key] <= MAX_METADATA_RECORDS)
+      && oldPage.globalOffset <= oldPage.nextGlobalOffset && oldPage.nextGlobalOffset <= globals.length
+      && oldPage.sbomOffset <= oldPage.nextSbomOffset && oldPage.nextSbomOffset <= sboms.length
+      && oldPage.pendingGlobals === globals.length - oldPage.nextGlobalOffset && oldPage.pendingSboms === sboms.length - oldPage.nextSbomOffset;
+    const queryPending = (previous.query?.pendingPackageKeys || previous.pendingPackageKeys || []).length > 0;
+    const detailPending = (options.state?.advisoryContinuation?.pendingIds || []).length > 0;
+    const pageActive = pageValid && (queryPending || detailPending || previous.pendingLockfiles?.length || oldPage.pendingGlobals || oldPage.pendingSboms);
+    const holdPage = pageActive && (queryPending || detailPending);
+    const heldLocks = new Set(holdPage ? (previous.parsedFiles || []).map(file => file.path) : []);
+    // 旧ACKのstatus欠落から完了を推測しない。現在ページの処理が終わったら再解析する。
+    const carryAcknowledgements = new Map(pageActive ? (previous.acknowledgedLockfiles || []).filter(file => PARSED_STATUSES.has(file.status))
+      .map(file => [file.path, { sourceIdentity: file.sourceIdentity, status: file.status }]) : []);
+    const observedLockIdentities = new Map();
+    const globalOffset = pageActive ? holdPage ? oldPage.globalOffset : oldPage.nextGlobalOffset : 0;
+    const sbomOffset = pageActive ? holdPage ? oldPage.sbomOffset : oldPage.nextSbomOffset : 0;
+    let nextGlobalOffset = globalOffset, nextSbomOffset = sbomOffset, recordLimited = Boolean(pageActive);
+    // global/SBOMを先に受け入れ、巨大なlock集合で毎回未照会になることを防ぐ。
+    for (; nextGlobalOffset < (holdPage ? oldPage.nextGlobalOffset : globals.length) && records.length < maxRecords; nextGlobalOffset += 1) {
+      context.check();
+      const record = projectGlobal(globals[nextGlobalOffset], nextGlobalOffset);
+      if (!record) continue;
+      records.push(record);
+    }
+    for (; nextSbomOffset < (holdPage ? oldPage.nextSbomOffset : sboms.length) && records.length < maxRecords; nextSbomOffset += 1) {
+      context.check();
+      const record = sbomRecord(sboms[nextSbomOffset]);
+      if (!record) continue;
+      records.push(record);
+    }
+    const pendingGlobals = globals.length - nextGlobalOffset, pendingSboms = sboms.length - nextSbomOffset;
+    recordLimited ||= pendingGlobals > 0 || pendingSboms > 0;
     let scannerAvailable = false, invalidLockRecords = 0;
     if (!options.noScanner && lockfiles.length) {
       try {
@@ -236,6 +341,17 @@ export async function scanPackages(inventory, options = {}) {
         context.check();
         const stat = await context.io.inspect(lock.path, { roots, purpose: 'project' });
         if (!stat.metadata.isFile()) throw new SweepError('BOUNDARY', { cause: 'boundary', operation: 'packages' });
+        observedLockIdentities.set(lock.path, stat.identity);
+        if (carryAcknowledgements.get(lock.path)?.sourceIdentity !== stat.identity) carryAcknowledgements.delete(lock.path);
+        // 照会と詳細が未完了のページを維持し、完了済みページは現在のidentityだけ再確認する。
+        if (pageActive && (holdPage ? !heldLocks.has(lock.path) : carryAcknowledgements.has(lock.path))) {
+          if (!carryAcknowledgements.has(lock.path)) pendingLockfiles.push(lock.path);
+          // 現在ページの照会証拠とは区別し、以前の陽性を今回の陰性として解消しない。
+          else coverage.push({ area: 'lockfile-previous-page', path: lock.path, status: carryAcknowledgements.get(lock.path).status,
+            reason: '前ページで解析した同一ファイル。未対応・未確認の判定も保持' });
+          continue;
+        }
+        if (records.length >= maxRecords) { recordLimited = true; pendingLockfiles.push(lock.path); continue; }
         const old = oldFiles.get(lock.path);
         const unchanged = (options.continuationVerified === true || context.continuationVerified === true) && old?.sourceIdentity === stat.identity && old.parserVersion === 2;
         if (!unchanged && processed >= maxLockfiles) { pendingLockfiles.push(lock.path); continue; }
@@ -260,6 +376,18 @@ export async function scanPackages(inventory, options = {}) {
         });
         if (unchanged) revalidated += 1; else processed += 1;
         const current = extracted.records.map(record => ({ ...record, path: lock.path, location: lock.path }));
+        if (current.length > maxRecords) {
+          // 単一lockがページ上限を超える場合は未対応を明示し、同じファイルを無限保留しない。
+          parsedFiles.push({ path: lock.path, sourceIdentity: stat.identity, parserVersion: 2, status: 'unsupported' });
+          coverage.push({ area: 'lockfile', path: lock.path, status: 'unsupported', count: 0, reasonCode: 'lockfile-record-page-limit',
+            diagnostic: safeDiagnostic(new SweepError('CAPACITY', { cause: 'limit', operation: 'packages' })) });
+          continue;
+        }
+        if (records.length + current.length > maxRecords) {
+          recordLimited = true; pendingLockfiles.push(lock.path);
+          coverage.push({ area: 'lockfile', path: lock.path, status: 'partial', deferred: true, count: 0, reasonCode: 'record-page-capacity', reason: 'このlockの抽出済みrecordは次の有限ページで照会する' });
+          continue;
+        }
         invalidLockRecords += extracted.invalid || 0;
         records.push(...current);
         parsedFiles.push({ path: lock.path, sourceIdentity: stat.identity, parserVersion: 2, status: extracted.status });
@@ -267,41 +395,11 @@ export async function scanPackages(inventory, options = {}) {
           excluded: extracted.excluded || 0, unknown: extracted.unknown || 0, invalid: extracted.invalid || 0, reason: extracted.reason,
           ...(extracted.diagnostic ? { diagnostic: extracted.diagnostic } : {}) });
       } catch (error) { pendingLockfiles.push(lock.path); coverage.push({ area: 'lockfile', path: lock.path, status: readStatus(error), diagnostic: safeDiagnostic(error, 'READ', 'packages') }); }
-      if (records.length > 15000) throw new SweepError('CAPACITY', { cause: 'limit', operation: 'packages' });
     }
-    let unverifiedGlobals = 0, excludedGlobals = 0, unknownGlobals = 0, invalidGlobals = 0;
-    for (const [index, pkg] of (inventory.globalPackages || []).entries()) {
-      if (!validPackage(pkg)) { invalidGlobals += 1; continue; }
-      const legacyEligible = allowGlobalPackage(pkg, { queryUnknownGlobals: true });
-      const eligible = allowGlobalPackage(pkg, { queryUnknownGlobals: options.queryUnknownGlobals ?? context.config.queryUnknownGlobals ?? true });
-      const publicOrigin = pkg.publicRegistry === true || [pkg.registry, pkg.resolved].some(reference => publicResolution(reference, pkg.ecosystem));
-      const origin = ['private', 'git', 'local'].includes(pkg.origin) ? pkg.origin : !legacyEligible ? 'private' : publicOrigin ? 'public' : 'unknown';
-      const unknown = origin === 'unknown';
-      if (unknown) unknownGlobals += 1;
-      if (unknown && eligible) unverifiedGlobals += 1;
-      if (!eligible) excludedGlobals += 1;
-      const evidence = typeof pkg.evidence === 'string' && path.isAbsolute(pkg.evidence) ? pkg.evidence : null;
-      records.push({ name: pkg.name, version: pkg.version, ecosystem: pkg.ecosystem, origin, queryEligible: eligible, policyExcluded: !eligible,
-        ...(!eligible ? { exclusion: unknown ? 'unknown-global-opt-out' : 'non-public-origin' } : {}),
-        recordId: digest(['global', index, pkg.ecosystem, pkg.name, pkg.version, evidence]), sourceIdentity: digest([pkg.ecosystem, pkg.name, pkg.version, evidence, origin, eligible]),
-        evidenceKind: 'installed-metadata', evidenceScope: 'host', path: evidence, location: evidence, originException: unknown && eligible, optional: false, platform: context.platform });
-    }
-    let unassessedSbomPackages = 0;
-    // SBOMには由来不明global例外を適用せず、検証済み画像との結合だけを扱う。
-    for (const pkg of inventory.sbomPackages || []) {
-      if (!validPackage(pkg) || !/^sha256:[a-f0-9]{64}$/.test(pkg.imageDigest || '')) { unassessedSbomPackages += 1; continue; }
-      const distro = /^(?:Debian|Alpine):/.test(pkg.ecosystem);
-      const identityVerified = !distro || pkg.provenanceStatus === 'verified-public-record' && !pkg.distributionConflict && pkg.sourcePackage === pkg.name && pkg.sourceVersion === pkg.version
-        && pkg.ecosystem === (pkg.distribution === 'debian' ? `Debian:${pkg.distributionRelease}` : pkg.distribution === 'alpine' ? `Alpine:v${pkg.distributionRelease}` : null);
-      records.push({ name: pkg.name, version: pkg.version, ecosystem: pkg.ecosystem, origin: identityVerified && pkg.origin === 'public' ? 'public' : 'unknown',
-        queryEligible: identityVerified && pkg.publicRegistry === true && pkg.origin === 'public' && !pkg.explicitPrivate,
-        ...(distro ? { binaryName: pkg.binaryName, binaryVersion: pkg.binaryVersion, distribution: pkg.distribution, distributionRelease: pkg.distributionRelease, architecture: pkg.architecture, sourcePackage: pkg.sourcePackage, sourceVersion: pkg.sourceVersion, provenanceStatus: pkg.provenanceStatus, distributionConflict: Boolean(pkg.distributionConflict), purlType: pkg.purlType } : {}),
-        recordId: digest(['sbom', pkg.recordId, pkg.name, pkg.version]), sourceIdentity: pkg.imageDigest,
-        evidenceKind: 'digest-bound-sbom', evidenceScope: 'image', digestBound: true, imageDigest: pkg.imageDigest,
-        path: typeof pkg.evidence === 'string' ? pkg.evidence : null, location: typeof pkg.evidence === 'string' ? pkg.evidence : null, optional: false, platform: distro ? 'linux' : 'unknown' });
-    }
-    coverage.push({ area: 'sbom-packages', status: unassessedSbomPackages ? 'partial' : 'complete', count: (inventory.sbomPackages || []).length - unassessedSbomPackages, unsupported: unassessedSbomPackages, reasonCode: unassessedSbomPackages ? 'sbom-package-identity-unknown' : 'sbom-supported-records' });
-    if (records.length > 15000) throw new SweepError('CAPACITY', { cause: 'limit', operation: 'packages' });
+    coverage.push({ area: 'sbom-packages', status: unassessedSbomPackages || pendingSboms ? 'partial' : 'complete', count: records.filter(record => record.evidenceKind === 'digest-bound-sbom').length, unsupported: unassessedSbomPackages, pending: pendingSboms, reasonCode: unassessedSbomPackages ? 'sbom-package-identity-unknown' : 'sbom-supported-records' });
+    if (recordLimited) coverage.push({ area: 'package-record-page', status: pendingLockfiles.length || pendingGlobals || pendingSboms ? 'partial' : 'complete', count: records.length,
+      pending: pendingLockfiles.length + pendingGlobals + pendingSboms, deferred: Boolean(pendingLockfiles.length || pendingGlobals || pendingSboms), reasonCode: 'bounded-record-page',
+      reason: 'record合計15000件以内で照会。現在ページの照会・詳細完了後に保留lock/global/SBOMへ進む' });
     const packageMap = new Map();
     for (const record of records) {
       if (!validPackage(record)) continue;
@@ -317,10 +415,16 @@ export async function scanPackages(inventory, options = {}) {
     const wrapContinuation = query => {
       const completedPackageKeys = query.queries.filter(item => item.complete).map(item => item.key);
       const completed = new Set(completedPackageKeys);
-      const acknowledgedLockfiles = parsedFiles.filter(file => records.filter(record => record.path === file.path && record.queryEligible).every(record => completed.has(packageKey(record))))
-        .map(file => ({ path: file.path, sourceIdentity: file.sourceIdentity }));
+      const acknowledgements = new Map([...carryAcknowledgements].filter(([file, entry]) => observedLockIdentities.get(file) === entry.sourceIdentity));
+      for (const file of parsedFiles) {
+        acknowledgements.delete(file.path);
+        if (records.filter(record => record.path === file.path && record.queryEligible).every(record => completed.has(packageKey(record)))) acknowledgements.set(file.path, { sourceIdentity: file.sourceIdentity, status: file.status });
+      }
+      const acknowledgedLockfiles = [...acknowledgements].map(([file, entry]) => ({ path: file, ...entry }));
       return { schemaVersion: 2, parsedFiles, pendingLockfiles, acknowledgedLockfiles, query, pendingPackageKeys: query.pendingPackageKeys,
-        completedPackageKeys, cycleStartedAt: query.cycleStartedAt, catalogSignature: digest(packages.map(queryFingerprint)), findingCache: [] };
+        completedPackageKeys, cycleStartedAt: query.cycleStartedAt, catalogSignature: digest(packages.map(queryFingerprint)), findingCache: [],
+        ...(recordLimited ? { recordPage: { schemaVersion: 1, cycleStartedAt: pageActive ? oldPage.cycleStartedAt : new Date(started).toISOString(), metadataSignature: signature,
+          globalOffset, nextGlobalOffset, sbomOffset, nextSbomOffset, pendingGlobals, pendingSboms } } : {}) };
     };
     const onProgress = async progress => context.checkpoint({ stage: 'packages', value: { schemaVersion: 2, scannedAt: new Date(started).toISOString(),
       packages, records, findings: progress.findings, queryAssessments: progress.queryAssessments, coverage: [...coverage, ...progress.coverage], commands,
@@ -332,12 +436,12 @@ export async function scanPackages(inventory, options = {}) {
         maxPackages, maxPages: options.maxPages, deadline: options.deadline, onProgress });
     coverage.push({ area: 'lockfiles', status: pendingLockfiles.length ? 'partial' : 'complete', count: lockfiles.length - pendingLockfiles.length, total: lockfiles.length,
       extracted: processed, revalidated, deferred: pendingLockfiles.length > 0, reason: '新規/変更lockの抽出上限とは別に、以前のlockも現在のbounded本文で公開性を再確認' });
-    coverage.push({ area: 'global-package-origins', status: unverifiedGlobals || invalidGlobals ? 'partial' : excludedGlobals ? 'complete-with-exclusions' : 'complete',
-      count: unverifiedGlobals, unknown: unknownGlobals, invalid: invalidGlobals, excluded: excludedGlobals,
+    coverage.push({ area: 'global-package-origins', status: unverifiedGlobals || invalidGlobals || pendingGlobals ? 'partial' : excludedGlobals ? 'complete-with-exclusions' : 'complete',
+      count: unverifiedGlobals, unknown: unknownGlobals, invalid: invalidGlobals, excluded: excludedGlobals, pending: pendingGlobals,
       reason: '由来未検証のinstalled-global例外を明示。lock/SBOMには適用しない。queryUnknownGlobals=falseで停止可能' });
     const unknownRecords = records.filter(record => record.origin === 'unknown' && !record.policyExcluded).length;
     const excludedRecords = records.filter(record => record.policyExcluded).length;
-    coverage.push({ area: 'package-extraction', status: unknownRecords || invalidLockRecords || invalidGlobals || pendingLockfiles.length ? 'partial' : excludedRecords ? 'complete-with-exclusions' : 'complete', count: records.length,
+    coverage.push({ area: 'package-extraction', status: unknownRecords || invalidLockRecords || invalidGlobals || pendingLockfiles.length || pendingGlobals || pendingSboms ? 'partial' : excludedRecords ? 'complete-with-exclusions' : 'complete', count: records.length,
       excluded: excludedRecords, unknown: unknownRecords, invalid: invalidLockRecords + invalidGlobals, reason: '同一名・版でも由来と方針除外を独立保持。未確認を除外によって隠さない' }, ...response.coverage);
     const findings = response.findings;
     if (options.inspectInstallations !== false) {

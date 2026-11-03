@@ -17,8 +17,9 @@ const PROGRESS_FIELDS = new Set(`schemaVersion parsedFiles pendingLockfiles ackn
 for (const key of [...IMPACT_FIELDS, 'range', 'versions', 'editor', 'installationWindow', 'iocs', 'value', 'specificity', 'context', 'roots', 'processedPages', 'rootIdentities', 'acknowledgedFiles', 'withdrawnAt', 'depthLimited', 'registered', 'enablementEvidence']) PROGRESS_FIELDS.add(key);
 for (const key of 'sourceId categories datePrecision dateSemantics reasonCode ongoing distribution distributionRelease repository architecture sourcePackage sourceVersion binaryName binaryVersion purlType provenanceStatus distributionConflict componentCount skippedPackages unsupportedPackages unknownOrigins distributionConflicts historyScope queriedAt queryComplete queryAssessments conflictingEvidence verifiedAt observedAt assessmentBasis published'.split(' ')) PROGRESS_FIELDS.add(key);
 const STRUCTURES = Object.fromEntries(Object.entries({
-  packageContinuation: 'schemaVersion parsedFiles pendingLockfiles acknowledgedLockfiles query pendingPackageKeys completedPackageKeys cycleStartedAt catalogSignature findingCache',
-  parsedFiles: 'path sourceIdentity parserVersion status', acknowledgedLockfiles: 'path sourceIdentity',
+  packageContinuation: 'schemaVersion parsedFiles pendingLockfiles acknowledgedLockfiles query pendingPackageKeys completedPackageKeys cycleStartedAt catalogSignature findingCache recordPage',
+  recordPage: 'schemaVersion cycleStartedAt metadataSignature globalOffset nextGlobalOffset sbomOffset nextSbomOffset pendingGlobals pendingSboms',
+  parsedFiles: 'path sourceIdentity parserVersion status', acknowledgedLockfiles: 'path sourceIdentity status',
   query: 'schemaVersion queries pendingPackageKeys cycleStartedAt', queries: 'key fingerprint pageToken vulns complete queriedAt historyScope', vulns: 'id modified',
   advisoryContinuation: 'pendingIds cache', cache: 'id summary aliases modified withdrawn fetchedAt severity severityDetails advisoryType fixed knownExploited',
   discoveryContinuation: 'schemaVersion signature complete queue files projects roots page acknowledgedFiles depthLimited',
@@ -52,7 +53,7 @@ function progressFieldAllowed(parent, key) {
           : PROGRESS_FIELDS.has(key);
 }
 
-const OBJECT_PROGRESS = new Set('packageContinuation advisoryContinuation discoveryContinuation adaptiveNews sourceCursors sourceContinuations productBaselines baselines homebrew query transport cooldowns window installationWindow package impact locale'.split(' '));
+const OBJECT_PROGRESS = new Set('packageContinuation recordPage advisoryContinuation discoveryContinuation adaptiveNews sourceCursors sourceContinuations productBaselines baselines homebrew query transport cooldowns window installationWindow package impact locale'.split(' '));
 const ARRAY_PROGRESS = new Set('queryAssessments categories backlog assessmentSnapshot parsedFiles pendingLockfiles acknowledgedLockfiles queries pendingPackageKeys completedPackageKeys findingCache vulns pendingIds cache queue files projects roots pendingProductIds tree records pendingPaths updates aliases affected evidence evidenceKinds items products urls advisoryIds severityDetails severityEvidence iocs'.split(' '));
 const RECORD_ARRAYS = new Set('queryAssessments backlog assessmentSnapshot parsedFiles acknowledgedLockfiles queries vulns cache queue files roots tree records updates items affected severityDetails severityEvidence iocs'.split(' '));
 const DATES = new Set('queriedAt verifiedAt observedAt lastRunAt lastSuccessfulAt newsFallbackSince cycleStartedAt modified fetchedAt modifiedAt publishedAt updatedAt withdrawnAt withdrawn since until'.split(' '));
@@ -65,7 +66,16 @@ export function validateProgress(state) {
     const [key, value] = pending.pop();
     if (OBJECT_PROGRESS.has(key) && (!value || typeof value !== 'object' || Array.isArray(value))) reject();
     if (ARRAY_PROGRESS.has(key) && !Array.isArray(value)) reject();
+    if (key === 'acknowledgedLockfiles' && value.some(item => item?.status !== undefined && !['complete', 'complete-with-exclusions', 'partial', 'unsupported'].includes(item.status))) reject();
     if (key === 'product' && value !== null && (typeof value !== 'string' || value.length > 500)) reject();
+    if (key === 'recordPage') {
+      if (value.schemaVersion !== 1 || typeof value.metadataSignature !== 'string' || !/^[a-f0-9]{64}$/.test(value.metadataSignature)
+        || typeof value.cycleStartedAt !== 'string' || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(value.cycleStartedAt) || !Number.isFinite(Date.parse(value.cycleStartedAt))) reject();
+      for (const field of ['globalOffset', 'nextGlobalOffset', 'sbomOffset', 'nextSbomOffset', 'pendingGlobals', 'pendingSboms']) {
+        if (!Number.isSafeInteger(value[field]) || value[field] < 0 || value[field] > 1000000) reject();
+      }
+      if (value.nextGlobalOffset < value.globalOffset || value.nextSbomOffset < value.sbomOffset) reject();
+    }
     // GitHubの修正版は文字列、Homebrew/OSVの修正版一覧は配列になる。
     if (key === 'fixed' && value !== null && typeof value !== 'string' && (!Array.isArray(value) || value.some(item => typeof item !== 'string' && (!item || typeof item !== 'object' || Array.isArray(item))))) reject();
     if (DATES.has(key) && value !== null && (typeof value !== 'string' || !/^\d{4}-\d\d-\d\d(?:T[\d:.]+Z)?$/.test(value) || !Number.isFinite(Date.parse(value)))) reject();

@@ -7,10 +7,20 @@ import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createStateStore } from '../scripts/state-store.mjs';
-import { parseRunnerArgs, projectProgress } from '../scripts/configuration.mjs';
+import { parseRunnerArgs, projectProgress, validateConfiguration } from '../scripts/configuration.mjs';
 import { validateTranslationContent } from '../scripts/translation-validation.mjs';
 import { deliverTranslation } from '../scripts/deliver-translation.mjs';
 
+test('malformed package page offsets cannot skip unchecked records on resume', () => {
+  // Arrange
+  const page = { schemaVersion: 1, cycleStartedAt: '2026-11-03T00:00:00Z', metadataSignature: 'a'.repeat(64),
+    globalOffset: 0, nextGlobalOffset: 324, sbomOffset: 0, nextSbomOffset: 0, pendingGlobals: 0, pendingSboms: 1 };
+  const changes = [{ pendingGlobals: -1 }, { pendingSboms: 0.5 }, { nextGlobalOffset: 1000001 }, { globalOffset: 325 },
+    { metadataSignature: 'invalid' }, { metadataSignature: { toString: null } }, { cycleStartedAt: '2026-11-03' }, { schemaVersion: 2 }];
+  // Act / Assert
+  for (const change of changes) assert.throws(() => validateConfiguration({ packageContinuation: { recordPage: { ...page, ...change } } }, '/Users/fixture'), error => error.diagnostic.code === 'MSS_STATE');
+  assert.throws(() => validateConfiguration({ packageContinuation: { acknowledgedLockfiles: [{ path: '/Users/fixture/Projects/fixture.lock', sourceIdentity: 'fixture', status: 'complete-and-clean' }] } }, '/Users/fixture'), error => error.diagnostic.code === 'MSS_STATE');
+});
 const identityProvider = async () => ({ status: 'live', start: 'fixture-start', boot: 'fixture-boot' });
 const canonicalText = 'Security report: 2026-11-03. CVE-2026-1234. Version 1.2.3. 2 records.\n[Source](https://www.cisa.gov/example)\n[Evidence](evidence.json)';
 const translatedText = 'Informe de seguridad: 2026-11-03. CVE-2026-1234. Versión 1.2.3. 2 registros.\n[Fuente](https://www.cisa.gov/example)\n[Evidencia](evidence.json)\n';
@@ -125,7 +135,9 @@ test('new source history, distro identity, query dates and language survive a co
     sourceContinuations: { 'GitHub Advisory reviewed': { url: 'https://api.github.com/advisories?after=fixture', window,
       items: [{ id: 'CVE-2026-1234', sourceId: 'github-reviewed', categories: ['linux'], fetchedAt: '2026-11-03T00:00:00Z', datePrecision: 'day', dateSemantics: 'published', ongoing: false, distribution: 'debian', distributionRelease: '12', fixed: null, secret: 'SENTINEL_SECRET' }],
       backlog: [{ url: 'https://api.github.com/advisories?after=older', window, items: [] }] } },
-    packageContinuation: { query: { queries: [{ key: 'fixture', fingerprint: 'fixture', pageToken: null, complete: true, vulns: [], queriedAt: '2026-11-03T00:00:00Z', historyScope: 'osv-all-records-for-exact-version' }] } },
+    packageContinuation: { query: { queries: [{ key: 'fixture', fingerprint: 'fixture', pageToken: null, complete: true, vulns: [], queriedAt: '2026-11-03T00:00:00Z', historyScope: 'osv-all-records-for-exact-version' }] },
+      recordPage: { schemaVersion: 1, cycleStartedAt: '2026-11-03T00:00:00Z', metadataSignature: 'a'.repeat(64), globalOffset: 0, nextGlobalOffset: 324, sbomOffset: 0, nextSbomOffset: 0, pendingGlobals: 0, pendingSboms: 1, secret: 'SENTINEL_SECRET' },
+      acknowledgedLockfiles: [{ path: '/Users/fixture/Projects/fixture.lock', sourceIdentity: 'fixture', status: 'unsupported', secret: 'SENTINEL_SECRET' }] },
     assessmentSnapshot: [{ id: 'CVE-2026-1234', product: 'OpenSSL', status: '可能性高', observedAt: '2026-11-03T00:00:00Z',
       package: { name: 'openssl', ecosystem: 'Debian:12', distribution: 'debian', distributionRelease: '12', sourcePackage: 'openssl', sourceVersion: '3.0.14-1~deb12u2', binaryName: 'libssl3', binaryVersion: '3.0.14-1~deb12u2', architecture: 'arm64', purlType: 'deb', provenanceStatus: 'verified-public-record', distributionConflict: false } }],
   };
@@ -142,6 +154,8 @@ test('new source history, distro identity, query dates and language survive a co
   assert.equal(actual.assessmentSnapshot[0].package.sourceVersion, '3.0.14-1~deb12u2');
   assert.equal(actual.assessmentSnapshot[0].observedAt, '2026-11-03T00:00:00Z');
   assert.equal(actual.assessmentSnapshot[0].product, 'OpenSSL');
+  assert.deepEqual(actual.packageContinuation.recordPage, { schemaVersion: 1, cycleStartedAt: '2026-11-03T00:00:00Z', metadataSignature: 'a'.repeat(64), globalOffset: 0, nextGlobalOffset: 324, sbomOffset: 0, nextSbomOffset: 0, pendingGlobals: 0, pendingSboms: 1 });
+  assert.deepEqual(actual.packageContinuation.acknowledgedLockfiles, [{ path: '/Users/fixture/Projects/fixture.lock', sourceIdentity: 'fixture', status: 'unsupported' }]);
   assert.equal(actual.locale.requestedLanguage, 'es');
   assert.equal((await fs.readFile(path.join(saved.evidenceDirectory, 'continuation.json'), 'utf8')).includes('SENTINEL'), false);
 });

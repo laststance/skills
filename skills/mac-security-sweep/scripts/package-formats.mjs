@@ -5,7 +5,7 @@ import { SweepError, safeDiagnostic } from './diagnostics.mjs';
 
 const DEFINITIONS = [
   ['npm', ['package-lock.json', 'npm-shrinkwrap.json'], '1/2/3', 'npm', 'https://docs.npmjs.com/cli/v11/configuring-npm/package-lock-json'],
-  ['pnpm', ['pnpm-lock.yaml'], '5/6/9 subset', 'npm', 'https://github.com/pnpm/spec/blob/master/lockfile/9.0.md'],
+  ['pnpm', ['pnpm-lock.yaml'], '5/6/9 subset; 1/2 documents', 'npm', 'https://github.com/pnpm/pnpm/blob/main/pnpm/docs/lockfile.md'],
   ['yarn', ['yarn.lock'], 'classic/berry subset', 'npm', 'https://yarnpkg.com/advanced/lexicon#lockfile'],
   ['bun', ['bun.lock'], 'JSONC 1/2', 'npm', 'https://bun.sh/docs/pm/lockfile'],
   ['bun-binary', ['bun.lockb'], 'detected only', 'npm', 'https://bun.sh/docs/pm/lockfile'],
@@ -36,6 +36,11 @@ const PUBLIC_HOSTS = {
   RubyGems: new Set(['rubygems.org']), Maven: new Set(['repo.maven.apache.org', 'repo1.maven.org']),
   NuGet: new Set(['api.nuget.org', 'www.nuget.org']), Pub: new Set(['pub.dev', 'pub.dartlang.org']),
 };
+
+/** 意図的に未対応とした構文だけを有限診断へ変換する。形式検証の各guardが呼び、JS実装例外は変換しない。
+ * @example throw unsupportedSyntax()
+ */
+function unsupportedSyntax() { return new SweepError('FORMAT', { cause: 'unsupported', operation: 'packages' }); }
 
 /** 発見と解析が同じ形式表を使う。{@link extractLockfile}とinventoryから呼ぶ。 @example identifyFormat('Cargo.lock') */
 export function identifyFormat(filename) { return FORMAT_CAPABILITIES.find(format => format.files.includes(path.basename(filename))) || null; }
@@ -90,7 +95,7 @@ function strictJson(text) {
       const frame = stack.at(-1);
       if (text[next] === ':' && frame?.object) {
         const key = JSON.parse(text.slice(start, index + 1));
-        if (frame.keys.has(key)) throw new Error('duplicate');
+        if (frame.keys.has(key)) throw unsupportedSyntax();
         frame.keys.add(key);
       }
     }
@@ -141,8 +146,8 @@ export function parseJsonc(text) {
 function scalar(value) {
   const text = value.trim();
   if (text.startsWith('"')) return boundedJson(text);
-  if (text.startsWith("'")) { if (!/^'(?:[^']|'')*'$/.test(text)) throw new Error('scalar'); return text.slice(1, -1).replace(/''/g, "'"); }
-  if (/[\x00-\x1f]/.test(text) || /^(?:[&*!>|]|\{\{|\$\{)/.test(text)) throw new Error('scalar');
+  if (text.startsWith("'")) { if (!/^'(?:[^']|'')*'$/.test(text)) throw unsupportedSyntax(); return text.slice(1, -1).replace(/''/g, "'"); }
+  if (/[\x00-\x1f]/.test(text) || /^(?:[&*!>|]|\{\{|\$\{)/.test(text)) throw unsupportedSyntax();
   return text.replace(/\s+#.*$/, '').trim();
 }
 
@@ -151,26 +156,62 @@ function validateYamlKeys(text) {
   const frames = [];
   for (const line of text.split('\n')) {
     if (/^\s*(?:#.*)?$/.test(line)) continue;
-    if (/^(?:---|\.\.\.)\s*$/.test(line)) throw new Error('yaml-documents');
+    if (/^(?:---|\.\.\.)(?:[ \t]|$)/.test(line) || /^%/.test(line)) throw unsupportedSyntax();
     const mapping = line.match(/^( *)(\S.*?):(?:\s|$)/);
     if (!mapping) continue;
+    // mapping値のalias/tagだけを拒否し、workspace:*などscalar内のcolonを読み違えない。
+    if (/^[&*!]/.test(line.slice(mapping[0].length).trimStart())) throw unsupportedSyntax();
     const indent = mapping[1].length;
     while (frames.length && frames.at(-1).indent > indent) frames.pop();
     if (!frames.length || frames.at(-1).indent < indent) frames.push({ indent, keys: new Set() });
     const selector = mapping[2].match(/^("(?:[^"\\]|\\.)*"),\s*(?:"(?:[^"\\]|\\.)*"(?:,\s*)?)+$/)?.[1];
     const key = scalar(selector || mapping[2]);
-    if (frames.at(-1).keys.has(key)) throw new Error('duplicate');
+    if (frames.at(-1).keys.has(key)) throw unsupportedSyntax();
     frames.at(-1).keys.add(key);
     // flow mapの由来に関係するkeyも重複を拒否する。複雑なflowは未対応として閉じる。
     const originKeys = [...line.matchAll(/(?:[,{]\s*)("(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|[A-Za-z_][A-Za-z0-9_-]*)\s*:/g)].map(match => scalar(match[1]));
-    if (new Set(originKeys).size !== originKeys.length) throw new Error('duplicate');
-    if (/[{,]\s*[!&*?]/.test(line) || /\s:\s*[{,]/.test(line)) throw new Error('yaml-flow');
+    if (new Set(originKeys).size !== originKeys.length) throw unsupportedSyntax();
+    if (/[{,]\s*[!&*?]/.test(line) || /\s:\s*[{,]/.test(line)) throw unsupportedSyntax();
   }
+}
+
+/** pnpmのboot/projectを別々のmappingとして検証する。{@link extractLockfile}は両方を同じ有限record枠へ収める。
+ * @example pnpmDocuments("---\nlockfileVersion: '9.0'\npackages: {}\n")
+ */
+function pnpmDocuments(text) {
+  const documents = text.split(/^---[ \t]*\r?$/m);
+  // 先頭markerの前はコメントと空白だけ許す。空documentや3document以上は受け入れない。
+  if (documents.length > 1 && documents[0].split('\n').every(line => /^\s*(?:#.*)?$/.test(line))) documents.shift();
+  if (documents.length > 2 || documents.some(document => document.split('\n').every(line => /^\s*(?:#.*)?$/.test(line)))) throw unsupportedSyntax();
+  let expectedSchema;
+  for (const document of documents) {
+    validateYamlKeys(document);
+    const schema = scalar(document.match(/^lockfileVersion:\s*(.+)$/m)?.[1] || '');
+    if (!/^(?:5(?:\.\d+)?|6(?:\.0)?|9(?:\.0)?)$/.test(schema) || expectedSchema !== undefined && schema !== expectedSchema) throw unsupportedSyntax();
+    expectedSchema = schema;
+  }
+  return documents;
+}
+
+/** packagesを省略したlockを、importerが全て明示的な空mappingの場合だけ空として扱う。pnpmの形式分岐が呼ぶ。
+ * @example emptyPnpmImporters('lockfileVersion: 9\nimporters:\n  .: {}\n')
+ */
+function emptyPnpmImporters(document) {
+  // 未対応のroot keyや引用したpackages欄を、依存なしとして読み飛ばさない。
+  if (document.split('\n').some(line => /^\S/.test(line) && !/^#/.test(line)
+    && !/^(?:lockfileVersion|settings|importers|snapshots|overrides|catalogs|packageExtensionsChecksum):/.test(line))) return false;
+  if (/^(?:dependencies|devDependencies|optionalDependencies|configDependencies|packageManagerDependencies):/m.test(document)
+    || /^snapshots:/m.test(document) && !/^snapshots:\s*\{\}\s*$/m.test(document)) return false;
+  if (/^importers:\s*\{\}\s*$/m.test(document)) return true;
+  const section = document.split(/^importers:\s*$/m)[1]?.split(/^\S/m)[0];
+  if (section === undefined) return false;
+  const lines = section.split('\n').filter(line => !/^\s*(?:#.*)?$/.test(line));
+  return lines.length > 0 && lines.every(line => /^ {2}\S.*:\s*\{\}\s*$/.test(line));
 }
 
 /** resolutionのflat flow mapだけを構文どおり読む。文字列内・入れ子のtarballを由来へ誤結合しない。 @example flatYamlMap('{tarball: https://registry.npmjs.org/a.tgz}') */
 function flatYamlMap(input) {
-  if (!input.startsWith('{') || !input.endsWith('}')) throw new Error('yaml-flow');
+  if (!input.startsWith('{') || !input.endsWith('}')) throw unsupportedSyntax();
   const fields = new Map();
   let index = 1;
   const end = input.length - 1;
@@ -183,30 +224,54 @@ function flatYamlMap(input) {
         return scalar(input.slice(start, index));
       }
     }
-    throw new Error('yaml-flow-string');
+    throw unsupportedSyntax();
   };
   while (index < end) {
     while (/\s/.test(input[index]) && index < end) index += 1;
     if (index >= end) break;
     let key;
     if (['"', "'"].includes(input[index])) key = quoted();
-    else { const match = input.slice(index).match(/^[A-Za-z_][A-Za-z0-9_-]*/); if (!match) throw new Error('yaml-flow-key'); key = match[0]; index += key.length; }
+    else { const match = input.slice(index).match(/^[A-Za-z_][A-Za-z0-9_-]*/); if (!match) throw unsupportedSyntax(); key = match[0]; index += key.length; }
     while (/\s/.test(input[index]) && index < end) index += 1;
-    if (input[index++] !== ':' || fields.has(key)) throw new Error('yaml-flow-key');
+    if (input[index++] !== ':' || fields.has(key)) throw unsupportedSyntax();
     while (/\s/.test(input[index]) && index < end) index += 1;
     let value;
     if (['"', "'"].includes(input[index])) value = quoted();
     else {
       const start = index;
-      while (index < end && input[index] !== ',') { if (/[{}\[\]"']/.test(input[index])) throw new Error('yaml-flow-nested'); index += 1; }
+      while (index < end && input[index] !== ',') { if (/[{}\[\]"']/.test(input[index])) throw unsupportedSyntax(); index += 1; }
       value = scalar(input.slice(start, index));
     }
     fields.set(key, value);
-    if (fields.size > 100) throw new Error('yaml-flow-capacity');
+    if (fields.size > 100) throw unsupportedSyntax();
     while (/\s/.test(input[index]) && index < end) index += 1;
-    if (index < end && input[index++] !== ',') throw new Error('yaml-flow');
+    if (index < end && input[index++] !== ',') throw unsupportedSyntax();
   }
   return fields;
+}
+
+/** TOML文字列内の等号をkey代入と混同しない。{@link validateTomlSubset}が限定構文の検証に使う。
+ * @example tomlAssignment('  "python_version == 3.13",')
+ */
+function tomlAssignment(line) {
+  let quote = null, escaped = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (quote) {
+      if (escaped) escaped = false;
+      else if (quote === '"' && char === '\\') escaped = true;
+      else if (char === quote) quote = null;
+      continue;
+    }
+    if (char === '#') break;
+    if (char === '"' || char === "'") { quote = char; continue; }
+    if (char === '=') {
+      const key = line.slice(0, index);
+      return /^[^#{}\[\],]+$/.test(key) ? key.trim() : null;
+    }
+  }
+  if (quote) throw new SweepError('FORMAT', { cause: 'unsupported', operation: 'packages' });
+  return null;
 }
 
 /** 読めないTOMLの同義keyやmultiline文字列をファイル単位で拒否する。由来の部分読取を防ぐ。 @example validateTomlSubset(text) */
@@ -215,24 +280,23 @@ function validateTomlSubset(text) {
   let section = '', instance = 0;
   for (const line of text.split('\n')) {
     if (/^\s*(?:#.*)?$/.test(line)) continue;
-    if (/['"]{3}/.test(line)) throw new Error('toml-multiline');
+    if (/['"]{3}/.test(line)) throw unsupportedSyntax();
     if (/^\s*\[/.test(line) && !/^\s*\[\s*$/.test(line)) {
       const table = line.match(/^(\[{1,2})([A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*)(\]{1,2})\s*(?:#.*)?$/);
-      if (!table || table[1].length !== table[3].length) throw new Error('toml-table');
+      if (!table || table[1].length !== table[3].length) throw unsupportedSyntax();
       if (table[1] === '[[') instance += 1;
       section = `${instance}:${table[2]}`;
       continue;
     }
     // 標準keyのquoted/dotted/空白付き表現を無視して公開版だけ採用しない。
-    const assignment = line.match(/^([^#{}\[\],]+?)\s*=/);
-    if (assignment) {
-      const key = assignment[1].trim();
-      if (!/^[A-Za-z0-9_-]+$/.test(key) || /^\s/.test(line)) throw new Error('toml-key');
+    const key = tomlAssignment(line);
+    if (key !== null) {
+      if (!/^[A-Za-z0-9_-]+$/.test(key) || /^\s/.test(line)) throw unsupportedSyntax();
       const identity = `${section}:${key}`;
-      if (keys.has(identity)) throw new Error('duplicate');
+      if (keys.has(identity)) throw unsupportedSyntax();
       keys.add(identity);
     }
-    if (/[{,]\s*["'](?:[^"']|\\.)*["']\s*=/.test(line) || /[{,]\s*[A-Za-z0-9_-]+\s*\./.test(line)) throw new Error('toml-inline-key');
+    if (/[{,]\s*["'](?:[^"']|\\.)*["']\s*=/.test(line) || /[{,]\s*[A-Za-z0-9_-]+\s*\./.test(line)) throw unsupportedSyntax();
   }
 }
 
@@ -244,18 +308,18 @@ function yamlBlocks(text, section, indent) {
   let active = section === null, current = null;
   for (const line of lines) {
     if (/^\s*(?:#.*)?$/.test(line)) continue;
-    if (/\t/.test(line) || /^\s*[&*!]/.test(line) || /^\s*<<\s*:/.test(line)) throw new Error('yaml');
+    if (/\t/.test(line) || /^\s*[&*!]/.test(line) || /^\s*<<\s*:/.test(line)) throw unsupportedSyntax();
     if (section !== null && /^\S/.test(line)) { active = line === `${section}:`; current = null; continue; }
     if (!active) continue;
     const match = line.match(new RegExp(`^ {${indent}}(\\S.*):(?:\\s*(\\{\\}))?\\s*$`));
     if (match) {
       const firstYarnSelector = section === null ? match[1].match(/^("(?:[^"\\]|\\.)*"),\s*(?:"(?:[^"\\]|\\.)*"(?:,\s*)?)+$/)?.[1] : null;
       current = { key: scalar(firstYarnSelector || match[1]), lines: [] };
-      if (keys.has(current.key)) throw new Error('duplicate');
+      if (keys.has(current.key)) throw unsupportedSyntax();
       keys.add(current.key); output.push(current);
     }
     else if (current && line.startsWith(' '.repeat(indent + 1))) current.lines.push(line);
-    else if (line.trim()) throw new Error('yaml');
+    else if (line.trim()) throw unsupportedSyntax();
   }
   return output;
 }
@@ -263,10 +327,10 @@ function yamlBlocks(text, section, indent) {
 /** TOML package blockの単純値だけを読む。source欄の未知表現は送信許可へ使わない。 @example tomlValue(block,'name') */
 function tomlValue(block, key) {
   const matches = [...block.matchAll(new RegExp(`^${key}\\s*=\\s*(.+?)\\s*$`, 'gm'))];
-  if (matches.length > 1) throw new Error('duplicate');
+  if (matches.length > 1) throw unsupportedSyntax();
   if (!matches.length) return undefined;
   const quoted = matches[0][1].match(/^("(?:[^"\\]|\\.)*"|'[^']*')\s*(?:#.*)?$/)?.[1];
-  if (!quoted) throw new Error('toml-string');
+  if (!quoted) throw unsupportedSyntax();
   return scalar(quoted);
 }
 
@@ -284,6 +348,8 @@ export function extractLockfile(filename, content, options = {}) {
     if (ecosystem === 'SwiftURL' && (!/^[A-Za-z0-9_.-]{1,200}$/.test(name || '') || !/^[v0-9][A-Za-z0-9.+_-]{0,119}$/.test(version || ''))) { invalid += 1; return; }
     records.push({ ...pkg, recordId, sourceIdentity, origin, queryEligible: origin === 'public' && ecosystem !== 'SwiftURL', policyExcluded: ['private', 'git', 'local'].includes(origin),
       evidenceKind: 'lock-declaration', optional: extra.optional === true, platform: extra.platform === 'darwin' ? 'darwin' : extra.platform === 'other' ? 'other' : 'unknown',
+      ...(Number.isInteger(extra.pnpmDocument) ? { pnpmDocument: extra.pnpmDocument } : {}),
+      ...(Number.isSafeInteger(extra.resolutionRevision) ? { resolutionRevision: extra.resolutionRevision, ...(extra.resolutionRevision > 0 ? { reasonCode: 'registry-revision-unassessed' } : {}) } : {}),
       ...(ecosystem === 'SwiftURL' ? { exclusion: 'git-url-privacy' } : {}) });
     if (records.length > 15000) throw new SweepError('CAPACITY', { cause: 'limit', operation: 'packages' });
   };
@@ -291,14 +357,14 @@ export function extractLockfile(filename, content, options = {}) {
   try {
     if (typeof content !== 'string' || Buffer.byteLength(content) > LIMITS.lock || content.includes('\0') || content.split('\n').some(line => line.length > LIMITS.line)) throw new SweepError('CAPACITY', { cause: 'limit', operation: 'packages' });
     const id = format.id;
-    if (['pnpm', 'yarn', 'dart'].includes(id)) validateYamlKeys(content);
+    if (['yarn', 'dart'].includes(id)) validateYamlKeys(content);
     if (id === 'npm') {
       const data = strictJson(content);
       const version = data.lockfileVersion ?? (data.packages ? 2 : null);
-      if (![1, 2, 3].includes(version)) throw new Error('schema');
+      if (![1, 2, 3].includes(version)) throw unsupportedSyntax();
       if (version === 1) {
         const visit = (dependencies, parent = '', depth = 0) => {
-          if (depth > 32 || !dependencies || typeof dependencies !== 'object' || Array.isArray(dependencies)) throw new Error('schema');
+          if (depth > 32 || !dependencies || typeof dependencies !== 'object' || Array.isArray(dependencies)) throw unsupportedSyntax();
           for (const [name, pkg] of Object.entries(dependencies)) {
             const key = `${parent}/node_modules/${name}`;
             add(key, name, pkg.version, 'npm', classifyOrigin(pkg.resolved, 'npm', pkg.private === true || pkg.link === true), { optional: pkg.optional });
@@ -307,7 +373,7 @@ export function extractLockfile(filename, content, options = {}) {
         };
         visit(data.dependencies || {});
       } else {
-        if (!data.packages || Array.isArray(data.packages)) throw new Error('schema');
+        if (!data.packages || Array.isArray(data.packages)) throw unsupportedSyntax();
         for (const [location, pkg] of Object.entries(data.packages)) {
           if (!location) continue;
           add(location, pkg.name || location.split('node_modules/').at(-1), pkg.version, 'npm', classifyOrigin(pkg.resolved, 'npm', pkg.private === true || pkg.link === true),
@@ -315,27 +381,37 @@ export function extractLockfile(filename, content, options = {}) {
         }
       }
     } else if (id === 'pnpm') {
-      const schema = scalar(content.match(/^lockfileVersion:\s*(.+)$/m)?.[1] || '');
-      if (!/^(?:5(?:\.\d+)?|6(?:\.0)?|9(?:\.0)?)$/.test(schema)) throw new Error('schema');
-      if (!/^packages:\s*(?:\{\})?\s*$/m.test(content)) throw new Error('schema');
-      for (const block of yamlBlocks(content, 'packages', 2)) {
-        const clean = block.key.replace(/^\//, '').replace(/\([^)]*\)/g, '');
-        const parsed = clean.match(/^(@[^/]+\/[^@/]+|[^@/]+)@([^/]+)$/) || clean.match(/^(@[^/]+\/[^/]+|[^/]+)\/([^/]+)$/);
-        if (!parsed) { invalid += 1; continue; }
-        const body = block.lines.join('\n');
-        const flow = body.match(/^    resolution:\s*(\{[^\n]*\})\s*$/m)?.[1];
-        const resolution = body.match(/^    resolution:\s*\n((?:^ {6,}[^\n]*\n?)+)/m)?.[1] || '';
-        const url = flow ? flatYamlMap(flow).get('tarball') : resolution.match(/^ {6}tarball:\s*("[^"]*"|'[^']*'|[^,}\s]+)/m)?.[1];
-        const privateSource = /(?:^\s+|[,{]\s*)(?:type:\s*(?:git|directory)|repo:|directory:|private:\s*true)/m.test(body);
-        add(block.key, parsed[1], parsed[2], 'npm', classifyOrigin(url && scalar(url), 'npm', privateSource));
+      const documents = pnpmDocuments(content);
+      for (let documentIndex = 0; documentIndex < documents.length; documentIndex += 1) {
+        const document = documents[documentIndex];
+        if (!/^packages:\s*(?:\{\})?\s*$/m.test(document) && (/^packages:/m.test(document) || !emptyPnpmImporters(document))) throw unsupportedSyntax();
+        // 同名recordもdocumentを跨いで上書きせず、各record自身のresolutionだけを読む。
+        for (const block of yamlBlocks(document, 'packages', 2)) {
+          const clean = block.key.replace(/^\//, '').replace(/\([^)]*\)/g, '');
+          const parsed = clean.match(/^(@[^/]+\/[^@/]+|[^@/]+)@([^/]+)$/) || clean.match(/^(@[^/]+\/[^/]+|[^/]+)\/([^/]+)$/);
+          if (!parsed) { invalid += 1; continue; }
+          const body = block.lines.join('\n');
+          const flow = body.match(/^    resolution:\s*(\{[^\n]*\})\s*$/m)?.[1];
+          const resolution = body.match(/^    resolution:\s*\n((?:^ {6,}[^\n]*\n?)+)/m)?.[1] || '';
+          const flowFields = flow ? flatYamlMap(flow) : null;
+          const url = flowFields ? flowFields.get('tarball') : resolution.match(/^ {6}tarball:\s*("[^"]*"|'[^']*'|[^,}\s]+)/m)?.[1];
+          const revisionValue = flowFields ? flowFields.get('revision') : resolution.match(/^ {6}revision:\s*(.+)$/m)?.[1];
+          const revision = revisionValue === undefined ? undefined : Number(scalar(revisionValue));
+          if (revisionValue !== undefined && (!/^(?:0|[1-9]\d*)$/.test(scalar(revisionValue)) || !Number.isSafeInteger(revision))) throw unsupportedSyntax();
+          const privateSource = /(?:^\s+|[,{]\s*)(?:type:\s*(?:git|directory)|repo:|directory:|private:\s*true)/m.test(body);
+          const origin = classifyOrigin(url && scalar(url), 'npm', privateSource);
+          // 正のrevisionは別配布物なので、通常のname/version照会へ縮約しない。
+          add(`${documentIndex}:${block.key}`, parsed[1], parsed[2], 'npm', revision > 0 && origin === 'public' ? 'unknown' : origin,
+            { pnpmDocument: documentIndex, resolutionRevision: revision });
+        }
       }
     } else if (id === 'yarn') {
       const berry = /^__metadata:/m.test(content);
       for (const block of yamlBlocks(content, null, 0)) {
         if (block.key === '__metadata') continue;
         const body = block.lines.join('\n');
-        if (!berry && /^  ["']/m.test(body)) throw new Error('yarn-quoted-field');
-        if ((body.match(/^  (?:resolved|resolution)(?::|\s)/gm) || []).length > 1 || (body.match(/^  version(?::|\s)/gm) || []).length !== 1) throw new Error('duplicate');
+        if (!berry && /^  ["']/m.test(body)) throw unsupportedSyntax();
+        if ((body.match(/^  (?:resolved|resolution)(?::|\s)/gm) || []).length > 1 || (body.match(/^  version(?::|\s)/gm) || []).length !== 1) throw unsupportedSyntax();
         const version = body.match(/^  version(?::|\s)\s*(.+)$/m)?.[1];
         let name = block.key.match(/^(@[^/]+\/[^@]+|[^@,]+)@/)?.[1];
         const aliased = block.key.match(/@npm:(@[^/]+\/[^@]+|[^@,]+)@/);
@@ -352,7 +428,7 @@ export function extractLockfile(filename, content, options = {}) {
       }
     } else if (id === 'bun') {
       const data = parseJsonc(content);
-      if (![1, 2].includes(data.lockfileVersion) || !data.packages || Array.isArray(data.packages)) throw new Error('schema');
+      if (![1, 2].includes(data.lockfileVersion) || !data.packages || Array.isArray(data.packages)) throw unsupportedSyntax();
       for (const [key, tuple] of Object.entries(data.packages)) {
         if (!Array.isArray(tuple) || tuple.length < 2 || tuple.length > 4) { invalid += 1; continue; }
         const parsed = tuple[0]?.match(/^(@[^/]+\/[^@]+|[^@]+)@(.+)$/);
@@ -362,19 +438,19 @@ export function extractLockfile(filename, content, options = {}) {
       validateTomlSubset(content);
       const header = content.split(/^\[\[package\]\]\s*$/m)[0];
       const declared = header.match(/^version\s*=\s*(\d+)\s*$/m)?.[1];
-      if ((header.match(/^version\s*=/gm) || []).length > 1) throw new Error('duplicate');
-      if (id === 'cargo' && declared && !['1', '2', '3', '4'].includes(declared) || id === 'uv' && declared !== '1') throw new Error('schema');
+      if ((header.match(/^version\s*=/gm) || []).length > 1) throw unsupportedSyntax();
+      if (id === 'cargo' && declared && !['1', '2', '3', '4'].includes(declared) || id === 'uv' && declared !== '1') throw unsupportedSyntax();
       const poetrySchema = content.match(/^lock-version\s*=\s*"([^"\n]+)"\s*$/m)?.[1];
-      if ((content.match(/^lock-version\s*=/gm) || []).length > 1) throw new Error('duplicate');
-      if (id === 'poetry' && poetrySchema && !/^[12]\.\d+$/.test(poetrySchema)) throw new Error('schema');
+      if ((content.match(/^lock-version\s*=/gm) || []).length > 1) throw unsupportedSyntax();
+      if (id === 'poetry' && poetrySchema && !/^[12]\.\d+$/.test(poetrySchema)) throw unsupportedSyntax();
       const blocks = content.split(/^\[\[package\]\]\s*$/m).slice(1);
-      if (!blocks.length && !/\[\[package\]\]/.test(content)) throw new Error('schema');
+      if (!blocks.length && !/\[\[package\]\]/.test(content)) throw unsupportedSyntax();
       let index = 0;
       for (const block of blocks) {
         const main = block.split(/^\[/m)[0];
         const sourceFields = (main.match(/^source\s*=/gm) || []).length;
         const sourceTables = (block.match(/^\[package\.source\]\s*$/gm) || []).length;
-        if (sourceFields > 1 || sourceTables > 1 || sourceFields && sourceTables || id !== 'poetry' && sourceTables || id === 'poetry' && sourceFields) throw new Error('duplicate');
+        if (sourceFields > 1 || sourceTables > 1 || sourceFields && sourceTables || id !== 'poetry' && sourceTables || id === 'poetry' && sourceFields) throw unsupportedSyntax();
         const name = tomlValue(main, 'name'), version = tomlValue(main, 'version');
         let origin = 'unknown';
         if (id === 'cargo') {
@@ -395,12 +471,12 @@ export function extractLockfile(filename, content, options = {}) {
       }
     } else if (id === 'pipfile') {
       const data = strictJson(content);
-      if (data._meta?.['pipfile-spec'] !== undefined && data._meta['pipfile-spec'] !== 6) throw new Error('schema');
-      if (!data._meta || !Object.hasOwn(data, 'default') && !Object.hasOwn(data, 'develop')) throw new Error('schema');
-      if (!Array.isArray(data._meta.sources)) throw new Error('schema');
+      if (data._meta?.['pipfile-spec'] !== undefined && data._meta['pipfile-spec'] !== 6) throw unsupportedSyntax();
+      if (!data._meta || !Object.hasOwn(data, 'default') && !Object.hasOwn(data, 'develop')) throw unsupportedSyntax();
+      if (!Array.isArray(data._meta.sources)) throw unsupportedSyntax();
       const sources = new Map();
       for (const source of data._meta.sources) {
-        if (!source || typeof source.name !== 'string' || sources.has(source.name)) throw new Error('duplicate');
+        if (!source || typeof source.name !== 'string' || sources.has(source.name)) throw unsupportedSyntax();
         sources.set(source.name, source.url);
       }
       for (const group of ['default', 'develop']) {
@@ -411,7 +487,7 @@ export function extractLockfile(filename, content, options = {}) {
       for (const [index, line] of content.split('\n').entries()) {
         if (!line.trim()) continue;
         const parsed = line.match(/^(\S+)\s+(v\S+?)(?:\/go\.mod)?\s+h1:[A-Za-z0-9+/=]+$/);
-        if (!parsed) throw new Error('schema');
+        if (!parsed) throw unsupportedSyntax();
         add(index, parsed[1], parsed[2], 'Go');
       }
     } else if (id === 'requirements') {
@@ -430,7 +506,7 @@ export function extractLockfile(filename, content, options = {}) {
       }
     } else if (id === 'composer') {
       const data = strictJson(content);
-      if (!Array.isArray(data.packages) || data['packages-dev'] !== undefined && !Array.isArray(data['packages-dev'])) throw new Error('schema');
+      if (!Array.isArray(data.packages) || data['packages-dev'] !== undefined && !Array.isArray(data['packages-dev'])) throw unsupportedSyntax();
       for (const group of ['packages', 'packages-dev']) for (const [index, pkg] of (data[group] || []).entries()) {
         const origin = pkg.dist?.url && ['zip', 'tar'].includes(pkg.dist.type) ? classifyOrigin(pkg.dist.url, 'Packagist', pkg.private === true) : pkg.source ? 'git' : 'unknown';
         add(`${group}/${index}`, pkg.name, pkg.version, 'Packagist', origin);
@@ -440,37 +516,37 @@ export function extractLockfile(filename, content, options = {}) {
       for (const [index, line] of content.split('\n').entries()) {
         if (/^[A-Z][A-Z ]*$/.test(line)) { section = line; remotes = []; specs = false; continue; }
         const remote = line.match(/^  remote: (.+)$/)?.[1];
-        if (remote) { if (specs) throw new Error('schema'); remotes.push(remote); }
+        if (remote) { if (specs) throw unsupportedSyntax(); remotes.push(remote); }
         if (line === '  specs:') specs = true;
         const pkg = line.match(/^    ([A-Za-z0-9_.-]+) \(([^)]+)\)$/);
         if (specs && pkg) add(index, pkg[1], pkg[2], 'RubyGems', section === 'GEM' && remotes.length === 1 ? classifyOrigin(remotes[0], 'RubyGems') : section === 'GIT' ? 'git' : section === 'PATH' ? 'local' : 'unknown');
       }
-      if (!/^GEM|^GIT|^PATH/m.test(content)) throw new Error('schema');
+      if (!/^GEM|^GIT|^PATH/m.test(content)) throw unsupportedSyntax();
     } else if (id === 'gradle') {
       for (const [index, line] of content.split('\n').entries()) {
         if (!line.trim() || line.startsWith('#') || line.startsWith('empty=')) continue;
         const parsed = line.match(/^([A-Za-z0-9_.-]+):([A-Za-z0-9_.-]+):([^=\s]+)=[A-Za-z0-9_,.\-]*$/);
-        if (!parsed) throw new Error('schema');
+        if (!parsed) throw unsupportedSyntax();
         add(index, `${parsed[1]}:${parsed[2]}`, parsed[3], 'Maven');
       }
     } else if (id === 'nuget') {
       const data = strictJson(content);
-      if (![1, 2].includes(data.version) || !data.dependencies || Array.isArray(data.dependencies)) throw new Error('schema');
+      if (![1, 2].includes(data.version) || !data.dependencies || Array.isArray(data.dependencies)) throw unsupportedSyntax();
       for (const [framework, entries] of Object.entries(data.dependencies)) for (const [name, pkg] of Object.entries(entries)) {
         if (['Direct', 'Transitive'].includes(pkg.type)) add(`${framework}/${name}`, name, pkg.resolved, 'NuGet');
         else if (pkg.type !== 'Project') invalid += 1;
       }
     } else if (id === 'nuget-config') {
-      if (/<!DOCTYPE|<!ENTITY/i.test(content) || !/<packages(?:\s[^>]*)?>[\s\S]*<\/packages>/.test(content)) throw new Error('schema');
+      if (/<!DOCTYPE|<!ENTITY/i.test(content) || !/<packages(?:\s[^>]*)?>[\s\S]*<\/packages>/.test(content)) throw unsupportedSyntax();
       const tags = [...content.matchAll(/<package\s+([^>]+)\/\s*>/g)];
       const remaining = content.replace(/<\?xml[^>]*\?>/g, '').replace(/<!--[^]*?-->/g, '').replace(/<\/?packages(?:\s[^>]*)?>/g, '').replace(/<package\s+[^>]+\/\s*>/g, '').trim();
-      if (remaining) throw new Error('schema');
+      if (remaining) throw unsupportedSyntax();
       for (const [index, tag] of tags.entries()) {
         const name = tag[1].match(/\bid="([^"&<>]+)"/)?.[1], version = tag[1].match(/\bversion="([^"&<>]+)"/)?.[1];
         add(index, name, version, 'NuGet');
       }
     } else if (id === 'dart') {
-      if (!/^packages:\s*(?:\{\})?\s*$/m.test(content)) throw new Error('schema');
+      if (!/^packages:\s*(?:\{\})?\s*$/m.test(content)) throw unsupportedSyntax();
       for (const block of yamlBlocks(content, 'packages', 2)) {
         const body = block.lines.join('\n');
         const version = body.match(/^    version:\s*(.+)$/m)?.[1];
@@ -483,9 +559,9 @@ export function extractLockfile(filename, content, options = {}) {
       }
     } else if (id === 'swift') {
       const data = strictJson(content);
-      if (![1, 2, 3].includes(data.version)) throw new Error('schema');
+      if (![1, 2, 3].includes(data.version)) throw unsupportedSyntax();
       const pins = data.version === 1 ? data.object?.pins : data.pins;
-      if (!Array.isArray(pins)) throw new Error('schema');
+      if (!Array.isArray(pins)) throw unsupportedSyntax();
       for (const [index, pin] of pins.entries()) add(index, pin.identity || pin.package, pin.state?.version, 'SwiftURL', 'git');
     }
     const packages = records.filter(record => record.queryEligible).map(({ name, version, ecosystem }) => ({ name, version, ecosystem }));

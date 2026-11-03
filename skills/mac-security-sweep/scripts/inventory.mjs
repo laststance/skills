@@ -43,6 +43,7 @@ export async function inventory(options = {}) {
         && previous.files.every(item => acknowledgements.get(item.path) === item.sourceIdentity)
         && Array.isArray(packages?.pendingLockfiles) && packages.pendingLockfiles.length === 0
         && Array.isArray(packages?.pendingPackageKeys) && packages.pendingPackageKeys.length === 0
+        && (!packages?.recordPage || packages.recordPage.pendingGlobals === 0 && packages.recordPage.pendingSboms === 0)
         && Array.isArray(options.previous?.advisoryContinuation?.pendingIds) && options.previous.advisoryContinuation.pendingIds.length === 0;
       const discovery = await discoverProjects(context, previous, { ...options.discoveryLimits, pageAcknowledged });
       for (const key of ['projectRoots', 'lockfiles', 'packageRoots', 'projectDirectories', 'rootCandidates']) result[key] = discovery[key];

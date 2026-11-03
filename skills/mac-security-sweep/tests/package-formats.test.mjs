@@ -6,6 +6,154 @@ import path from 'node:path';
 import { FORMAT_CAPABILITIES, LOCKFILE_NAMES, extractLockfile, validPackage, parseJsonc } from '../scripts/package-formats.mjs';
 import { scanPackages } from '../scripts/scan-packages.mjs';
 
+test('pnpmのbootとprojectを両方読み同名同版でもdocument間の公開・private由来を混同しない', async t => {
+  // Arrange
+  const home = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'sweep-pnpm-documents-')));
+  t.after(() => fs.rm(home, { recursive: true, force: true }));
+  const root = path.join(home, 'Projects'); await fs.mkdir(root);
+  const file = path.join(root, 'pnpm-lock.yaml');
+  const content = `---
+lockfileVersion: '9.0'
+importers:
+  .:
+    packageManagerDependencies:
+      fixture-manager:
+        specifier: workspace:*
+        version: link:../fixture-manager
+packages:
+  alpha@1.0.0:
+    resolution: {tarball: https://registry.npmjs.org/alpha.tgz}
+  bravo@1.0.0:
+    resolution: {tarball: https://user:SENTINEL_SECRET@private.example/bravo.tgz}
+---
+lockfileVersion: '9.0'
+importers:
+  .: {}
+packages:
+  alpha@1.0.0:
+    resolution: {tarball: https://user:SENTINEL_SECRET@private.example/alpha.tgz}
+  bravo@1.0.0:
+    resolution: {tarball: https://registry.npmjs.org/bravo.tgz}
+`;
+  await fs.writeFile(file, content);
+  const sent = [];
+  const fetchImpl = async (_url, init) => { const body = JSON.parse(init.body); sent.push(body); return Response.json({ results: body.queries.map(() => ({})) }); };
+  // Act
+  const result = await scanPackages({ scanRoots: [root], lockfiles: [{ path: file }] }, { home, noScanner: true, inspectInstallations: false, fetchImpl });
+  // Assert
+  assert.deepEqual(result.records.map(record => [record.name, record.pnpmDocument, record.origin, record.queryEligible]), [
+    ['alpha', 0, 'public', true], ['bravo', 0, 'private', false], ['alpha', 1, 'private', false], ['bravo', 1, 'public', true],
+  ]);
+  assert.equal(new Set(result.records.map(record => record.recordId)).size, 4);
+  assert.deepEqual(sent, [{ queries: [{ package: { name: 'alpha', ecosystem: 'npm' }, version: '1.0.0' }, { package: { name: 'bravo', ecosystem: 'npm' }, version: '1.0.0' }] }]);
+  assert.equal(JSON.stringify([result, sent]).includes('SENTINEL'), false);
+  assert.equal(JSON.stringify(sent).includes(home), false);
+});
+
+test('pnpmの3document・schema不一致・alias・空documentを一部だけ解析して公開送信しない', () => {
+  // Arrange
+  const single = "lockfileVersion: '9.0'\npackages:\n  example@1.0.0:\n    resolution: {tarball: https://registry.npmjs.org/example.tgz}\n";
+  const cases = [
+    `---\n${single}---\n${single}---\n${single}`,
+    `---\n${single}---\n${single.replace("'9.0'", "'6.0'")}`,
+    `---\n${single}---\n${single.replace('resolution: {', 'resolution: &SENTINEL_SECRET {')}`,
+    `---\n${single}---\n`,
+    `${single}--- # ambiguous second document\nimporters:\n  .: {}\n`,
+    `---\n${single}---\n${single.replace('resolution: {tarball: https://registry.npmjs.org/example.tgz}', 'resolution: *SENTINEL_SECRET')}`,
+  ];
+  // Act
+  const results = cases.map(content => extractLockfile('pnpm-lock.yaml', content));
+  // Assert
+  for (const result of results) {
+    assert.equal(result.status, 'unsupported');
+    assert.equal(result.diagnostic.code, 'MSS_FORMAT');
+    assert.deepEqual(result.records, []);
+    assert.deepEqual(result.packages, []);
+    assert.equal(JSON.stringify(result).includes('SENTINEL'), false);
+  }
+});
+
+test('pnpmの2documentを合わせて15000件を超えたら単一lockの上限を維持する', () => {
+  // Arrange
+  const packages = Array.from({ length: 7501 }, (_, index) => `  example-${index}@1.0.0:\n    resolution: {tarball: https://registry.npmjs.org/example.tgz}\n`).join('');
+  const document = `lockfileVersion: '9.0'\npackages:\n${packages}`;
+  // Act
+  const result = extractLockfile('pnpm-lock.yaml', `---\n${document}---\n${document}`);
+  // Assert
+  assert.equal(result.status, 'unsupported');
+  assert.equal(result.diagnostic.code, 'MSS_CAPACITY');
+  assert.deepEqual(result.records, []);
+  assert.deepEqual(result.packages, []);
+});
+
+test('packagesを省略した空pnpm lockは受理し依存記録や引用したpackagesがあれば空と推定しない', () => {
+  // Arrange
+  const empty = "lockfileVersion: '9.0'\nsettings:\n  autoInstallPeers: true\nimporters:\n  .: {}\n";
+  const cases = [empty, empty.replace('  .: {}', '  .:\n    dependencies:\n      example:\n        version: 1.0.0'), `${empty}'packages':\n  example@1.0.0: {}\n`, `${empty}packages: unexpected\n`];
+  // Act
+  const results = cases.map(content => extractLockfile('pnpm-lock.yaml', content));
+  // Assert
+  assert.deepEqual(results.map(result => result.status), ['complete', 'unsupported', 'unsupported', 'unsupported']);
+  assert.deepEqual(results.map(result => result.packages), [[], [], [], []]);
+});
+
+test('pnpmの正のregistry revisionは記録を保持して通常versionのOSV照会から外す', () => {
+  // Arrange
+  const content = `lockfileVersion: '9.0'
+packages:
+  original@1.0.0:
+    resolution: {tarball: https://registry.npmjs.org/original.tgz}
+  zero@1.0.0:
+    resolution: {tarball: https://registry.npmjs.org/zero.tgz, revision: 0}
+  replaced@1.0.0:
+    resolution:
+      tarball: https://registry.npmjs.org/replaced.tgz
+      revision: 1
+`;
+  // Act
+  const result = extractLockfile('pnpm-lock.yaml', content);
+  const malformed = ['-1', '1.5', '999999999999999999', 'unexpected'].map(value => extractLockfile('pnpm-lock.yaml', content.replace('revision: 1', `revision: ${value}`)));
+  // Assert
+  assert.deepEqual(result.packages.map(pkg => pkg.name), ['original', 'zero']);
+  assert.equal(result.status, 'partial');
+  assert.deepEqual(result.records.map(record => [record.name, record.resolutionRevision ?? null, record.queryEligible]), [['original', null, true], ['zero', 0, true], ['replaced', 1, false]]);
+  assert.equal(result.records[2].origin, 'unknown');
+  assert.equal(result.records[2].policyExcluded, false);
+  assert.equal(result.records[2].reasonCode, 'registry-revision-unassessed');
+  for (const invalid of malformed) { assert.equal(invalid.status, 'unsupported'); assert.deepEqual(invalid.packages, []); }
+});
+
+test('uvの複数行arrayにある比較文字列を代入と誤認せずpublicとprivateの同名記録を区別する', () => {
+  // Arrange
+  const content = `version = 1
+resolution-markers = [
+  "python_full_version >= '3.14'",
+  'python_version == "3.13"',
+]
+[[package]]
+name = "example"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+  { name = "another", marker = "python_version == '3.13'" },
+]
+[[package]]
+name = "example"
+version = "1.0.0"
+source = { registry = "https://user:SENTINEL_SECRET@private.example/simple" }
+`;
+  // Act
+  const result = extractLockfile('uv.lock', content);
+  const ambiguous = extractLockfile('uv.lock', `${content}"source" = { registry = "https://pypi.org/simple" }\n`);
+  // Assert
+  assert.equal(result.status, 'complete-with-exclusions');
+  assert.deepEqual(result.packages, [{ name: 'example', version: '1.0.0', ecosystem: 'PyPI' }]);
+  assert.deepEqual(result.records.map(record => [record.origin, record.queryEligible]), [['public', true], ['private', false]]);
+  assert.equal(JSON.stringify(result).includes('SENTINEL'), false);
+  assert.equal(ambiguous.status, 'unsupported');
+  assert.equal(ambiguous.diagnostic.code, 'MSS_FORMAT');
+});
+
 const PUBLIC_CASES = [
   { label: 'npm v1', file: 'package-lock.json', name: 'example', version: '1.2.3', ecosystem: 'npm', body: JSON.stringify({ lockfileVersion: 1, dependencies: { example: { version: '1.2.3', resolved: 'https://registry.npmjs.org/example/-/example-1.2.3.tgz' } } }) },
   { label: 'npm v2', file: 'package-lock.json', name: 'example', version: '1.2.3', ecosystem: 'npm', body: JSON.stringify({ lockfileVersion: 2, packages: { 'node_modules/example': { version: '1.2.3', resolved: 'https://registry.npmjs.org/example/-/example-1.2.3.tgz' } } }) },

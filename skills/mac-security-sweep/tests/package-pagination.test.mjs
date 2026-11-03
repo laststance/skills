@@ -143,11 +143,12 @@ test('同じ未知名でもglobal例外だけを既定許可しopt-out時は何�
   const second = await scanPackages(inventory, { home, fetchImpl, noScanner: true, queryUnknownGlobals: false });
   // Assert
   assert.deepEqual(payloads, [{ queries: [{ package: { name: '@internal/fixture', ecosystem: 'npm' }, version: '1.0.0' }] }]);
-  assert.deepEqual(first.records.map(record => record.queryEligible), [false, true]);
+  assert.deepEqual(first.records.map(record => [record.evidenceKind, record.queryEligible]).sort(), [['installed-metadata', true], ['lock-declaration', false]]);
   assert.equal(second.packages.length, 0);
-  assert.equal(second.records[1].origin, 'unknown');
-  assert.equal(second.records[1].policyExcluded, true);
-  assert.equal(second.records[1].exclusion, 'unknown-global-opt-out');
+  const excludedGlobal = second.records.find(record => record.evidenceKind === 'installed-metadata');
+  assert.equal(excludedGlobal.origin, 'unknown');
+  assert.equal(excludedGlobal.policyExcluded, true);
+  assert.equal(excludedGlobal.exclusion, 'unknown-global-opt-out');
   assert.equal(assessmentStatus(second.coverage), 'partial'); // 未確認lockはglobalのopt-outと別に残す。
   assert.equal(JSON.stringify([first, second, payloads]).includes('SENTINEL'), false);
 });
@@ -294,5 +295,5 @@ test('公開lockと同名同版でもprivate globalは実物確認へ転用し�
   const result = matchInventory(inventory, { items: [] }, { packages }); await context.close();
   // Assert
   assert.equal(result.findings.find(finding => finding.package?.name === 'example').impact.kind, 'declared-only');
-  assert.deepEqual(packages.findings[0].occurrences.map(record => record.queryEligible), [true, false]);
+  assert.deepEqual(packages.findings[0].occurrences.map(record => [record.evidenceKind, record.queryEligible]).sort(), [['installed-metadata', false], ['lock-declaration', true]]);
 });

@@ -26,6 +26,8 @@
 
 能力registryは `scripts/package-formats.mjs`。npm v1/v2/v3、pnpm、Yarn classic/Berry、Bun text、Cargo、Go、Poetry/Pipfile/uv/requirements、Composer、Gemfile、Gradle、NuGet packages.lock/packages.config、Dart pubspecを発見・静的解析する。
 
+pnpmは、同じschemaの起動用・プロジェクト用データを含む最大2文書を、それぞれ独立して解析する。[公式のロックファイル仕様](https://github.com/pnpm/pnpm/blob/main/pnpm/docs/lockfile.md)に従い、片方だけを読んで依存なしとは判断しない。文書間で由来を混ぜず、通常版とは異なる `resolution.revision > 0` は記録を保って未確認・外部照会対象外とする。
+
 解析成功と照会許可は別。各依存recordの名前・版・source file/record identity・由来を保持する。同名同版の公開recordが私有recordを公開扱いに変更することはない。既定registryを証明できないGo/Gradle/NuGetやsource欠落は由来不明のまま。関連ファイルを使う場合も、その正確な依存recordへの束縛が必要で、単なるrepository一覧では足りない。
 
 Bun binaryは検出未対応。Swift Package.resolvedは解析するが、OSV SwiftURLはGit URLを名前として必要とするため、このスキルの送信方針では照会除外。[OSV ecosystem定義](https://ossf.github.io/osv-schema/#affectedpackage-field)

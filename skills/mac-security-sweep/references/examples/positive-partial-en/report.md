@@ -29,7 +29,7 @@ The inspected system was not modified. Matching affected conditions does not est
 
 | Assessment | Component and version / advisory | Observation | Severity | Fixed version | Scope | Evidence |
 |---|---|---|---|---|---|---|
-| Likely affected | example 1.0.0; GHSA-fixture-positive | Lockfile/global record; installation unconfirmed | High | Check the affected conditions in the primary source | npm | OSV lists the exact queried package version as affected. Check its recorded origin and use before assessing reachability. 2026-11-03T00:00:00.000Z [Source](https://osv.dev/vulnerability/GHSA-fixture-positive) |
+| Likely affected | example 1.0.0; GHSA-fixture-positive | Lockfile/global record; installation unconfirmed | High | Check the affected conditions in the primary source | See the evidence for the precise scope | OSV lists the exact queried package version as affected. Check its recorded origin and use before assessing reachability. npm / 2026-11-03T00:00:00.000Z [Source](https://osv.dev/vulnerability/GHSA-fixture-positive) |
 
 ### Components outside the assessed affected conditions
 
