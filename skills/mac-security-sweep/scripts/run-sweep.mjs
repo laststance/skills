@@ -166,7 +166,7 @@ export async function runSweep(options = {}) {
       status: evidence.runStatus, runStatus: evidence.runStatus, collectionCoverage: evidence.collectionCoverage, queryCoverage: evidence.queryCoverage,
       impact: evidence.impact, elapsedMs: Math.max(0, context.monotonicNow() - startedMonotonic), findings: evidence.match.counts || {},
       newsItems: evidence.news.items?.length || 0, scannedPackages: evidence.packages.packages?.length || 0,
-      codes: [...new Set(evidence.diagnostics.map(item => item.code))], diagnostics: evidence.diagnostics };
+      codes: [...new Set(evidence.diagnostics.map(item => item.code))], diagnostics: evidence.diagnostics.map(item => localizeDiagnostic(item, locale.canonicalLanguage)) };
   } finally {
     closing = true;
     await context?.close();

@@ -184,6 +184,7 @@ test('a failed news attempt is saved before inventory and remains a visible sour
   assert.equal(exit, 2); assert.deepEqual(events, ['news', 'inventory']);
   assert.equal(receipt.queryCoverage, 'partial'); assert.equal(receipt.collectionCoverage, 'complete');
   assert.equal(receipt.diagnostics[0].operation, 'news'); assert.equal(receipt.diagnostics[0].trace.module, 'sources');
+  assert.doesNotMatch(receipt.diagnostics.map(item => `${item.message} ${item.recovery}`).join('\n'), /[\u3040-\u30ff\u3400-\u9fff]/);
   assert.equal(out.join('').includes('SENTINEL'), false); assert.equal(err.join('').includes('SENTINEL'), false);
   assert.match(err.join(''), /MSS_INTERNAL \(news\)/);
 });

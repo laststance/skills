@@ -127,6 +127,63 @@ test('installed high-impact news ranks before equally severe unrelated news whil
   assert.match(report.split('### Ruby')[1], /Low unrelated Ruby issue/);
 });
 
+test('withdrawn advisories stay dated in category lists and never become priority news', () => {
+  // Arrange
+  const items = [{ id: 'GHSA-withdrawn-fixture', title: 'Withdrawn fixture issue', severity: 'CRITICAL', knownExploited: true,
+    withdrawnAt: '2026-11-02T00:00:00Z', categories: ['mac-apps'], url: 'https://github.com/advisories/GHSA-withdrawn-fixture' }];
+  // Act / Assert
+  for (const language of ['EN', 'JA']) {
+    const report = renderReport({ locale: resolveLanguage({ explicit: language }), news: { items }, match: { newsAssessment: [{ id: items[0].id, relevance: '関係あり' }] } });
+    assert.doesNotMatch(report, /\*\*Withdrawn fixture issue\*\*/);
+    assert.match(report, /Withdrawn fixture issue/);
+    assert.match(report, /2026-11-02T00:00:00Z/);
+    assert.match(report, language === 'EN' ? /Not used to establish current exposure/ : /現在の影響判定には使用しません/);
+  }
+});
+
+test('crowded highlights retain both locally relevant high-impact news and unrelated known exploitation', () => {
+  // Arrange
+  for (const localExploitation of [false, true]) {
+    const items = [
+      ...Array.from({ length: 8 }, (_, index) => ({ id: `GHSA-local-fixture${index}`, title: `Local high issue ${index}`, severity: 'HIGH', knownExploited: localExploitation, relevance: '関係あり', categories: ['mac-apps'] })),
+      ...Array.from({ length: 8 }, (_, index) => ({ id: `CVE-2026-500${index}`, title: `World exploitation ${index}`, knownExploited: true, relevance: '関係なし', categories: ['linux'] })),
+    ];
+    // Act
+    const report = renderReport({ locale: resolveLanguage({ explicit: 'EN' }), news: { items }, match: { newsAssessment: items } });
+    const highlights = report.split('## Important news\n')[1].split('## Results for this Mac')[0];
+    // Assert
+    assert.equal((highlights.match(/^- \*\*/gm) || []).length, 5);
+    assert.match(highlights, /Local high issue 0/);
+    assert.match(highlights, /World exploitation 0/);
+    assert.match(highlights, /Known exploitation/);
+  }
+});
+
+test('English Xcode release checks describe the observed product without calling it macOS', () => {
+  // Arrange
+  const finding = { id: 'security-update:xcode:27.2', product: 'Xcode', version: '27.2', status: '影響なし', category: 'update-review',
+    reasonCode: 'security-release-reached', historyScope: 'official-release-index', sources: ['https://support.apple.com/en-us/149589'] };
+  // Act
+  const report = renderReport({ locale: resolveLanguage({ explicit: 'EN' }), match: { findings: [finding] } });
+  // Assert
+  assert.match(report, /Xcode 27\.2/);
+  assert.match(report, /The observed product version has reached this security release/);
+  assert.match(report, /Product version observed/);
+  assert.doesNotMatch(report, /Update advisory needs review/);
+  assert.doesNotMatch(report, /The observed macOS version has reached this security release/);
+});
+
+test('Japanese affected rows preserve observed installation without claiming execution or compromise', () => {
+  // Arrange
+  const finding = { id: 'GHSA-installed-fixture', package: { name: 'example', ecosystem: 'npm' }, version: '1.0.0', status: '可能性高',
+    reasonCode: 'package-osv-affected', reason: '実際のインストール・実行・到達可能性・攻撃 IOC は未確認', impact: { installationConfirmed: true } };
+  // Act
+  const report = renderReport({ locale: resolveLanguage({ explicit: 'JA' }), match: { findings: [finding] } });
+  // Assert
+  assert.match(report, /インストール済みのバージョンを確認しましたが、入手元・実行条件・侵害の有無は別途確認が必要/);
+  assert.doesNotMatch(report, /実際のインストール・実行・到達可能性・攻撃 IOC は未確認/);
+});
+
 test('news-only checkpoints explicitly preserve unstarted local checks and a previous positive', () => {
   // Arrange
   const data = { locale: resolveLanguage({ explicit: 'EN' }), stageStatus: { inventory: 'pending' }, status: 'partial', collectionCoverage: 'partial', queryCoverage: 'partial',

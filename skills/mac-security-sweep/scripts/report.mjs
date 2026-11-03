@@ -156,7 +156,8 @@ function observationText(finding, language) {
   const ja = language === 'ja';
   if (finding.status === '確定') return ja ? '固有IOCの一致' : 'Specific indicator match';
   if (finding.incident) return ja ? '悪性配布の疑い・実行は未確認' : 'Suspected malicious distribution; execution unconfirmed';
-  if (finding.category === 'update-review') return ja ? '更新情報の確認が必要' : 'Update advisory needs review';
+  if (finding.category === 'update-review') return finding.status === '影響なし'
+    ? (ja ? '製品バージョンを確認' : 'Product version observed') : (ja ? '更新情報の確認が必要' : 'Update advisory needs review');
   if (finding.impact?.executionConfirmed) return ja ? '対象の実行とバージョンを確認' : 'Target execution and version observed';
   if (finding.impact?.installationConfirmed) return ja ? 'インストール済みのバージョンを確認' : 'Installed version observed';
   if (finding.impact?.kind === 'image-record-affected') return ja ? '画像digestと結合したSBOM記録' : 'SBOM record bound to the image digest';
@@ -166,6 +167,7 @@ function observationText(finding, language) {
 /** Retain exact negative-proof bounds and identifiers in both native languages. @example findingReason(finding, 'en') */
 function findingReason(finding, language) {
   const t = TEXT[language];
+  if (language === 'ja' && finding.reasonCode === 'package-osv-affected' && finding.impact?.installationConfirmed) return 'OSVが対象版と判定。インストール済みのバージョンを確認しましたが、入手元・実行条件・侵害の有無は別途確認が必要です。';
   if (language === 'ja' && finding.reason) return escapeReportText(finding.reason);
   if (language === 'ja') return finding.status === '影響なし' ? '記録した対象は、この告知の対象条件に該当しません。バージョン・配布元・確認範囲は証拠を参照してください。'
     : finding.status === '可能性高' ? '記録した対象が脆弱性の対象条件に一致しています。実際の利用条件と侵害の有無は追加確認が必要です。'
@@ -191,7 +193,7 @@ function findingReason(finding, language) {
     'rule-inventory-partial': 'The required product inventory is incomplete.',
     'rule-version-not-affected': 'The observed product version falls outside this verified advisory range.',
     'security-release-review': 'A security update exists for the observed macOS major version. Review its advisory; the release index alone does not establish CVE applicability.',
-    'security-release-reached': 'The observed macOS version has reached this security release. This comparison does not establish the absence of other vulnerabilities.',
+    'security-release-reached': 'The observed product version has reached this security release. This comparison does not establish the absence of other vulnerabilities.',
     'ioc-file-match': 'The exact file matched a published indicator. This establishes file presence, not execution or theft.',
     'ioc-supporting-match': 'Supporting indicator metadata matched. More evidence is required to establish compromise.',
   };
@@ -238,20 +240,35 @@ function importantNews(items, findings, details, now) {
   const positive = new Set(findings.filter(finding => ['確定', '可能性高'].includes(finding.status)).map(finding => aliases[finding.advisoryId || finding.id] || finding.advisoryId || finding.id));
   const scored = items.map(item => {
     const detail = detailFor(item, details);
+    // 取り下げ済み告知は保存するが、現在対応すべき重要ニュースには選ばない。
+    if (item.withdrawnAt || item.withdrawn || detail?.withdrawn) return null;
     const severity = normalizeSeverity(item.severity || detail?.severity);
     const local = item.relevance === '関係あり' || positive.has(aliases[item.id] || item.id);
     const active = item.knownExploited === true || detail?.knownExploited === true;
     const timestamp = Date.parse(item.updatedAt || item.modified || item.publishedAt || '');
     return { ...item, knownExploited: active, _id: aliases[item.id] || item.id || item.url, _local: local, _severity: severity,
-      _rank: [local && severity.rank >= 3 ? 1 : 0, active ? 1 : 0, severity.rank, local ? 1 : 0,
+      _rank: [local && (active || item.advisoryType === 'malware') ? 1 : 0, active ? 1 : 0, severity.rank, local ? 1 : 0,
         Number.isFinite(timestamp) && timestamp <= now && timestamp >= now - 86400000 ? 1 : 0, Number.isFinite(timestamp) ? timestamp : 0] };
-  }).filter(item => item._local || item.knownExploited || item._severity.rank >= 3);
+  }).filter(item => item && (item._local || item.knownExploited || item._severity.rank >= 3));
   scored.sort((left, right) => {
     for (let index = 0; index < left._rank.length; index++) if (left._rank[index] !== right._rank[index]) return right._rank[index] - left._rank[index];
     return String(left._id).localeCompare(String(right._id));
   });
   const seen = new Set();
-  return scored.filter(item => { if (seen.has(item._id)) return false; seen.add(item._id); return true; }).slice(0, 5);
+  const unique = scored.filter(item => { if (seen.has(item._id)) return false; seen.add(item._id); return true; });
+  const highlights = unique.slice(0, 5);
+  const local = unique.find(item => item._local && (item.knownExploited || item._severity.rank >= 3));
+  const global = unique.find(item => !item._local && (item.knownExploited || item._severity.rank >= 4));
+  // どちらかの大量の記事で、重要なローカル情報または世界の悪用情報を押し出さない。
+  for (const candidate of [local, global].filter(Boolean)) {
+    if (highlights.some(item => item._id === candidate._id)) continue;
+    if (highlights.length === 5) {
+      const index = highlights.findLastIndex(item => item !== local && item !== global);
+      highlights.splice(index, 1);
+    }
+    highlights.push(candidate);
+  }
+  return unique.filter(item => highlights.includes(item));
 }
 
 /** Explain news relevance without promoting product-name matches to exposure or absence proof. @example relevanceText(item, 'en') */
@@ -280,6 +297,7 @@ function newsLine(item, language, important = false) {
   const t = TEXT[language];
   const title = escapeReportText(item.title || item.id || t.unknown, 260);
   const heading = important ? `**${title}**` : title;
+  if (item.withdrawnAt || item.withdrawn) return `- ${heading}\n  ${language === 'ja' ? '取り下げ済み' : 'Withdrawn'}: ${escapeReportText(item.withdrawnAt || item.withdrawn)}. ${language === 'ja' ? '現在の影響判定には使用しません。' : 'Not used to establish current exposure.'} ${sourceLink(item.url, t.source)}`;
   const known = item.knownExploited ? (language === 'ja' ? '悪用確認あり。' : 'Known exploitation. ') : '';
   const dates = `${t.date}: ${escapeReportText(item.publishedAt || t.unknown)}; ${t.updated}: ${escapeReportText(item.updatedAt || item.modified || t.unknown)}`;
   const source = sourceLink(item.url, t.source);
