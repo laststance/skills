@@ -1,6 +1,6 @@
 # 🛡️ mac-security-sweep: Collect the latest vulnerability reports and check your Mac for signs of compromise
 
-[日本語](../../README.md#mac-security-sweep) | [English](README.en.md)
+[日本語](../../README.md#mac-security-sweep)
 
 ## Install
 
