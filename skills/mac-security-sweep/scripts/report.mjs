@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { aggregateAdvisories, assessmentStatus, coverageKind, normalizeSeverity, prioritizeFindings } from './assessment.mjs';
 import { resolveLanguage, localizeDiagnostic } from './locale.mjs';
+import { newsDateRange, newsWindowStatus } from './news-format.mjs';
 import * as registry from './source-registry.mjs';
 
 const TEXT = Object.freeze({
@@ -245,10 +246,11 @@ function importantNews(items, findings, details, now) {
     const severity = normalizeSeverity(item.severity || detail?.severity);
     const local = item.relevance === '関係あり' || positive.has(aliases[item.id] || item.id);
     const active = item.knownExploited === true || detail?.knownExploited === true;
-    const timestamp = Date.parse(item.updatedAt || item.modified || item.publishedAt || '');
+    const dateRange = newsDateRange(item);
+    const timestamp = Date.parse(dateRange?.start || item.updatedAt || item.modified || item.publishedAt || '');
     return { ...item, knownExploited: active, _id: aliases[item.id] || item.id || item.url, _local: local, _severity: severity,
       _rank: [local && (active || item.advisoryType === 'malware') ? 1 : 0, active ? 1 : 0, severity.rank, local ? 1 : 0,
-        Number.isFinite(timestamp) && timestamp <= now && timestamp >= now - 86400000 ? 1 : 0, Number.isFinite(timestamp) ? timestamp : 0] };
+        dateRange && timestamp >= now - 86400000 && Date.parse(dateRange.endExclusive) <= now + 1 ? 1 : 0, Number.isFinite(timestamp) ? timestamp : 0] };
   }).filter(item => item && (item._local || item.knownExploited || item._severity.rank >= 3));
   scored.sort((left, right) => {
     for (let index = 0; index < left._rank.length; index++) if (left._rank[index] !== right._rank[index]) return right._rank[index] - left._rank[index];
@@ -292,6 +294,15 @@ function relevanceText(item, language) {
   return language === 'ja' ? 'ローカルの対象条件は未確認' : 'Local applicability remains unassessed.';
 }
 
+/** Display the published precision without turning a known month into an invented day. @example newsDateText({publishedMonth:'2026-10'}, 'publishedAt', 'en') */
+function newsDateText(item, field, language) {
+  const range = newsDateRange(item);
+  const month = item[field === 'publishedAt' ? 'publishedMonth' : 'updatedMonth'] || (range?.precision === 'month' && range.field === field ? range.start.slice(0, 7) : null);
+  if (month) return `${escapeReportText(month)} (${language === 'ja' ? '日付は月まで判明' : 'day not provided'})`;
+  if (range?.precision === 'day' && range.field === field) return range.start.slice(0, 10);
+  return escapeReportText(item[field] || (field === 'updatedAt' ? item.modified : null) || TEXT[language].unknown);
+}
+
 /** Keep dates, source links and applicability together in either the highlight or category list. @example newsLine(item, 'en', true) */
 function newsLine(item, language, important = false) {
   const t = TEXT[language];
@@ -299,7 +310,7 @@ function newsLine(item, language, important = false) {
   const heading = important ? `**${title}**` : title;
   if (item.withdrawnAt || item.withdrawn) return `- ${heading}\n  ${language === 'ja' ? '取り下げ済み' : 'Withdrawn'}: ${escapeReportText(item.withdrawnAt || item.withdrawn)}. ${language === 'ja' ? '現在の影響判定には使用しません。' : 'Not used to establish current exposure.'} ${sourceLink(item.url, t.source)}`;
   const known = item.knownExploited ? (language === 'ja' ? '悪用確認あり。' : 'Known exploitation. ') : '';
-  const dates = `${t.date}: ${escapeReportText(item.publishedAt || t.unknown)}; ${t.updated}: ${escapeReportText(item.updatedAt || item.modified || t.unknown)}`;
+  const dates = `${t.date}: ${newsDateText(item, 'publishedAt', language)}; ${t.updated}: ${newsDateText(item, 'updatedAt', language)}`;
   const source = sourceLink(item.url, t.source);
   return `- ${heading}${source ? ` (${source})` : ''}\n  ${dates}. ${label(item.relevance || 'unconfirmed', language)}. ${known}${relevanceText(item, language)}`;
 }
@@ -312,18 +323,95 @@ function undatedNewsText(count, language) {
 
 /** Preserve old receipts without treating undated or out-of-window items as current news. Category rendering calls this after collection. @example categoryNewsCounts(items, receipt, news.window) */
 function categoryNewsCounts(items, receipt, window) {
-  const timestamps = items.map(item => Date.parse(item.updatedAt || item.modified || item.publishedAt || ''));
+  const statuses = items.map(item => newsWindowStatus(item, window));
   const since = Date.parse(window?.since || ''), until = Date.parse(window?.until || '');
-  const undatedCount = Number.isSafeInteger(receipt?.undatedCount) && receipt.undatedCount >= 0 ? receipt.undatedCount : timestamps.filter(value => !Number.isFinite(value)).length;
+  const undatedCount = Number.isSafeInteger(receipt?.undatedCount) && receipt.undatedCount >= 0 ? receipt.undatedCount : statuses.filter(value => value === 'undated').length;
   // New receipts provide exact counts; older receipts need an explicit window before dates can be counted.
   const datedItemCount = Number.isSafeInteger(receipt?.datedItemCount) && receipt.datedItemCount >= 0 ? receipt.datedItemCount
-    : Number.isFinite(since) && Number.isFinite(until) ? timestamps.filter(value => value >= since && value <= until).length
+    : Number.isFinite(since) && Number.isFinite(until) ? statuses.filter(value => value === 'confirmed').length
       : items.length ? null : 0;
-  return { undatedCount, datedItemCount };
+  const uncertainItemCount = Number.isSafeInteger(receipt?.uncertainItemCount) && receipt.uncertainItemCount >= 0 ? receipt.uncertainItemCount : statuses.filter(value => value === 'possible').length;
+  const impreciseCount = Number.isSafeInteger(receipt?.impreciseCount) && receipt.impreciseCount >= 0 ? receipt.impreciseCount : items.filter(item => newsDateRange(item)?.precision === 'month').length;
+  const unclassifiedCount = Number.isSafeInteger(receipt?.unclassifiedCount) && receipt.unclassifiedCount >= 0 ? receipt.unclassifiedCount : items.filter(item => item.categoryStatus === 'unconfirmed').length;
+  return { undatedCount, datedItemCount, uncertainItemCount, impreciseCount, unclassifiedCount };
+}
+
+/** Keep timing and product-classification uncertainty separate from a confirmed empty result. @example categoryCountNotes({undatedCount:0,uncertainItemCount:1,impreciseCount:1,unclassifiedCount:0}, 'en') */
+function categoryCountNotes(counts, language) {
+  const ja = language === 'ja', notes = [];
+  if (counts.undatedCount) notes.push(undatedNewsText(counts.undatedCount, language));
+  if (counts.impreciseCount) notes.push(ja ? `${counts.impreciseCount}件は年月のみ判明しています。` : `${counts.impreciseCount} ${counts.impreciseCount === 1 ? 'article is' : 'articles are'} dated only to the month.`);
+  if (counts.uncertainItemCount) notes.push(ja ? `${counts.uncertainItemCount}件は日付の精度が足りず、期間内か確定できません。` : `${counts.uncertainItemCount} ${counts.uncertainItemCount === 1 ? 'article lacks' : 'articles lack'} enough date precision to confirm whether they fall within the discovery window.`);
+  if (counts.unclassifiedCount) notes.push(ja ? `${counts.unclassifiedCount}件は製品・OSの分類が未確認で、その他のニュースに保持しています。` : `${counts.unclassifiedCount} ${counts.unclassifiedCount === 1 ? 'article has' : 'articles have'} unconfirmed product or OS classification and ${counts.unclassifiedCount === 1 ? 'remains' : 'remain'} in general news.`);
+  return notes.join(' ');
+}
+
+// 既存readerの固定説明を有限コードへ対応付け、言語を変えても具体的な未確認範囲を残す。
+const COVERAGE_REASONS = Object.fromEntries([
+  ['discovery-resume', '同じroot実体のfrontier・directory位置を保存し、通常の再実行で継続します。リンク・依存/build配下は探索しません。', 'The same root identity and directory frontier are saved for the next normal run. Symlinks, dependency directories and build output are not explored.'],
+  ['discovery-depth', '探索の深さ上限より下に未確認のdirectoryがあります。後続runでも未確認を保持し、完走後は同じrootを再確認します。', 'Directories below the depth limit remain unassessed across subsequent runs. After completing the traversal, the same roots are checked again.'],
+  ['discovery-page', '現在のpageのみ再確認。以前のpageは保存済みレポートの証拠であり、今回の全件鮮度を意味しません。', 'Only the current discovery page was rechecked. Earlier pages remain evidence from previous saved reports, not fresh observations from this run.'],
+  ['scan-root-excluded', 'ホーム直下の認証領域・Library・リンクは探索対象にできません。', 'Authentication directories directly under the home, Library and symlink roots are excluded from project discovery.'],
+  ['ssh-metadata-only', '鍵・設定本文は読まず、存在・権限・時刻だけを確認します。authorized_keysの行数は本文を開かないためunknownです。', 'Only SSH file existence, permissions and timestamps were checked. Key and configuration contents were not read; the authorized_keys line count remains unknown.'],
+  ['os-status-only', 'status表示だけを使用。Gatekeeperのオンラインassess、権限変更、保護設定の修復は行いません。', 'Only protection status was read. No online Gatekeeper assessment, permission change or protection repair was performed.'],
+  ['os-platform-unsupported', 'macOS以外のOS保護状態は未対応です。', 'Protection-state inspection is unsupported for operating systems other than macOS.'],
+  ['sbom-digest-scope', '既存のCycloneDX/SPDXを画像digestと照合。未結合SBOM・由来未確認のpackageは照会や画像内部の確認完了に使いません。', 'Existing CycloneDX/SPDX records were matched to image digests. Unbound SBOMs and packages of unverified origin cannot establish image-content coverage or authorize queries.'],
+  ['xprotect-metadata-only', 'OSの配置差・権限制限を保持。版metadataだけでは最新性や過去の検知を断定しません。', 'OS layout differences and permission restrictions remain recorded. XProtect version metadata alone does not establish current protection or past detections.'],
+  ['cloud-existence-only', 'クラウド設定は存在のみ。本文・認証値・利用アカウントは取得しません。', 'Only cloud configuration existence was checked. Contents, credentials and account identities were not collected.'],
+  ['application-metadata-only', 'Info.plist・既存の同梱版metadata・署名表示だけを確認。チケットの存在は公証の有効性を証明しません。', 'Only Info.plist, existing bundled-version metadata and signature displays were inspected. The presence of a notarization ticket does not prove that notarization is valid.'],
+  ['editor-reader-unsupported', 'エディタを検出しましたが、この製品の拡張metadata readerは未対応です。', 'The editor was detected, but extension metadata inspection is unsupported for this product.'],
+  ['safari-enablement-unknown', 'Safari appex metadataを確認。有効状態は安全な既存metadataで確認できないためunknownです。', 'Safari appex metadata was inspected. Extension enablement remains unknown because safe existing metadata does not establish it.'],
+  ['background-enablement-unknown', '背景項目の識別子と静的LoginItemsだけを確認。有効状態・権限制限の領域はunknownです。', 'Only background-item identifiers and static LoginItems were inspected. Enablement and permission-restricted areas remain unknown.'],
+  ['cron-hooks-metadata-only', 'cronは行数、shell hookは存在metadataのみ。本文は保存しません。', 'Only cron line counts and shell-hook existence metadata were collected. Their contents were not retained.'],
+  ['network-current-user-tcp', '現在の利用者に見えるTCP接続のみ。UDP・過去の通信・権限制限の領域は未確認です。', 'Only current TCP connections visible to this user were observed. UDP, historical traffic and permission-restricted areas remain unassessed.'],
+  ['parent-process-scope', '親processの稼働は依存のロードやデプロイ版の証拠ではありません。', 'A running parent process does not prove that a dependency was loaded or establish its deployed version.'],
+  ['lock-origin-unverified', '由来未確認・不正recordを未確認として保持。省略された既定registryは公開の根拠にしない', 'Unverified-origin and invalid records remain unassessed. An omitted default registry is not evidence of public origin.'],
+  ['lock-public-records', 'recordに明記された公開配布先と固定版だけを抽出', 'Only exact versions with an explicitly recorded public distribution source were extracted.'],
+  ['lock-private-excluded', '解析済みのprivate/Git/local依存は方針上の対象外。公開由来の固定版だけを照会する', 'Parsed private, Git and local dependencies are excluded by policy. Only exact versions with verified public origin are queried.'],
+  ['record-page-capacity', 'このlockの抽出済みrecordは次の有限ページで照会する', 'The records extracted from this lockfile are deferred to the next bounded query page.'],
+  ['bounded-record-page', 'record合計15000件以内で照会。現在ページの照会・詳細完了後に保留lock/global/SBOMへ進む', 'Each page contains at most 15000 records. Pending lockfile, global and SBOM records follow after the current page queries and advisory details finish.'],
+  ['lock-revalidated-origin', '新規/変更lockの抽出上限とは別に、以前のlockも現在のbounded本文で公開性を再確認', 'Previously seen lockfiles are revalidated against their current bounded contents, independently of the extraction limit for new or changed files.'],
+  ['global-origin-exception', '由来未検証のinstalled-global例外を明示。lock/SBOMには適用しない。queryUnknownGlobals=falseで停止可能', 'The unverified-origin exception applies only to installed-global records, not lockfiles or SBOMs. Set queryUnknownGlobals=false to disable it.'],
+  ['record-origin-separation', '同一名・版でも由来と方針除外を独立保持。未確認を除外によって隠さない', 'Origin and policy exclusions remain separate even for identical names and versions. Exclusions do not conceal unassessed records.'],
+  ['osv-resume-scope', '現在の由来と一致する24時間以内の未完了照会だけ再開。全ページ成功を完了とする', 'Only incomplete queries less than 24 hours old with matching current provenance are resumed. A query is complete only after all its pages succeed.'],
+  ['package-installation-scope', '影響版と名前が一致する実物だけを観測。不在は未使用・未実行の証明にしない', 'Only installed objects matching the affected name and version were observed. Absence does not prove that the package was never used or executed.'],
+  ['ioc-no-verified-rules', 'no-verified-ioc-rules', 'No verified applicable indicator rules are available. Compromise remains unassessed.', '検証済みで適用可能な指標がありません。侵害の有無は未確認です。'],
+  ['ioc-key-contents-excluded', '鍵本文は読みません。未読を無影響の根拠にしません。', 'Key contents were not read. Unread data is not evidence of non-impact.'],
+  ['advisory-details-pending', '現在の許可query結果のIDのみGET。応答ID一致を検証し、未処理詳細を保持', 'Details are fetched only for IDs returned by currently authorized queries. Response IDs are verified and unprocessed details remain pending.'],
+  ['product-source-unsupported', '既知の公式情報源registryに対応がない製品。導入検出のみで脆弱性照合済みとはしない', 'No maintained official-source adapter covers this product. Detecting installation does not establish vulnerability assessment coverage.'],
+  ['product-channel-unverified', '配布チャネルを確認できない。履歴は候補として保持し別チャネルの修正版を適用しない', 'The distribution channel is unverified. Historical entries remain candidates; fixes from another channel are not applied to this product.'],
+  ['product-history-scope', '更新履歴baselineを確認。CVE影響開始版・実行条件の網羅は未確認', 'The release-history baseline was retrieved. Complete CVE affected-version ranges and execution conditions remain unassessed.'],
+  ['product-history-incomplete', '差分フィードまたは取得未完了。導入製品の過去の全脆弱性baselineは未確認', 'Only an incremental feed or incomplete retrieval is available. The installed product’s full vulnerability history remains unassessed.'],
+  ['source-registry-review', '情報源の定義・schema・取得方法は最終確認から30日で再確認。自動登録や任意URL追加は行わない', 'Source definitions, schemas and retrieval methods require review after 30 days. Sources are not registered automatically and arbitrary URLs are not added.'],
+  ['homebrew-record-scope', '公式DBの収録済みpatch修正だけを比較。未収録・cask・custom tapを無脆弱性と判定しない', 'Only patch fixes recorded in the official Homebrew database are compared. Missing entries, casks and custom taps are not declared vulnerability-free.'],
+  ['source-success-history', '情報源の成功と履歴範囲を確認', 'Source retrieval and historical coverage are assessed separately; retrieval alone does not establish complete history.'],
+  ['source-retention-limit', 'Feed retention and update dates are provider-dependent; older omissions remain unknown.', 'Feed retention and update dates depend on the provider. Older omissions remain unassessed.', 'フィードの保存期間と更新日は配信元に依存します。過去の記事の欠落は未確認です。'],
+  ['stage-not-finished', '収集は未完了。完了した観測だけを保存', 'Collection is unfinished. Only completed observations have been saved.'],
+  ['previous-positive-unconfirmed', '以前の陽性を今回の範囲で再確認できないため保持。消失・未走査を解消としない', 'Previous positive evidence is retained because this run could not recheck it. Disappearance or missing coverage does not establish resolution.'],
+  ['rule-review-expired', '出典の検証日が未確認・未来または30日超。影響版・配布元・IOCを再確認する', 'The source verification date is unknown, in the future or over 30 days old. Affected versions, provenance and indicators need renewed review.'],
+  ['ioc-extension-unavailable', '対象拡張の現在の実物を確認できず、hash検査を実施していません。', 'The current target extension could not be confirmed; its hash was not checked.'],
+  ['ioc-root-excluded', '許可された拡張rootの外は未読です。', 'Locations outside the allowed extension root were not read.'],
+  ['ioc-root-unverified', '拡張rootの実体を検証できません。', 'The extension root identity could not be verified.'],
+  ['format-static-unsupported', '検出済み・静的解析未対応', 'The format was detected but static parsing is unsupported.'],
+  ['format-unverified-no-query', '形式・schema・上限を検証できないため、このファイルから送信しない', 'The format, schema or limits could not be validated. No records from this file are sent externally.'],
+  ['osv-page-pending', 'queryごとの追加ページを次回へ保持', 'Additional pages for each query are retained for the next run.'],
+  ['lock-root-excluded', '現在の認可済みproject rootの外側', 'The lockfile is outside the currently authorized project roots.'],
+  ['previous-page-scope', '前ページで解析した同一ファイル。未対応・未確認の判定も保持', 'The same file was parsed on a previous page. Its unsupported and unassessed statuses are preserved.'],
+  ['offline-query-not-run', 'offline指定のため公開照会は未実施', 'Public queries were not performed because offline mode was selected.'],
+  ['reader-not-finished', 'この領域の収集を完了できませんでした。保存された診断コードを確認してください。', 'Collection for this area did not finish. Consult the saved diagnostic code.'],
+].map(([code, original, en, ja = original]) => [code, { original, ja, en }]));
+const COVERAGE_REASON_CODES = new Map(Object.entries(COVERAGE_REASONS).map(([code, text]) => [text.original, code]));
+
+/** Preserve a stable code for existing reader explanations in saved coverage and native reports. @example normalizeCoverageEntry({area:'network',reason:'...'}) */
+export function normalizeCoverageEntry(entry) {
+  if (entry.reasonCode) return entry;
+  const code = COVERAGE_REASON_CODES.get(entry.reason);
+  return code ? { ...entry, reasonCode: code } : entry;
 }
 
 /** Avoid exposing untranslated provider errors while preserving finite recovery context. @example coverageReason(entry, 'en') */
 function coverageReason(entry, language) {
+  entry = normalizeCoverageEntry(entry);
   const reasons = {
     'image-sbom-records-only': ['画像digestと対応するSBOM記録を確認しました。その他の画像内部は未確認です。', 'Only digest-bound SBOM records were assessed. Other image contents remain unassessed.'],
     'image-sbom-missing': ['画像digestと対応するSBOMがなく、画像内部は未確認です。', 'No digest-bound SBOM is available; the image contents remain unassessed.'],
@@ -336,12 +424,17 @@ function coverageReason(entry, language) {
     SOURCE_UNDATED_ITEMS: ['公開日・更新日が不明な記事があり、収集期間内か判定できません。', 'Some articles have no publication or update date; their inclusion in the discovery window is unconfirmed.'],
     PRIMARY_SOURCE_UNDATED_ITEMS: ['取得した記事の日付が不明で、収集期間内か判定できません。', 'The retrieved articles have no publication or update date; their inclusion in the discovery window is unconfirmed.'],
     PRIMARY_SOURCE_FETCHED_WITH_UNDATED_ITEMS: ['公開日・更新日が不明な記事は、収集期間内か判定できません。', 'Articles without publication or update dates cannot be assigned to the discovery window.'],
+    SOURCE_DATE_PRECISION: ['日付の精度が足りない記事を保持しています。収集期間内か確定できないものは件数を分けます。', 'Articles with limited date precision are retained. Uncertain window membership is counted separately.'],
+    PRIMARY_SOURCE_DATE_PRECISION: ['公式情報を取得しましたが、日付の精度が足りず収集期間内か確定できない記事があります。', 'The official source was retrieved, but some article dates are too imprecise to confirm discovery-window membership.'],
+    PRIMARY_SOURCE_CATEGORY_UNCONFIRMED: ['公式情報を取得しましたが、製品・OSを分類できない記事があります。その他のニュースに保持します。', 'The official source was retrieved, but some articles could not be assigned to a product or operating system. They remain in general news.'],
   };
-  const explanation = reasons[entry.reasonCode]?.[language === 'ja' ? 0 : 1];
+  const history = entry.area?.startsWith('news-history:') && entry.reason === 'partial'
+    ? (language === 'ja' ? '過去の情報の取得は未完了です。未取得の告知が残る可能性があります。' : 'Historical retrieval is incomplete. Older advisories may remain unassessed.') : null;
+  const explanation = COVERAGE_REASONS[entry.reasonCode]?.[language] || reasons[entry.reasonCode]?.[language === 'ja' ? 0 : 1] || history;
   if (language === 'ja') return escapeReportText(explanation || entry.reason || entry.reasonCode || TEXT.ja.unknown);
   if (entry.diagnostic) {
     const diagnostic = localizeDiagnostic(entry.diagnostic, language);
-    return `${escapeReportText(diagnostic.code)}: ${escapeReportText(diagnostic.message)} ${escapeReportText(diagnostic.recovery)}`;
+    return `${explanation ? `${escapeReportText(explanation)} ` : ''}${escapeReportText(diagnostic.code)}: ${escapeReportText(diagnostic.message)} ${escapeReportText(diagnostic.recovery)}`;
   }
   if (explanation) return explanation;
   const messages = { excluded: 'Excluded by the read-only collection policy.', deferred: 'Deferred because this run reached a limit.', failed: 'The check could not be completed.',
@@ -416,7 +509,7 @@ export function renderReport(data) {
     `${t.findingsCount}: ${findings.length}. ${evidence}. ${t.dependencyLimit}`, '', `### ${t.iocs}`, '');
   if (!(iocs.checks || []).length) lines.push(t.noIoc, '');
   else lines.push(`| ${ja ? '種類' : 'Type'} | ${ja ? '対象' : 'Target'} | ${ja ? '一致' : 'Match'} | ${t.detail} |`, '|---|---|---|---|', ...(iocs.checks || []).map(check => {
-    const result = check.status === 'unavailable' || check.status === 'unsupported' ? 'unconfirmed' : check.matched ? 'matched' : 'no-match';
+    const result = check.matched === true ? 'matched' : check.matched === false ? 'no-match' : 'unconfirmed';
     const reasons = {
       'ioc-path-present': 'The exact indicator path exists.', 'ioc-path-absent': 'The exact indicator path was absent during this check.',
       'ioc-target-unreadable': 'The exact target could not be read.', 'ioc-exact-hash-compared': 'The exact target hash was compared; file contents were not retained.',
@@ -433,7 +526,7 @@ export function renderReport(data) {
   lines.push(t.iocLimit, '', `## ${t.ongoing}`, '');
   if (Object.keys(changes).length) lines.push(ja ? `前回との差分: 新規 ${(changes.new || []).length} 件、継続 ${(changes.continuing || []).length} 件、再確認による解消 ${(changes.resolved || []).length} 件、今回は確認不能 ${(changes.unconfirmed || []).length} 件。`
     : `Changes: ${(changes.new || []).length} new, ${(changes.continuing || []).length} continuing, ${(changes.resolved || []).length} resolved by recheck, ${(changes.unconfirmed || []).length} not rechecked.`, '');
-  const older = items.filter(item => item.ongoing === true || (Date.parse(item.updatedAt || item.modified || item.publishedAt || '') < Date.parse(news.window?.since || '') && (item.knownExploited || item.relevance === '関係あり')));
+  const older = items.filter(item => item.ongoing === true || (Date.parse(newsDateRange(item)?.endExclusive || '') <= Date.parse(news.window?.since || '') && (item.knownExploited || item.relevance === '関係あり')));
   if (!(changes.unconfirmed || []).length && !older.length) lines.push(t.noOngoing, '');
   for (const old of changes.unconfirmed || []) lines.push(`- ${targetText(old, language)}: ${t.notRechecked}. ${t.lastObserved}: ${escapeReportText(old.observedAt || old.lastObservedAt || old.firstSeenAt || data.previousRunAt || t.unknown)}. ${escapeReportText(old.advisoryId || old.id)}`, '');
   lines.push(...older.slice(0, 20).flatMap(item => [newsLine(item, language), '']));
@@ -444,7 +537,8 @@ export function renderReport(data) {
     const receipt = (news.categoryCoverage || []).find(entry => entry.category === category.id);
     const fresh = receipt?.status === 'fresh';
     const counts = categoryNewsCounts(categoryItems, receipt, news.window);
-    const description = counts.undatedCount > 0 ? undatedNewsText(counts.undatedCount, language) : !fresh ? t.missingNews : counts.datedItemCount === 0 ? t.zeroNews : '';
+    const uncertainty = categoryCountNotes(counts, language);
+    const description = [!fresh && (!uncertainty || receipt?.reasonCode === 'PRIMARY_SOURCE_UNAVAILABLE') ? t.missingNews : '', uncertainty, fresh && !uncertainty && counts.datedItemCount === 0 ? t.zeroNews : ''].filter(Boolean).join(' ');
     lines.push(`| ${escapeReportText(category.labels[language])} | ${label(fresh ? 'fresh' : 'partial', language)} | ${counts.datedItemCount ?? t.unknown} | ${escapeReportText(receipt?.fetchedAt || t.unknown)} | ${description} |`);
   }
   lines.push('');
@@ -470,7 +564,7 @@ export function renderReport(data) {
     ...(news.sources || []).map(source => {
       const recovery = source.diagnostic ? localizeDiagnostic(source.diagnostic, language) : null;
       const detail = [source.historicalCoverage === 'partial' ? (ja ? '過去期間に不足あり' : 'Historical period incomplete') : '',
-        Number.isSafeInteger(source.undatedCount) && source.undatedCount > 0 ? undatedNewsText(source.undatedCount, language) : '',
+        categoryCountNotes(source, language),
         Number.isSafeInteger(source.datedItemCount) && source.datedItemCount >= 0 ? `${t.windowCount}: ${source.datedItemCount}.` : '',
         source.reasonCode || '', recovery?.code || '', recovery?.message || '', recovery?.recovery || '',
         source.cooldownUntil ? `${ja ? '再試行可能時刻' : 'Retry after'}: ${source.cooldownUntil}` : '',

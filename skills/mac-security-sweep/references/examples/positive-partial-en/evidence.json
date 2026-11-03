@@ -1151,171 +1151,205 @@
       {
         "area": "source:Apple Security Releases",
         "reason": "情報源の成功と履歴範囲を確認",
+        "reasonCode": "source-success-history",
         "status": "complete"
       },
       {
         "area": "source:Chrome Releases",
         "reason": "情報源の成功と履歴範囲を確認",
+        "reasonCode": "source-success-history",
         "status": "complete"
       },
       {
         "area": "source:Mozilla Security Advisories",
         "reason": "情報源の成功と履歴範囲を確認",
+        "reasonCode": "source-success-history",
         "status": "complete"
       },
       {
         "area": "source:Electron Security Advisories",
         "reason": "情報源の成功と履歴範囲を確認",
+        "reasonCode": "source-success-history",
         "status": "complete"
       },
       {
         "area": "source:Node.js Security Releases",
         "reason": "情報源の成功と履歴範囲を確認",
+        "reasonCode": "source-success-history",
         "status": "complete"
       },
       {
         "area": "source:Homebrew Advisory Database",
         "reason": "情報源の成功と履歴範囲を確認",
+        "reasonCode": "source-success-history",
         "status": "complete"
       },
       {
         "area": "source:Debian Security Advisories",
         "reason": "情報源の成功と履歴範囲を確認",
+        "reasonCode": "source-success-history",
         "status": "complete"
       },
       {
         "area": "source:Ubuntu Security Notices",
         "reason": "情報源の成功と履歴範囲を確認",
+        "reasonCode": "source-success-history",
         "status": "complete"
       },
       {
         "area": "source:Red Hat Security Data",
         "reason": "情報源の成功と履歴範囲を確認",
+        "reasonCode": "source-success-history",
         "status": "complete"
       },
       {
         "area": "source:Alpine 3.22 main security fixes",
         "reason": "情報源の成功と履歴範囲を確認",
+        "reasonCode": "source-success-history",
         "status": "complete"
       },
       {
         "area": "source:PHP News",
         "reason": "情報源の成功と履歴範囲を確認",
+        "reasonCode": "source-success-history",
         "status": "complete"
       },
       {
         "area": "source:PHP Core Security Advisories",
         "reason": "情報源の成功と履歴範囲を確認",
+        "reasonCode": "source-success-history",
         "status": "complete"
       },
       {
         "area": "source:OpenSSL Security Advisories",
         "reason": "情報源の成功と履歴範囲を確認",
+        "reasonCode": "source-success-history",
         "status": "complete"
       },
       {
         "area": "source:ImageMagick Security Advisories",
         "reason": "情報源の成功と履歴範囲を確認",
+        "reasonCode": "source-success-history",
         "status": "complete"
       },
       {
         "area": "source:Ruby News",
         "reason": "情報源の成功と履歴範囲を確認",
+        "reasonCode": "source-success-history",
         "status": "complete"
       },
       {
         "area": "source:Ruby Security Announcements",
         "reason": "情報源の成功と履歴範囲を確認",
+        "reasonCode": "source-success-history",
         "status": "complete"
       },
       {
         "area": "source:OpenJDK Security Advisories",
         "reason": "情報源の成功と履歴範囲を確認",
+        "reasonCode": "source-success-history",
         "status": "complete"
       },
       {
         "area": "source:Oracle Security Alerts",
         "reason": "情報源の成功と履歴範囲を確認",
+        "reasonCode": "source-success-history",
         "status": "complete"
       },
       {
         "area": "source:Docker Security Announcements",
         "reason": "情報源の成功と履歴範囲を確認",
+        "reasonCode": "source-success-history",
         "status": "complete"
       },
       {
         "area": "source:CISA KEV",
         "reason": "情報源の成功と履歴範囲を確認",
+        "reasonCode": "source-success-history",
         "status": "complete"
       },
       {
         "area": "source:CISA Cybersecurity Advisories",
         "reason": "情報源の成功と履歴範囲を確認",
+        "reasonCode": "source-success-history",
         "status": "complete"
       },
       {
         "area": "source:CISA Analysis Reports",
         "reason": "情報源の成功と履歴範囲を確認",
+        "reasonCode": "source-success-history",
         "status": "complete"
       },
       {
         "area": "source:Microsoft Security Research",
         "reason": "情報源の成功と履歴範囲を確認",
+        "reasonCode": "source-success-history",
         "status": "complete"
       },
       {
         "area": "source:JPCERT/CC Analysis",
         "reason": "情報源の成功と履歴範囲を確認",
+        "reasonCode": "source-success-history",
         "status": "complete"
       },
       {
         "area": "source:GitHub Advisory reviewed",
         "reason": "情報源の成功と履歴範囲を確認",
+        "reasonCode": "source-success-history",
         "status": "complete"
       },
       {
         "area": "source:GitHub Advisory malware",
         "reason": "情報源の成功と履歴範囲を確認",
+        "reasonCode": "source-success-history",
         "status": "complete"
       },
       {
         "area": "source:JPCERT/CC",
         "reason": "情報源の成功と履歴範囲を確認",
+        "reasonCode": "source-success-history",
         "status": "complete"
       },
       {
         "area": "source:IPA",
         "reason": "情報源の成功と履歴範囲を確認",
+        "reasonCode": "source-success-history",
         "status": "complete"
       },
       {
         "area": "source:The Hacker News",
         "reason": "情報源の成功と履歴範囲を確認",
+        "reasonCode": "source-success-history",
         "status": "complete"
       },
       {
         "area": "source:BleepingComputer",
         "reason": "情報源の成功と履歴範囲を確認",
+        "reasonCode": "source-success-history",
         "status": "complete"
       },
       {
         "area": "source:Socket",
         "reason": "情報源の成功と履歴範囲を確認",
+        "reasonCode": "source-success-history",
         "status": "complete"
       },
       {
         "area": "source:OpenSourceMalware",
         "reason": "情報源の成功と履歴範囲を確認",
+        "reasonCode": "source-success-history",
         "status": "complete"
       },
       {
         "area": "source:Security NEXT",
         "reason": "情報源の成功と履歴範囲を確認",
+        "reasonCode": "source-success-history",
         "status": "complete"
       },
       {
         "area": "source:piyolog",
         "reason": "情報源の成功と履歴範囲を確認",
+        "reasonCode": "source-success-history",
         "status": "complete"
       }
     ],

@@ -90,6 +90,47 @@ test('同じrunの複数checkpointがreport-backed generation鎖として再開�
   await resumed.close();
 });
 
+test('translation refuses a canonical traversal link without reading its target or publishing a derivative', async t => {
+  // Arrange
+  const home = await fixture(t), target = path.join(home, 'security-reports/credentials');
+  let targetReads = 0;
+  const filesystem = { ...fs, open: async (filename, ...args) => {
+    if (filename === target) targetReads += 1;
+    return fs.open(filename, ...args);
+  } };
+  const store = await createStateStore({ home, identityProvider, filesystem });
+  const report = '[Credentials](../credentials)';
+  const saved = await store.commit({ evidence: {}, report, nextState: { locale: { requestedLanguage: 'es', canonicalLanguage: 'en', translationStatus: 'pending' } }, final: true });
+  await fs.writeFile(target, 'SENTINEL_SECRET', { mode: 0o600 });
+  const stateBefore = await fs.readFile(saved.statePath);
+  // Act / Assert
+  await assert.rejects(store.commitTranslation({ generation: saved.generation, canonicalHash: saved.reportHash, language: 'es', content: '[Credenciales](../credentials)', semanticReviewed: true }), error => error.diagnostic.code === 'MSS_TRANSLATION_PENDING' && !JSON.stringify(error.diagnostic).includes('SENTINEL'));
+  assert.equal(targetReads, 0);
+  assert.deepEqual(await fs.readdir(saved.evidenceDirectory), ['commit.json', 'continuation.json', 'evidence.json', 'report.md']);
+  assert.deepEqual(await fs.readFile(saved.statePath), stateBefore);
+  assert.equal(await fs.readFile(saved.reportPath, 'utf8'), `${report}\n`);
+  await store.close();
+});
+
+test('translation retries refuse a changed derivative manifest without replacing either report', async t => {
+  // Arrange
+  const home = await fixture(t), store = await createStateStore({ home, identityProvider });
+  const saved = await store.commit({ evidence: {}, report: '[Evidence](evidence.json)', nextState: { locale: { requestedLanguage: 'es', canonicalLanguage: 'en', translationStatus: 'pending' } }, final: true });
+  const options = { generation: saved.generation, canonicalHash: saved.reportHash, language: 'es', content: '[Pruebas](evidence.json)', semanticReviewed: true };
+  const receipt = await store.commitTranslation(options);
+  const changed = { ...JSON.parse(await fs.readFile(receipt.manifestPath, 'utf8')), canonicalReport: '../credentials' };
+  const changedBytes = stableJson(changed);
+  await fs.writeFile(receipt.manifestPath, changedBytes);
+  const stateBefore = await fs.readFile(saved.statePath);
+  // Act / Assert
+  await assert.rejects(store.commitTranslation(options), error => error.diagnostic.code === 'MSS_STATE');
+  assert.equal(await fs.readFile(receipt.manifestPath, 'utf8'), changedBytes);
+  assert.equal(await fs.readFile(receipt.translatedPath, 'utf8'), '[Pruebas](evidence.json)');
+  assert.equal(await fs.readFile(saved.reportPath, 'utf8'), '[Evidence](evidence.json)\n');
+  assert.deepEqual(await fs.readFile(saved.statePath), stateBefore);
+  await store.close();
+});
+
 test('字下げだけで32MiBを超える大量の証拠も全記録を保存して再開できる', async t => {
   // Arrange
   const home = await fixture(t), store = await createStateStore({ home, identityProvider });

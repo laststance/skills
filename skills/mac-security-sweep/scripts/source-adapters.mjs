@@ -25,9 +25,11 @@ export function parseOfficialIndex(text, source) {
   const links = sourceLinks(text, source.url);
   const result = [];
   const headings = source.kind === 'mozilla-index' ? [...text.matchAll(/<h2\b[^>]*>([\s\S]*?)<\/h2>/gi)].map(match => ({ offset: match.index, date: iso(`${plain(match[1])} UTC`) })) : [];
-  let headingIndex = -1;
+  const rows = source.kind === 'oracle' ? [...text.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map(match => ({ offset: match.index, end: match.index + match[0].length,
+    cells: [...match[1].matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map(cell => plain(cell[1])) })) : [];
+  let headingIndex = -1, rowIndex = -1;
   for (const link of links) {
-    let publishedAt, precision = 'day', title = link.title;
+    let publishedAt, publishedMonth, updatedAt, precision = 'day', title = link.title;
     if (source.kind === 'openjdk') {
       const date = /\/advisories\/(\d{4}-\d{2}-\d{2})$/.exec(link.url.pathname)?.[1];
       if (!date) continue;
@@ -43,9 +45,14 @@ export function parseOfficialIndex(text, source) {
     } else if (source.kind === 'oracle') {
       if (!/^\/security-alerts\/(?:cpu|cspu|alert-)[a-zA-Z0-9-]+\.html$/.test(link.url.pathname)) continue;
       const date = /(?:cpu|cspu)(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)(\d{4})\.html$/i.exec(link.url.pathname);
-      if (date) { publishedAt = iso(`${date[2]}-${String(['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'].indexOf(date[1].toLowerCase()) + 1).padStart(2, '0')}-01`); precision = 'month'; }
+      if (date) { publishedMonth = `${date[2]}-${String(['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'].indexOf(date[1].toLowerCase()) + 1).padStart(2, '0')}`; precision = 'month'; }
+      // Only the same table row's explicit revision date supplies an update day; the CPU month never does.
+      while (rowIndex + 1 < rows.length && rows[rowIndex + 1].offset <= link.offset) rowIndex++;
+      const row = rows[rowIndex], revision = row && link.offset < row.end ? /^Rev(?:ision)?\s+\d+(?:\.\d+)?,\s*(\d{1,2} [A-Za-z]+ \d{4})$/.exec(row.cells[1] || '') : null;
+      if (revision) { updatedAt = iso(`${revision[1]} UTC`); if (updatedAt) precision = 'day'; }
     } else throw new SweepError('SOURCE', { cause: 'unsupported', operation: 'news' });
-    result.push(item(source, { title, url: link.url.href, publishedAt, datePrecision: publishedAt ? precision : 'unknown',
+    result.push(item(source, { title, url: link.url.href, publishedAt, ...(publishedMonth ? { publishedMonth } : {}), updatedAt,
+      datePrecision: publishedAt || publishedMonth || updatedAt ? precision : 'unknown', ...(updatedAt ? { dateSemantics: 'vendor-last-updated' } : {}),
       aliases: [...new Set(title.match(/CVE-\d{4}-\d{4,10}/g) || [])], reasonCode: 'OFFICIAL_INDEX_REQUIRES_RANGE_REVIEW' }));
   }
   // A changed or login page must not look like a successful empty security index.
@@ -70,15 +77,17 @@ export function parseDockerAnnouncements(text, source) {
     const body = plain(text.slice(heading.index + heading[0].length, headings[index + 1]?.index ?? text.length));
     // Only the section's explicit update label supplies a date; CVE years and page build times do not.
     const date = /^Last updated (January|February|March|April|May|June|July|August|September|October|November|December)(?: ([1-9]|[12]\d|3[01]),)? (\d{4})\b/.exec(body);
-    let updatedAt = null;
+    let updatedAt = null, updatedMonth;
     if (date) {
-      const calendar = `${date[3]}-${String(months.indexOf(date[1]) + 1).padStart(2, '0')}-${String(date[2] || '1').padStart(2, '0')}`;
-      const parsed = iso(calendar);
-      if (parsed?.startsWith(calendar)) updatedAt = parsed;
+      const month = `${date[3]}-${String(months.indexOf(date[1]) + 1).padStart(2, '0')}`;
+      if (date[2]) {
+        const calendar = `${month}-${String(date[2]).padStart(2, '0')}`, parsed = iso(calendar);
+        if (parsed?.startsWith(calendar)) updatedAt = parsed;
+      } else updatedMonth = month;
     }
     entries.push(item(source, { title, url: `${source.url}#${slug[1] || slug[2]}`, summary: body,
-      publishedAt: null, updatedAt, datePrecision: updatedAt ? date[2] ? 'day' : 'month' : 'unknown', dateSemantics: 'vendor-last-updated',
-      aliases: [...new Set(`${title} ${body}`.match(/CVE-\d{4}-\d{4,10}/g) || [])], reasonCode: updatedAt ? 'OFFICIAL_ANNOUNCEMENT_REQUIRES_RANGE_REVIEW' : 'SOURCE_UNDATED_ITEMS' }));
+      publishedAt: null, updatedAt, ...(updatedMonth ? { updatedMonth } : {}), datePrecision: updatedMonth ? 'month' : updatedAt ? 'day' : 'unknown', dateSemantics: 'vendor-last-updated',
+      aliases: [...new Set(`${title} ${body}`.match(/CVE-\d{4}-\d{4,10}/g) || [])], reasonCode: updatedAt || updatedMonth ? 'OFFICIAL_ANNOUNCEMENT_REQUIRES_RANGE_REVIEW' : 'SOURCE_UNDATED_ITEMS' }));
   }
   if (!entries.length) throw new SweepError('SOURCE', { cause: 'malformed', operation: 'news' });
   return entries;

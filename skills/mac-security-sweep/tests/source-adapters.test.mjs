@@ -4,6 +4,7 @@ import { SOURCES, NEWS_CATEGORIES } from '../scripts/source-registry.mjs';
 import { SOURCE_PUBLIC_GETS, validateSourceRequest } from '../scripts/source-request-policy.mjs';
 import { parseOfficialIndex, parseDockerAnnouncements, openSslPaths, parseOpenSslCve, parseRedHatList, parseAlpineSnapshot } from '../scripts/source-adapters.mjs';
 import { fetchNews, parseXmlFeed, normalizeAdvisory } from '../scripts/fetch-news.mjs';
+import { newsDateRange, newsWindowStatus } from '../scripts/news-format.mjs';
 import { createRunContext } from '../scripts/runtime.mjs';
 
 const source = id => SOURCES.find(value => value.id === id);
@@ -32,6 +33,16 @@ test('Repository advisories preserve branch-specific patched_versions instead of
   assert.equal(item.affected[0].ecosystem, 'c/c++');
 });
 
+test('An Electron issue explicitly limited to Windows does not count as a Mac application advisory', () => {
+  // Arrange
+  const data = { ghsa_id: 'GHSA-windows-only', summary: 'Electron Windows-only privilege escalation', updated_at: '2026-11-01T00:00:00Z' };
+  // Act
+  const article = normalizeAdvisory(data, source('electron'));
+  // Assert
+  assert.deepEqual(article.categories, ['general']);
+  assert.equal(article.categoryStatus, 'explicit');
+});
+
 test('OpenJDK and Ruby indexes retain explicit calendar dates while Oracle month-only dates remain labeled as months', () => {
   // Arrange / Act
   const jdk = parseOfficialIndex('<a href="2026-10-20">2026/10/20</a>', source('openjdk'));
@@ -41,6 +52,8 @@ test('OpenJDK and Ruby indexes retain explicit calendar dates while Oracle month
   assert.equal(jdk[0].publishedAt, '2026-10-20T00:00:00.000Z');
   assert.equal(ruby[0].publishedAt, '2026-10-25T00:00:00.000Z');
   assert.equal(oracle[0].datePrecision, 'month');
+  assert.equal(oracle[0].publishedAt, null);
+  assert.equal(oracle[0].publishedMonth, '2026-10');
   assert.equal(oracle[1].publishedAt, null);
 });
 
@@ -180,6 +193,8 @@ test('Docker announcements use each explicit update date and never borrow a CVE 
   assert.equal(entries[1].dateSemantics, 'vendor-last-updated');
   assert.equal(entries[1].url, 'https://docs.docker.com/security/security-announcements/#sandbox-fix');
   assert.equal(entries[2].datePrecision, 'month');
+  assert.equal(entries[2].updatedAt, null);
+  assert.equal(entries[2].updatedMonth, '2024-07');
   assert.throws(() => parseDockerAnnouncements('<h1>Login</h1>', source('docker')), error => error.diagnostic.code === 'MSS_SOURCE');
 });
 
@@ -200,6 +215,237 @@ test('An undated Docker announcement keeps its category partial instead of provi
   assert.equal(result.sources.find(value => value.sourceId === 'docker').status, 'partial');
   assert.equal(result.sources.find(value => value.sourceId === 'docker').reasonCode, 'SOURCE_UNDATED_ITEMS');
   assert.equal(result.items.filter(value => value.sourceId === 'docker').length, 1);
+});
+
+test('Month precision uses the full calendar interval and never pretends the advisory was published on day one', () => {
+  // Arrange
+  const article = { publishedMonth: '2026-10', datePrecision: 'month' };
+  const windows = [
+    ['2026-10-04T00:00:00Z', '2026-11-03T00:00:00Z', 'possible'],
+    ['2026-09-15T00:00:00Z', '2026-10-20T00:00:00Z', 'possible'],
+    ['2026-10-01T00:00:00Z', '2026-10-31T23:59:59.999Z', 'confirmed'],
+    ['2026-11-01T00:00:00Z', '2026-11-03T00:00:00Z', 'outside'],
+    ['2026-09-01T00:00:00Z', '2026-09-30T23:59:59.999Z', 'outside'],
+  ];
+  // Act / Assert
+  assert.deepEqual(newsDateRange(article), { start: '2026-10-01T00:00:00.000Z', endExclusive: '2026-11-01T00:00:00.000Z', precision: 'month', field: 'publishedAt' });
+  for (const [since, until, expected] of windows) assert.equal(newsWindowStatus(article, { since, until }), expected);
+  assert.deepEqual(newsDateRange({ updatedMonth: '2024-02', datePrecision: 'month' }), { start: '2024-02-01T00:00:00.000Z', endExclusive: '2024-03-01T00:00:00.000Z', precision: 'month', field: 'updatedAt' });
+  assert.equal(newsDateRange({ publishedMonth: '2026-13' }), null);
+  assert.equal(newsDateRange({ publishedAt: '+275760-09-13T00:00:00.000Z' }), null);
+  assert.equal(newsWindowStatus({ publishedAt: '2026-10-04T00:00:00.000Z', datePrecision: 'day' }, { since: '2026-10-04T12:00:00Z', until: '2026-11-03T00:00:00Z' }), 'possible');
+});
+
+for (const [since, until] of [
+  ['2026-10-04T00:00:00Z', '2026-11-03T00:00:00Z'],
+  ['2026-09-15T00:00:00Z', '2026-10-20T00:00:00Z'],
+]) test(`Oracle and Docker month-only notices remain uncertain when the discovery window is ${since} through ${until}`, async () => {
+  // Arrange
+  const context = createRunContext({ budgetMs: 120000, wallNow: () => NOW, fetchImpl: async address => {
+    if (String(address) === source('oracle').url) return new Response('<a href="/security-alerts/cpuoct2026.html">Critical Patch Update October 2026</a>');
+    if (String(address) === source('docker').url) return new Response('<h2 id=month-fix>Docker security update</h2><p>Last updated October 2026</p>');
+    return new Response('', { status: 404 });
+  } });
+  // Act
+  const news = await fetchNews({ context, previous: {}, since, until });
+  await context.close();
+  // Assert
+  assert.deepEqual(news.items.map(value => value.sourceId).sort(), ['docker', 'oracle']);
+  assert.equal(news.items.find(value => value.sourceId === 'oracle').publishedMonth, '2026-10');
+  assert.equal(news.items.find(value => value.sourceId === 'docker').updatedMonth, '2026-10');
+  for (const id of ['oracle', 'docker']) {
+    const record = news.sources.find(value => value.sourceId === id);
+    assert.equal(record.contentFetched, true);
+    assert.equal(record.freshness, 'fresh');
+    assert.equal(record.itemCount, 1);
+    assert.equal(record.datedItemCount, 0);
+    assert.equal(record.uncertainItemCount, 1);
+    assert.equal(record.impreciseCount, 1);
+    assert.equal(record.undatedCount, 0);
+    assert.equal(record.newestAvailableAt, null);
+    assert.equal(record.windowComplete, false);
+    assert.equal(record.status, 'partial');
+    assert.equal(record.reasonCode, 'SOURCE_DATE_PRECISION');
+  }
+  const receipt = news.categoryCoverage.find(value => value.category === 'docker');
+  assert.equal(receipt.datedItemCount, 0);
+  assert.equal(receipt.uncertainItemCount, 1);
+  assert.equal(receipt.undatedCount, 0);
+  assert.equal(receipt.windowStatus, 'partial');
+  assert.equal(receipt.reasonCode, 'PRIMARY_SOURCE_DATE_PRECISION');
+});
+
+test('A whole known month can be confirmed inside the window while the exact update day stays unknown', async () => {
+  // Arrange
+  const context = createRunContext({ budgetMs: 120000, wallNow: () => NOW, fetchImpl: async address => String(address) === source('docker').url
+    ? new Response('<h2 id=month-fix>Docker security update</h2><p>Last updated October 2026</p>') : new Response('', { status: 404 }) });
+  // Act
+  const news = await fetchNews({ context, previous: {}, since: '2026-10-01T00:00:00Z', until: '2026-11-01T00:00:00Z' });
+  await context.close();
+  // Assert
+  const receipt = news.categoryCoverage.find(value => value.category === 'docker');
+  assert.equal(news.items[0].updatedAt, null);
+  assert.equal(news.items[0].updatedMonth, '2026-10');
+  assert.equal(receipt.impreciseCount, 1);
+  assert.equal(receipt.datedItemCount, 1);
+  assert.equal(receipt.uncertainItemCount, 0);
+  assert.equal(receipt.undatedCount, 0);
+  assert.equal(receipt.windowStatus, 'complete');
+});
+
+test('A month interval ending exactly at the window start is excluded without inventing a current advisory', async () => {
+  // Arrange
+  const context = createRunContext({ budgetMs: 120000, wallNow: () => NOW, fetchImpl: async address => String(address) === source('docker').url
+    ? new Response('<h2 id=month-fix>Docker security update</h2><p>Last updated September 2026</p>') : new Response('', { status: 404 }) });
+  // Act
+  const news = await fetchNews({ context, previous: {}, since: '2026-10-01T00:00:00Z' });
+  await context.close();
+  // Assert
+  const record = news.sources.find(value => value.sourceId === 'docker');
+  assert.equal(news.items.length, 0);
+  assert.equal(record.datedCount, 1);
+  assert.equal(record.impreciseCount, 1);
+  assert.equal(record.datedItemCount, 0);
+  assert.equal(record.uncertainItemCount, 0);
+  assert.equal(record.undatedCount, 0);
+  assert.equal(record.windowComplete, true);
+});
+
+test('Oracle uses only a same-row revision date and preserves a separate publication month', () => {
+  // Arrange
+  const html = '<table><tr><td><a href="/security-alerts/cpuoct2026.html">Critical Patch Update October 2026</a></td><td>Rev 2, 26 October 2026</td></tr>'
+    + '<tr><td><a href="/security-alerts/cpujul2026.html">Critical Patch Update July 2026</a></td><td>No revision date</td></tr></table>'
+    + '<a href="/security-alerts/cspusep2026.html">Critical Security Patch Update September 2026</a>';
+  // Act
+  const entries = parseOfficialIndex(html, source('oracle'));
+  // Assert
+  assert.equal(entries[0].publishedAt, null);
+  assert.equal(entries[0].publishedMonth, '2026-10');
+  assert.equal(entries[0].updatedAt, '2026-10-26T00:00:00.000Z');
+  assert.equal(entries[0].datePrecision, 'day');
+  assert.equal(entries[0].dateSemantics, 'vendor-last-updated');
+  assert.equal(newsWindowStatus(entries[0], { since: '2026-10-04T00:00:00Z', until: '2026-11-03T00:00:00Z' }), 'confirmed');
+  assert.equal(entries[1].updatedAt, null);
+  assert.equal(entries[1].publishedMonth, '2026-07');
+  assert.equal(entries[2].updatedAt, null);
+  assert.equal(entries[2].publishedMonth, '2026-09');
+});
+
+test('Resumed pages preserve legacy month precision and recompute article categories instead of trusting cached source-wide labels', async () => {
+  // Arrange
+  const window = { since: '2026-10-01T00:00:00.000Z', until: '2026-10-31T23:59:59.999Z' };
+  const address = new URL('https://api.github.com/advisories');
+  address.search = new URLSearchParams({ type: 'reviewed', modified: `${window.since}..${window.until}`, sort: 'updated', direction: 'desc', per_page: '100', after: 'old-page' }).toString();
+  const previous = { sourceContinuations: { 'GitHub Advisory reviewed': { url: address.href, window, items: [
+    { id: 'GHSA-month-fixture', title: 'Docker security advisory', url: 'https://github.com/advisories/GHSA-month-fixture', publishedAt: '2026-10-01T00:00:00.000Z', datePrecision: 'month',
+      products: ['Docker'], categories: ['macos', 'ios'], categoryStatus: 'explicit', fetchedAt: '2026-10-31T00:00:00Z' },
+  ] } } };
+  const context = createRunContext({ budgetMs: 120000, wallNow: () => NOW, fetchImpl: async input => {
+    const url = new URL(input);
+    if (url.pathname !== '/advisories' || url.searchParams.get('type') !== 'reviewed') return new Response('', { status: 404 });
+    if (!url.searchParams.has('after')) return Response.json([]);
+    const next = new URL(url); next.searchParams.set('after', `${url.searchParams.get('after')}-next`);
+    return Response.json([], { headers: { link: `<${next.href}>; rel="next"` } });
+  } });
+  // Act
+  const news = await fetchNews({ context, previous });
+  await context.close();
+  // Assert
+  const article = news.items.find(value => value.id === 'GHSA-month-fixture');
+  assert.equal(article.publishedAt, null);
+  assert.equal(article.publishedMonth, '2026-10');
+  assert.equal(article.datePrecision, 'month');
+  assert.deepEqual(article.categories, ['docker']);
+  assert.equal(article.categoryStatus, 'explicit');
+  const cached = news.sourceContinuations['GitHub Advisory reviewed'].items[0];
+  assert.equal(cached.publishedAt, null);
+  assert.equal(cached.publishedMonth, '2026-10');
+  assert.equal(cached.datePrecision, 'month');
+  assert.deepEqual(cached.categories, ['docker']);
+  assert.equal(news.categoryCoverage.find(value => value.category === 'docker').uncertainItemCount, 1);
+});
+
+test('A tvOS-only Apple response establishes no macOS or iOS article and keeps the actual release as general news', async () => {
+  // Arrange
+  const html = '<table><tr><td><a href="https://support.apple.com/en-us/149524">tvOS 27.2</a></td><td>Apple TV HD</td><td>26 Oct 2026</td></tr></table>';
+  const context = createRunContext({ budgetMs: 120000, wallNow: () => NOW, fetchImpl: async address => String(address) === source('apple').url ? new Response(html) : new Response('', { status: 404 }) });
+  // Act
+  const news = await fetchNews({ context, previous: {} });
+  await context.close();
+  // Assert
+  assert.deepEqual(news.items[0].categories, ['general']);
+  assert.deepEqual(news.items[0].products, ['tvOS']);
+  assert.equal(news.items[0].categoryStatus, 'explicit');
+  for (const category of ['macos', 'ios']) {
+    const receipt = news.categoryCoverage.find(value => value.category === category);
+    assert.equal(receipt.status, 'fresh');
+    assert.equal(receipt.datedItemCount, 0);
+    assert.equal(receipt.unclassifiedCount, 0);
+    assert.equal(receipt.windowStatus, 'complete');
+  }
+  assert.equal(news.categoryCoverage.find(value => value.category === 'mac-apps').datedItemCount, 0);
+  assert.equal(news.categoryCoverage.find(value => value.category === 'general').datedItemCount, 1);
+});
+
+test('Mixed Apple releases count each actual product without copying Xcode host requirements into macOS news', async () => {
+  // Arrange
+  const rows = [
+    ['macOS Sequoia 15.8.2', 'Mac'], ['iOS 27.2 and iPadOS 27.2', 'iPhone and iPad'], ['Xcode 27.2', 'macOS Tahoe'], ['Safari 27.2', 'macOS Sequoia'],
+    ['tvOS 27.2', 'Apple TV'], ['watchOS 27.2', 'Apple Watch'], ['visionOS 27.2', 'Apple Vision Pro'], ['Unrecognized Apple release', 'Unknown'],
+  ];
+  const html = '<table>' + rows.map(([title, platforms], index) => `<tr><td><a href="https://support.apple.com/en-us/${150000 + index}">${title}</a></td><td>${platforms}</td><td>26 Oct 2026</td></tr>`).join('') + '</table>';
+  const context = createRunContext({ budgetMs: 120000, wallNow: () => NOW, fetchImpl: async address => String(address) === source('apple').url ? new Response(html) : new Response('', { status: 404 }) });
+  // Act
+  const news = await fetchNews({ context, previous: {} });
+  await context.close();
+  // Assert
+  assert.deepEqual(Object.fromEntries(news.items.map(value => [value.title, value.categories])), {
+    'macOS Sequoia 15.8.2': ['macos'], 'iOS 27.2 and iPadOS 27.2': ['ios'], 'Xcode 27.2': ['mac-apps'], 'Safari 27.2': ['mac-apps'],
+    'tvOS 27.2': ['general'], 'watchOS 27.2': ['general'], 'visionOS 27.2': ['general'], 'Unrecognized Apple release': ['general'],
+  });
+  assert.deepEqual(news.items.find(value => value.title === 'Xcode 27.2').products, ['Xcode']);
+  assert.equal(news.items.find(value => value.title === 'Unrecognized Apple release').categoryStatus, 'unconfirmed');
+  for (const [category, expected] of [['macos', 1], ['ios', 1], ['mac-apps', 2], ['general', 4]]) assert.equal(news.categoryCoverage.find(value => value.category === category).datedItemCount, expected);
+  const receipt = news.categoryCoverage.find(value => value.category === 'macos');
+  assert.equal(receipt.unclassifiedCount, 1);
+  assert.equal(receipt.windowStatus, 'partial');
+  assert.equal(receipt.reasonCode, 'PRIMARY_SOURCE_CATEGORY_UNCONFIRMED');
+});
+
+test('Mozilla iOS and Android and ChromeOS news never inflate the Mac application article count', async () => {
+  // Arrange
+  const mozilla = '<h2>October 26, 2026</h2>' + ['Firefox 159', 'Thunderbird 159', 'Firefox for iOS 159', 'Firefox for Android 159']
+    .map((title, index) => `<a href="/en-US/security/advisories/mfsa2026-${200 + index}/">Security Vulnerabilities fixed in ${title}</a>`).join('');
+  const chrome = '<rss><channel>' + ['Stable Channel Update for Desktop', 'Chrome for iOS Update', 'Dev Channel Update for ChromeOS / ChromeOS Flex', 'Chrome for Android Update']
+    .map((title, index) => `<item><title>${title}</title><link>https://chromereleases.googleblog.com/2026/10/update-${index}.html</link><pubDate>26 Oct 2026</pubDate><description>Chrome also supports Mac.</description></item>`).join('') + '</channel></rss>';
+  const context = createRunContext({ budgetMs: 120000, wallNow: () => NOW, fetchImpl: async address => String(address) === source('mozilla').url ? new Response(mozilla)
+    : String(address) === source('chrome').url ? new Response(chrome) : new Response('', { status: 404 }) });
+  // Act
+  const news = await fetchNews({ context, previous: {} });
+  await context.close();
+  // Assert
+  assert.equal(news.categoryCoverage.find(value => value.category === 'mac-apps').datedItemCount, 3);
+  assert.equal(news.categoryCoverage.find(value => value.category === 'ios').datedItemCount, 2);
+  assert.equal(news.categoryCoverage.find(value => value.category === 'general').datedItemCount, 3);
+  assert.equal(news.categoryCoverage.find(value => value.category === 'ios').status, 'partial');
+  assert.deepEqual(news.items.find(value => value.title === 'Dev Channel Update for ChromeOS / ChromeOS Flex').categories, ['general']);
+  assert.deepEqual(news.items.find(value => value.title === 'Security Vulnerabilities fixed in Firefox for iOS 159').categories, ['ios']);
+  assert.deepEqual(news.items.find(value => value.title === 'Security Vulnerabilities fixed in Firefox for Android 159').categories, ['general']);
+});
+
+test('A secondary macOS article can be listed but cannot replace a failed maintained Apple source', async () => {
+  // Arrange
+  const context = createRunContext({ budgetMs: 120000, wallNow: () => NOW, fetchImpl: async address => String(address) === source('hackernews').url
+    ? new Response('<rss><channel><item><title>macOS security issue</title><pubDate>26 Oct 2026</pubDate></item></channel></rss>') : new Response('', { status: 404 }) });
+  // Act
+  const news = await fetchNews({ context, previous: {} });
+  await context.close();
+  // Assert
+  const receipt = news.categoryCoverage.find(value => value.category === 'macos');
+  assert.equal(receipt.datedItemCount, 1);
+  assert.equal(receipt.status, 'partial');
+  assert.deepEqual(receipt.sourceIds, ['apple']);
+  assert.equal(receipt.reasonCode, 'PRIMARY_SOURCE_UNAVAILABLE');
 });
 
 test('Docker current dated news and undated announcements retain separate source and category counts', async () => {

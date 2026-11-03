@@ -40,13 +40,17 @@ Node標準APIには原子的なopenatによる祖先探索がない。no-follow�
 対象は `translationStatus: pending` の保存済みレポート。元の `report.md` と `commit.json` のSHA-256を保持し、同じ世代から翻訳する。ニュース取得やローカル調査は繰り返さない。
 
 1. `reportPath` の原文を読み、同じ世代ディレクトリの `translation-es.input.md` にスペイン語訳をモード0600で保存する。別の言語ではファイル名の `es` を正規化された `requestedLanguage` に置き換える。
-2. 原文と訳文を照合し、判定、未確認、前回からの継続、数値、識別子、日時、URLを維持していることを確認する。単にハッシュが一致しても意味の正しさは保証されない。
+2. 原文と訳文を照合し、判定、未確認範囲、前回からの継続、数値、識別子、日時、リンク先とその出現回数を保つ。OpenSourceMalwareなど、情報源・製品の固有名詞は原綴りを残す。単語の一括置換で固有名詞まで翻訳しない。意味の確認はホストが行う。
 3. スキルの実体ディレクトリで次のコマンドを入力する。`ID` と `SHA256` は実行結果の `generation` と `reportHash` に置き換える。profileを使った実行なら同じ `--profile` も付ける。
 
 ```bash
 node scripts/deliver-translation.mjs --generation ID --canonical-hash SHA256 --language es --semantic-reviewed
 ```
 
-`--semantic-reviewed` はホストが意味を確認したという記録。機械による保証ではない。成功時は `translatedPath` と `manifestPath` が返る。完成稿は `translations/` に保存され、元の世代・原文ハッシュ・訳文ハッシュと対応付けられる。原文や走査の継続位置は変更しない。
+`--semantic-reviewed` はホストが意味を確認したという記録。機械による保証ではない。成功時は `translatedPath` と `manifestPath` が返る。完成稿は原文と同じ世代ディレクトリの `translation-es-<SHA256>.md` に保存される。対応する `.commit.json` はschema 2で、元の世代・原文ハッシュ・訳文ハッシュを記録する。原文や走査の継続位置は変更しない。
+
+ローカルリンクは同じ世代の `evidence.json`、`continuation.json`、`report.md`、`commit.json` に限る。原文のリンク先をそのまま残し、`../` や絶対パスへ書き換えない。参照形式のリンク、HTML、自動リンク、画像の追加は受け付けない。
+
+旧版が `translations/` に保存した完成稿と記録は残す。そこでは `evidence.json` のリンク先がずれるため、上の手順で同じ原文から完成稿を保存し直し、新しい `translatedPath` を提示する。旧ファイルの移動や証拠のコピー、再スキャンは不要。
 
 保存途中で停止した場合は、同じ原文・訳文・引数で一度だけ再試行する。既存の完成稿と保存記録が一致すれば再利用し、不一致なら停止する。未確定ファイルがあるだけでは翻訳完了と扱わない。

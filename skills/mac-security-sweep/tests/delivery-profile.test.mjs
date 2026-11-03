@@ -5,11 +5,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-import { createStateStore } from '../scripts/state-store.mjs';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createStateStore, stableJson } from '../scripts/state-store.mjs';
 import { parseRunnerArgs, projectProgress, validateConfiguration } from '../scripts/configuration.mjs';
 import { validateTranslationContent } from '../scripts/translation-validation.mjs';
 import { deliverTranslation } from '../scripts/deliver-translation.mjs';
+import { renderReport } from '../scripts/report.mjs';
 
 test('malformed package page offsets cannot skip unchecked records on resume', () => {
   // Arrange
@@ -83,6 +84,99 @@ test('translation integrity rejects changed evidence and active content without 
   }
 });
 
+test('translation refuses traversal and alternate Markdown links even when the source contains the same destination', () => {
+  // Arrange
+  const unsafe = ['../credentials', '%2e%2e/credentials', '/credentials', '//evil.example/credentials', 'file:///credentials', 'evidence.json/../credentials', 'https://evil.example/credentials'];
+  // Act / Assert
+  for (const destination of unsafe) {
+    assert.throws(() => validateTranslationContent(`${canonicalText}\n[Open](${destination})`, `${translatedText}\n[Abrir](${destination})`), error => error.diagnostic.code === 'MSS_TRANSLATION_PENDING');
+  }
+  for (const suffix of ['\n[Open][private]\n[private]: ../credentials', '\n[private]:\n  ../credentials', '\n[Open](evidence.json)', '\n<https://www.cisa.gov/example>', '\n<file:///credentials>', '\n\\\\[Open](../credentials)']) {
+    assert.throws(() => validateTranslationContent(canonicalText, translatedText + suffix), error => error.diagnostic.code === 'MSS_TRANSLATION_PENDING');
+  }
+  const literal = String.raw`\[literal\]\(../credentials\)`;
+  assert.equal(validateTranslationContent(`${canonicalText}\n${literal}`, `${translatedText}\n${literal}`).semanticReviewRequired, true);
+});
+
+test('translation keeps every occurrence of identifiers, numbers and source URLs', () => {
+  // Arrange
+  const suffixes = ['\nCVE-2026-1234', '\nGHSA-added-token', '\n2', '\nhttps://www.cisa.gov/example'];
+  // Act / Assert
+  for (const suffix of suffixes) assert.throws(() => validateTranslationContent(canonicalText, translatedText + suffix), error => error.diagnostic.code === 'MSS_TRANSLATION_PENDING');
+  assert.throws(() => validateTranslationContent(`${canonicalText}\nCVE-2026-1234`, translatedText), error => error.diagnostic.code === 'MSS_TRANSLATION_PENDING');
+});
+
+test('every local link in a saved translation resolves to the unchanged canonical artifact', async t => {
+  // Arrange
+  const home = await fixture(t), store = await createStateStore({ home, identityProvider });
+  const locale = { requestedLanguage: 'es', canonicalLanguage: 'en', translationStatus: 'pending' };
+  const report = renderReport({ locale, evidenceDirectory: '.', finishedAt: '2026-11-03T00:00:00Z' })
+    + '\n[Continuation](continuation.json)\n[Canonical](report.md)\n[Commit](commit.json)';
+  const translated = report.replaceAll('Complete evidence', 'Pruebas completas');
+  const saved = await store.commit({ evidence: { fixture: true }, report, nextState: { locale }, final: true });
+  const artifactNames = ['evidence.json', 'continuation.json', 'report.md', 'commit.json'];
+  const originals = Object.fromEntries(await Promise.all(artifactNames.map(async name => [name, await fs.readFile(path.join(saved.evidenceDirectory, name))])));
+  const stateBefore = await fs.readFile(saved.statePath);
+  // Act
+  const receipt = await store.commitTranslation({ generation: saved.generation, canonicalHash: saved.reportHash, language: 'es', content: translated, semanticReviewed: true });
+  const delivered = await fs.readFile(receipt.translatedPath, 'utf8');
+  const links = [...delivered.matchAll(/\]\(([^)]+)\)/g)].map(match => match[1]).filter(destination => !destination.startsWith('https:'));
+  const manifest = JSON.parse(await fs.readFile(receipt.manifestPath, 'utf8'));
+  // Assert
+  assert.deepEqual([...new Set(links)].sort(), ['commit.json', 'continuation.json', 'evidence.json', 'report.md']);
+  assert.ok(links.filter(destination => destination === 'evidence.json').length >= 2);
+  for (const destination of links) {
+    const target = fileURLToPath(new URL(destination, pathToFileURL(receipt.translatedPath)));
+    assert.equal(target, path.join(saved.evidenceDirectory, destination));
+    assert.equal((await fs.lstat(target)).isSymbolicLink(), false);
+    assert.deepEqual(await fs.readFile(target), originals[destination]);
+  }
+  assert.equal(path.dirname(receipt.translatedPath), saved.evidenceDirectory);
+  assert.equal(manifest.schemaVersion, 2);
+  assert.equal(fileURLToPath(new URL(manifest.canonicalReport, pathToFileURL(receipt.manifestPath))), saved.reportPath);
+  assert.equal(fileURLToPath(new URL(manifest.translatedReport, pathToFileURL(receipt.manifestPath))), receipt.translatedPath);
+  assert.equal(createHash('sha256').update(delivered).digest('hex'), manifest.translatedHash);
+  assert.equal(createHash('sha256').update(originals['report.md']).digest('hex'), manifest.canonicalHash);
+  assert.deepEqual(await fs.readFile(saved.statePath), stateBefore);
+  assert.equal((await fs.stat(receipt.manifestPath)).mode & 0o777, 0o600);
+  await store.close();
+});
+
+test('translation-only retry repairs delivery beside a legacy generation without changing its old derivative or state', async t => {
+  // Arrange
+  const home = await fixture(t), store = await createStateStore({ home, identityProvider });
+  const saved = await store.commit({ evidence: { fixture: true }, report: canonicalText, nextState: { locale: { requestedLanguage: 'es', canonicalLanguage: 'en', translationStatus: 'pending' }, lastRunStatus: 'partial' }, final: true });
+  await store.close();
+  const legacyRoot = path.join(saved.evidenceDirectory, 'translations');
+  const translatedHash = createHash('sha256').update(translatedText).digest('hex');
+  const legacyReport = path.join(legacyRoot, `es-${translatedHash}.md`);
+  const legacyManifest = path.join(legacyRoot, `es-${translatedHash}.commit.json`);
+  const legacyBytes = stableJson({ schemaVersion: 1, generation: saved.generation, requestedLanguage: 'es', canonicalLanguage: 'en', canonicalReport: '../report.md', canonicalHash: saved.reportHash, translatedReport: path.basename(legacyReport), translatedHash, translationStatus: 'complete', semanticReview: 'host-attested' });
+  await fs.mkdir(legacyRoot, { mode: 0o700 });
+  await fs.writeFile(legacyReport, translatedText, { mode: 0o600 });
+  await fs.writeFile(legacyManifest, legacyBytes, { mode: 0o600 });
+  await fs.writeFile(path.join(saved.evidenceDirectory, 'translation-es.input.md'), translatedText, { mode: 0o600 });
+  const stateBefore = await fs.readFile(saved.statePath);
+  // Act
+  const receipt = await deliverTranslation({ home, identityProvider, generation: saved.generation, canonicalHash: saved.reportHash, language: 'es', semanticReviewed: true });
+  const repeated = await deliverTranslation({ home, identityProvider, generation: saved.generation, canonicalHash: saved.reportHash, language: 'es', semanticReviewed: true });
+  const resumed = await createStateStore({ home, identityProvider });
+  const canonical = await resumed.canonicalReport(saved.generation);
+  // Assert
+  assert.equal(resumed.progressVerified, true);
+  assert.equal(canonical.hash, saved.reportHash);
+  assert.equal(canonical.content, `${canonicalText}\n`);
+  assert.equal(receipt.translatedPath, repeated.translatedPath);
+  assert.notEqual(receipt.translatedPath, legacyReport);
+  assert.equal(await fs.readFile(legacyReport, 'utf8'), translatedText);
+  assert.equal(await fs.readFile(legacyManifest, 'utf8'), legacyBytes);
+  assert.deepEqual(await fs.readFile(saved.statePath), stateBefore);
+  assert.deepEqual(await fs.readdir(legacyRoot), [`es-${translatedHash}.commit.json`, `es-${translatedHash}.md`]);
+  assert.deepEqual(JSON.parse(await fs.readFile(new URL('evidence.json', pathToFileURL(receipt.translatedPath)), 'utf8')), { fixture: true });
+  assert.equal((await fs.readdir(path.dirname(saved.evidenceDirectory))).filter(name => name.startsWith('mss-')).length, 1);
+  await resumed.close();
+});
+
 for (const boundary of ['translation:write', 'translation:sync', 'translation:rename', 'translation-commit:write', 'translation-commit:sync', 'translation-commit:rename']) {
   test(`translation retry after ${boundary} preserves the canonical generation and commits one verified derivative`, async t => {
     // Arrange
@@ -126,14 +220,14 @@ test('translation-only delivery reads a private draft and refuses mismatched can
   assert.equal(receipt.canonicalReportPath, saved.reportPath);
 });
 
-test('new source history, distro identity, query dates and language survive a committed resume without unknown private fields', async t => {
+test('source month precision, product classification, distro identity and language survive a committed resume without private fields', async t => {
   // Arrange
   const home = await fixture(t), store = await createStateStore({ home, identityProvider });
   const window = { since: '2026-10-04T00:00:00Z', until: '2026-11-03T00:00:00Z' };
   const progress = {
     locale: { requestedLanguage: 'es', canonicalLanguage: 'en', translationStatus: 'pending' },
     sourceContinuations: { 'GitHub Advisory reviewed': { url: 'https://api.github.com/advisories?after=fixture', window,
-      items: [{ id: 'CVE-2026-1234', sourceId: 'github-reviewed', categories: ['linux'], fetchedAt: '2026-11-03T00:00:00Z', datePrecision: 'day', dateSemantics: 'published', ongoing: false, distribution: 'debian', distributionRelease: '12', fixed: null, secret: 'SENTINEL_SECRET' }],
+      items: [{ id: 'CVE-2026-1234', sourceId: 'github-reviewed', categories: ['linux'], fetchedAt: '2026-11-03T00:00:00Z', datePrecision: 'month', publishedAt: null, publishedMonth: '2026-10', updatedAt: null, updatedMonth: '2026-11', categoryStatus: 'unconfirmed', dateSemantics: 'published', ongoing: false, distribution: 'debian', distributionRelease: '12', fixed: null, secret: 'SENTINEL_SECRET' }],
       backlog: [{ url: 'https://api.github.com/advisories?after=older', window, items: [] }] } },
     packageContinuation: { query: { queries: [{ key: 'fixture', fingerprint: 'fixture', pageToken: null, complete: true, vulns: [], queriedAt: '2026-11-03T00:00:00Z', historyScope: 'osv-all-records-for-exact-version' }] },
       recordPage: { schemaVersion: 1, cycleStartedAt: '2026-11-03T00:00:00Z', metadataSignature: 'a'.repeat(64), globalOffset: 0, nextGlobalOffset: 324, sbomOffset: 0, nextSbomOffset: 0, pendingGlobals: 0, pendingSboms: 1, secret: 'SENTINEL_SECRET' },
@@ -150,6 +244,11 @@ test('new source history, distro identity, query dates and language survive a co
   // Assert
   assert.equal(actual.sourceContinuations['GitHub Advisory reviewed'].backlog.length, 1);
   assert.equal(actual.sourceContinuations['GitHub Advisory reviewed'].items[0].distributionRelease, '12');
+  assert.equal(actual.sourceContinuations['GitHub Advisory reviewed'].items[0].publishedMonth, '2026-10');
+  assert.equal(actual.sourceContinuations['GitHub Advisory reviewed'].items[0].updatedMonth, '2026-11');
+  assert.equal(actual.sourceContinuations['GitHub Advisory reviewed'].items[0].publishedAt, null);
+  assert.equal(actual.sourceContinuations['GitHub Advisory reviewed'].items[0].updatedAt, null);
+  assert.equal(actual.sourceContinuations['GitHub Advisory reviewed'].items[0].categoryStatus, 'unconfirmed');
   assert.equal(actual.packageContinuation.query.queries[0].queriedAt, '2026-11-03T00:00:00Z');
   assert.equal(actual.assessmentSnapshot[0].package.sourceVersion, '3.0.14-1~deb12u2');
   assert.equal(actual.assessmentSnapshot[0].observedAt, '2026-11-03T00:00:00Z');

@@ -20,7 +20,7 @@
 | TLS / OpenSSL | [OpenSSL CVE JSON index](https://openssl-library.org/news/secjson/) | CVE JSON 5の公開・更新日時とベンダーの範囲を保持。1回最大16件。古いCVEの変更を含む全履歴の確認は未完了として残す |
 | ImageMagick | [公式repository advisories](https://api.github.com/repos/ImageMagick/ImageMagick/security-advisories) | 6系・7系の影響範囲を別々に保持。PHP imagick、Ruby RMagick、delegateライブラリとは別の製品 |
 | Ruby | [公式RSS](https://www.ruby-lang.org/en/feeds/news.rss)、[security index](https://www.ruby-lang.org/en/security/) | Ruby本体、同梱gem、独立したRubyGems依存を区別する |
-| Java / JDK | [OpenJDK advisories](https://openjdk.org/groups/vulnerability/advisories/)、[Oracle alerts](https://www.oracle.com/security-alerts/) | OpenJDKは明示された日付。Oracleで月しか分からない告知は月精度と表示する。JDKのベンダー・系列・buildをMaven依存と混同しない |
+| Java / JDK | [OpenJDK advisories](https://openjdk.org/groups/vulnerability/advisories/)、[Oracle alerts](https://www.oracle.com/security-alerts/) | OpenJDKは明示された日付。Oracle CPUの公開月と、同じ表の行に記載された更新日を分けて保存する。月しか分からない場合は日を補わない。Oracleの複数製品を含むCPUは、Javaを明示しない限り「その他」に残す。JDKのベンダー・系列・buildをMaven依存と混同しない |
 | Docker | [公式セキュリティ告知](https://docs.docker.com/security/security-announcements/) | Desktop、Engine、BuildKit、runc等の告知。RSSには各記事の日付がないため、公式ページの項目ごとの`Last updated`を読む。年のない修正日から公開年を推測しない。Linuxの取得成功をDockerの取得成功として扱わない。コンテナ内部は既存のdigest対応SBOMなどで別途確認する |
 | 悪用の優先度 | [CISA KEV](https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json) | `dateAdded`はKEV掲載日。非掲載は「悪用されていない」「脆弱でない」の証明にならない |
 | 公開依存・悪性配布 | [GitHub Global Advisories](https://api.github.com/advisories)、[OSV querybatch](https://api.osv.dev/v1/querybatch) | reviewed / malwareを区別。OSVは棚卸し後に由来確認済みのecosystem・パッケージ名・バージョンだけを送信する |
@@ -37,7 +37,23 @@ JPCERT/CCの[注意喚起](https://www.jpcert.or.jp/rss/jpcert.rdf)、[IPA](http
 
 RSS/Atomの`oldestAvailableAt`が期間開始より新しければ、掲載されなくなった記事の範囲は未確認。日時のない項目も別に保持する。HTTP 200、空のフィード、取得失敗、期間不足は別の状態として記録する。条件付きリクエストは実装していないため、予期しないHTTP 304を新鮮な取得として受理しない。
 
-`categoryCoverage.status = fresh`は、そのカテゴリの一次情報源から日付付きの告知、または検証できる空の一覧を今回取得できたことを示す。全CVE・全履歴・全製品を確認できた意味ではない。日付不明の項目は`undatedCount`、30日内と確認できた件数は`datedItemCount`に分ける。日付不明しか得られない場合は`partial`とし、期間内の告知がなかったとは判断しない。個々の情報源には別途`windowComplete`、`historicalCoverage`、未取得件数を残す。指定カテゴリの一次情報取得に失敗した実行を、最新情報の提供に成功したと評価しない。
+`categoryCoverage.status = fresh`は、そのカテゴリを継続して調べる一次情報源から、日付または月が分かる告知、もしくは検証できる空の一覧を今回取得できたことを示す。全CVE・全履歴・全製品を確認できた意味ではない。本文取得が必要な情報源は、一覧を取得しただけでは成功としない。個々の情報源には別途`windowComplete`、`historicalCoverage`、未取得件数を残す。指定カテゴリの一次情報取得に失敗した実行を、補助情報源の記事だけで成功としない。
+
+情報源の`categories`は取得対象の範囲、記事の`categories`はその記事が扱う製品・OSを示す。記事へ情報源のカテゴリ一覧をコピーしない。Appleはリリース名から分類し、Xcodeの動作条件にあるmacOSを別のmacOS更新として数えない。Firefox・ChromeのiOS告知はiOSへ、tvOS・watchOS・visionOS・ChromeOS・Android専用の告知は「その他」へ残す。PHPやOpenSSLなど、対象製品が限定された公式情報源ではその製品を使う。製品・OSを判断できない記事は`categoryStatus = unconfirmed`として「その他」に保存する。その情報源が受け持つカテゴリには`unclassifiedCount`と`PRIMARY_SOURCE_CATEGORY_UNCONFIRMED`を残し、未分類の記事を根拠に「対象記事なし」と断定しない。カテゴリ別の記事数は、補助情報源を含む個々の記事の分類から数える。公式情報源の取得成否とは分けて表示する。
+
+OracleやDockerで月しか分からない日時は、`publishedMonth`または`updatedMonth`へ`YYYY-MM`で保存し、対応する`publishedAt`・`updatedAt`は`null`にする。比較では月初以上・翌月初未満の区間を使う。この区間全体が収集期間に入れば`confirmed`、一部だけ重なれば`possible`、交わらなければ`outside`、日時も月も不明なら`undated`とする。`possible`と`undated`の記事も残す。たとえば10月の告知は、10月4日から11月3日の収集では期間内の可能性があるため削除しない。公開月が分かっても公開日は不明のまま表示する。日精度の告知も、日内の時刻を断定せず同じ区間比較を使う。旧版の継続データにある「月精度＋1日」の仮日時は、再開時に月へ戻す。
+
+日付の集計は次のように分ける。情報源の件数は取得済み一覧、カテゴリの件数はそのカテゴリへ分類して保持した記事を対象にする。
+
+| field | 意味 |
+| --- | --- |
+| `datedCount` | 日時・日・月のいずれかが分かる件数 |
+| `impreciseCount` | 期間比較に使う日付が月精度の件数 |
+| `datedItemCount` | 収集期間内と確認できた`confirmed`の件数 |
+| `uncertainItemCount` | 日付区間が収集期間の境界と重なる`possible`の件数 |
+| `undatedCount` | 日時も月も分からない件数 |
+
+`possible`があれば`SOURCE_DATE_PRECISION` / `PRIMARY_SOURCE_DATE_PRECISION`を記録し、期間確認は`partial`にする。月全体を含む収集期間では、その記事を`datedItemCount`へ数えられるが、日付の表示は月のまま。日付不明しか得られない場合も`partial`とし、期間内の告知がなかったとは判断しない。月初を`oldestAvailableAt`や`newestAvailableAt`の確定日時として保存しない。
 
 ## 取得量と通信の上限
 

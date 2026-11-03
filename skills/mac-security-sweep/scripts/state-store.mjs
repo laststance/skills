@@ -306,14 +306,15 @@ export async function createStateStore({ home, profile, runId = randomUUID(), fi
     if (!HASH.test(canonicalHash || '') || canonical.hash !== canonicalHash || canonical.locale?.requestedLanguage !== requestedLanguage) throw new SweepError('STATE', { cause: 'mismatch', operation: 'report' });
     validateTranslationContent(canonical.content, content);
     await lock.assertOwner();
-    const directory = path.join(canonical.directory, 'translations');
+    // Keep relative evidence links rooted at the immutable canonical generation.
+    const directory = canonical.directory;
     await privateDirectory(directory, { home, filesystem });
     const contentHash = digest(content);
-    const name = `${requestedLanguage}-${contentHash}.md`;
+    const name = `translation-${requestedLanguage}-${contentHash}.md`;
     const translatedPath = path.join(directory, name);
-    const manifestPath = path.join(directory, `${requestedLanguage}-${contentHash}.commit.json`);
-    const expected = { schemaVersion: 1, generation, requestedLanguage, canonicalLanguage: canonical.locale.canonicalLanguage,
-      canonicalReport: '../report.md', canonicalHash, translatedReport: name, translatedHash: contentHash,
+    const manifestPath = path.join(directory, `translation-${requestedLanguage}-${contentHash}.commit.json`);
+    const expected = { schemaVersion: 2, generation, requestedLanguage, canonicalLanguage: canonical.locale.canonicalLanguage,
+      canonicalReport: 'report.md', canonicalHash, translatedReport: name, translatedHash: contentHash,
       translationStatus: 'complete', semanticReview: 'host-attested' };
     // A previous process may have published a marker before losing its response; verify, never overwrite it.
     const prior = await io.readJson(manifestPath, { roots: [reportRoot], maxBytes: 8192 }).catch(error => { if (causeClass(error) === 'absent') return null; throw error; });

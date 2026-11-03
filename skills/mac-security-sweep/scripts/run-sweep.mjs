@@ -7,7 +7,7 @@ import { assessmentStatus, compareAssessments } from './assessment.mjs';
 import { createRunContext } from './runtime.mjs';
 import { createStateStore } from './state-store.mjs';
 import { parseRunnerArgs, validateProfile } from './configuration.mjs';
-import { renderReport } from './report.mjs';
+import { renderReport, normalizeCoverageEntry } from './report.mjs';
 import { normalizeLanguage, resolveLanguage, localizeDiagnostic } from './locale.mjs';
 export { renderReport, jstDate } from './report.mjs';
 import { safeDiagnostic, causeClass, SweepError } from './diagnostics.mjs';
@@ -103,7 +103,7 @@ export async function runSweep(options = {}) {
       const commands = [inventory, news, packages, iocs, details].flatMap(stage => stage.commands || []);
       const nextState = buildNextState(store.state, news, finishedAt, '', status, { inventory, packages, details, changes, transport: context.transport, locale });
       // 統合coverageを一度だけreportへ渡し、重複した未確認件数を避ける。
-      const uniqueCoverage = [...new Map(coverage.map(entry => [`${entry.area}:${entry.status}:${entry.reason || ''}`, entry])).values()];
+      const uniqueCoverage = [...new Map(coverage.map(normalizeCoverageEntry).map(entry => [`${entry.area}:${entry.status}:${entry.reason || ''}`, entry])).values()];
       const reportMatch = { ...match, coverage: uniqueCoverage };
       const stageStatus = Object.fromEntries(['news', 'inventory', 'adaptive', 'packages', 'iocs', 'details'].map(name => [name, pending.has(name) ? 'pending' : assessmentStatus([...(data[name]?.coverage || []), ...(name === 'news' ? sourceCoverage : name === 'adaptive' ? productCoverage : [])])]));
       const diagnostics = [...new Map([...context.diagnostics, ...coverage.map(entry => entry.diagnostic), ...(news.sources || []).map(source => source.diagnostic)].filter(Boolean).map(item => [JSON.stringify(item), item])).values()].slice(0, 1000);

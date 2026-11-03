@@ -223,7 +223,8 @@ function classifyNews(item, inventory, packages, packageCoverage = []) {
   const ecosystems = new Set(['npm', 'PyPI', 'crates.io', 'Go', 'Packagist', 'RubyGems', 'Maven', 'NuGet', 'Hex', 'GitHub Actions', 'Pub', 'SwiftURL', 'VSCode']);
   const base = { id: item.id, title: item.title, url: item.url, source: item.source, sourceId: item.sourceId,
     category: item.category, categories: item.categories || [], coverageTopics: item.coverageTopics || [], aliases: item.aliases || [],
-    publishedAt: item.publishedAt, updatedAt: item.updatedAt, fetchedAt: item.fetchedAt,
+    publishedAt: item.publishedAt, updatedAt: item.updatedAt, publishedMonth: item.publishedMonth, updatedMonth: item.updatedMonth, fetchedAt: item.fetchedAt,
+    categoryStatus: item.categoryStatus,
     datePrecision: item.datePrecision, dateSemantics: item.dateSemantics, ongoing: item.ongoing === true,
     distribution: item.distribution, distributionRelease: item.distributionRelease, repository: item.repository,
     severity: item.severity, knownExploited: item.knownExploited === true, advisoryType: advisoryKind(item) };

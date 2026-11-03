@@ -1,8 +1,65 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { renderReport, safeSourceUrl, escapeReportText } from '../scripts/report.mjs';
+import { renderReport, safeSourceUrl, escapeReportText, normalizeCoverageEntry } from '../scripts/report.mjs';
 import { normalizeLanguage, resolveLanguage, localizeDiagnostic } from '../scripts/locale.mjs';
-import { matchRule, matchSecurityReleases } from '../scripts/match.mjs';
+import { matchRule, matchSecurityReleases, matchInventory } from '../scripts/match.mjs';
+import { checkIocs } from '../scripts/check-iocs.mjs';
+import { createRunContext } from '../scripts/runtime.mjs';
+
+test('denied IOC reads and incomplete process inventory stay unassessed in Japanese and English reports', async () => {
+  // Arrange
+  const context = createRunContext({ home: '/synthetic-report-home', platform: 'darwin', budgetMs: 120000, wallNow: () => Date.parse('2026-11-03T00:00:00Z') });
+  context.io.inspect = async () => { throw Object.assign(new Error('fixture denied'), { code: 'EACCES' }); };
+  context.io.withVerifiedFile = async () => { throw Object.assign(new Error('fixture denied'), { code: 'EACCES' }); };
+  const rules = { rules: [{ id: 'fixture-ioc', product: 'fixture', sourceUrl: 'https://www.cisa.gov/cybersecurity-advisories/fixture', platform: 'darwin', verified: true,
+    verifiedAt: '2026-11-01', expiresAt: '2026-11-30T00:00:00Z', iocs: [
+      { type: 'exact-path', relativePath: 'Projects/fixture' }, { type: 'sha256', target: 'exact-file', relativePath: 'Projects/fixture', value: 'a'.repeat(64) },
+      { type: 'process-name', value: 'fixture-process' },
+    ] }] };
+  try {
+    // Act
+    const iocs = await checkIocs({ processes: [], coverage: [{ area: 'processes', status: 'partial' }] }, { context, rules });
+    // Assert
+    assert.deepEqual(iocs.checks.map(check => [check.kind, check.matched, check.status]), [['path', null, 'denied'], ['sha256', null, 'denied'], ['process', null, 'partial']]);
+    for (const language of ['JA', 'EN']) {
+      const report = renderReport({ locale: resolveLanguage({ explicit: language }), iocs, status: 'partial' });
+      const matches = report.split('\n').filter(line => /^\| (path|sha256|process) \|/.test(line)).map(line => line.split('|')[3].trim());
+      assert.deepEqual(matches, language === 'JA' ? ['未確認', '未確認', '未確認'] : ['Unassessed', 'Unassessed', 'Unassessed']);
+    }
+  } finally { await context.close(); }
+});
+
+test('completed IOC observations retain an explicit match or non-match beside unknown checks', () => {
+  // Arrange
+  const iocs = { checks: [{ kind: 'process', value: 'present', matched: true }, { kind: 'path', value: 'absent', matched: false }, { kind: 'sha256', value: 'unread', matched: null, status: 'deferred-not-local' }] };
+  // Act
+  const report = renderReport({ locale: resolveLanguage({ explicit: 'EN' }), iocs });
+  const matches = report.split('\n').filter(line => /^\| (path|sha256|process) \|/.test(line)).map(line => line.split('|')[3].trim());
+  // Assert
+  assert.deepEqual(matches, ['Matched', 'No match', 'Unassessed']);
+});
+
+test('English coverage preserves TCP, UDP, notarization and normal-resume limits using stable reason codes', () => {
+  // Arrange
+  const coverage = [
+    { area: 'network', status: 'partial', reason: '現在の利用者に見えるTCP接続のみ。UDP・過去の通信・権限制限の領域は未確認です。' },
+    { area: 'applications', status: 'partial', reason: 'Info.plist・既存の同梱版metadata・署名表示だけを確認。チケットの存在は公証の有効性を証明しません。' },
+    { area: 'lockfiles', status: 'partial', reason: '同じroot実体のfrontier・directory位置を保存し、通常の再実行で継続します。リンク・依存/build配下は探索しません。' },
+    { area: 'ssh-metadata', status: 'partial', reason: '鍵・設定本文は読まず、存在・権限・時刻だけを確認します。authorized_keysの行数は本文を開かないためunknownです。' },
+  ];
+  // Act
+  const normalized = coverage.map(normalizeCoverageEntry);
+  const report = renderReport({ locale: resolveLanguage({ explicit: 'EN' }), match: { coverage: normalized } });
+  // Assert
+  assert.deepEqual(normalized.map(entry => entry.reasonCode), ['network-current-user-tcp', 'application-metadata-only', 'discovery-resume', 'ssh-metadata-only']);
+  assert.match(report, /Only current TCP connections visible to this user/);
+  assert.match(report, /UDP, historical traffic and permission-restricted areas remain unassessed/);
+  assert.match(report, /presence of a notarization ticket does not prove that notarization is valid/);
+  assert.match(report, /saved for the next normal run/);
+  assert.match(report, /Symlinks, dependency directories and build output are not explored/);
+  assert.match(report, /authorized_keys line count remains unknown/);
+  assert.doesNotMatch(report, /[\u3040-\u30ff\u3400-\u9fff]/);
+});
 
 test('CISA exploited-vulnerability highlights retain their public CVE source link without accepting arbitrary query values', () => {
   // Arrange
@@ -265,6 +322,40 @@ test('mixed dated and undated category results show the confirmed count and reta
   assert.match(categoryRow, /dates are unavailable for 1 article; whether they fall within the discovery window is unconfirmed/);
   assert.match(report, /Dated Docker advisory/);
   assert.match(report, /Undated Docker advisory/);
+});
+
+test('month-only news keeps its date uncertainty through local matching and never becomes a confirmed empty category', () => {
+  // Arrange
+  const news = { window: { since: '2026-10-04T00:00:00Z', until: '2026-11-03T00:00:00Z' },
+    items: [{ id: 'docker-month', title: 'Monthly Docker advisory', categories: ['docker'], categoryStatus: 'explicit', publishedAt: null, publishedMonth: '2026-10', datePrecision: 'month' }],
+    categoryCoverage: [{ category: 'docker', status: 'fresh', datedItemCount: 0, impreciseCount: 1, uncertainItemCount: 1, undatedCount: 0, unclassifiedCount: 0, windowStatus: 'partial' }],
+    sources: [{ name: 'Docker security announcements', status: 'partial', itemCount: 1, datedItemCount: 0, impreciseCount: 1, uncertainItemCount: 1 }] };
+  const match = matchInventory({}, news, { now: new Date('2026-11-03T00:00:00Z') });
+  // Act / Assert
+  for (const language of ['JA', 'EN']) {
+    const report = renderReport({ locale: resolveLanguage({ explicit: language }), news, match });
+    const categoryRow = report.split('\n').find(line => line.startsWith(language === 'JA' ? '| Docker / コンテナ |' : '| Docker / containers |'));
+    const sourceRow = report.split('\n').find(line => line.startsWith('| Docker security announcements |'));
+    assert.match(report, language === 'JA' ? /2026-10 \(日付は月まで判明\)/ : /2026-10 \(day not provided\)/);
+    assert.doesNotMatch(report, /2026-10-01/);
+    assert.match(categoryRow, language === 'JA' ? /1件は日付の精度が足りず、期間内か確定できません/ : /1 article lacks enough date precision/);
+    assert.match(sourceRow, language === 'JA' ? /1件は年月のみ判明/ : /1 article is dated only to the month/);
+    assert.doesNotMatch(categoryRow, /該当する記事は0件|successful query returned no articles/);
+  }
+});
+
+test('unclassified fetched articles remain visible without proving zero articles for the maintained product category', () => {
+  // Arrange
+  const news = { window: { since: '2026-10-04T00:00:00Z', until: '2026-11-03T00:00:00Z' },
+    items: [{ id: 'unknown-product', title: 'Unclassified product update', categories: ['general'], categoryStatus: 'unconfirmed', publishedAt: '2026-11-02T00:00:00Z' }],
+    categoryCoverage: [{ category: 'macos', status: 'fresh', datedItemCount: 0, unclassifiedCount: 1, windowStatus: 'partial', reasonCode: 'PRIMARY_SOURCE_CATEGORY_UNCONFIRMED' }] };
+  // Act
+  const report = renderReport({ locale: resolveLanguage({ explicit: 'EN' }), news });
+  const categoryRow = report.split('\n').find(line => line.startsWith('| macOS |'));
+  // Assert
+  assert.match(categoryRow, /1 article has unconfirmed product or OS classification and remains in general news/);
+  assert.doesNotMatch(categoryRow, /successful query returned no articles/);
+  assert.match(report, /Unclassified product update/);
 });
 
 test('older category receipts count only dated in-window articles and preserve undated items', () => {

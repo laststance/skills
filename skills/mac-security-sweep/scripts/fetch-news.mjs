@@ -10,7 +10,7 @@
 import { assertMarkupBudget } from './markup-budget.mjs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { plain, iso, publicLink, item } from './news-format.mjs';
+import { plain, iso, publicLink, item, productHints, newsDateRange, newsWindowStatus } from './news-format.mjs';
 export { plain } from './news-format.mjs';
 import { SOURCES, MOZILLA_SOURCES, NEWS_CATEGORIES, identifyProducts, sourceRegistryCoverage } from './source-registry.mjs';
 import { createRunContext, validatePublicRequest } from './runtime.mjs';
@@ -83,7 +83,9 @@ export function parseApple(text, source) {
   const releases = rows.flatMap(([, row]) => {
     const cells = [...row.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map(match => match[1]);
     if (cells.length < 3 || !iso(plain(cells[2]))) return [];
-    return [item(source, { title: plain(cells[0]), url: cells[0].match(/href="([^"]+)"/)?.[1], publishedAt: `${plain(cells[2])} UTC`, summary: `対象製品: ${plain(cells[1])}`, fixed: [plain(cells[0])], evidence: '公開日は日付精度。比較のため UTC 00:00 として格納' })];
+    const title = plain(cells[0]);
+    return [item(source, { title, url: cells[0].match(/href="([^"]+)"/)?.[1], publishedAt: `${plain(cells[2])} UTC`, datePrecision: 'day', products: productHints(title),
+      summary: `対象製品: ${plain(cells[1])}`, fixed: [title], evidence: '公開日は日付精度。比較のため UTC 00:00 として格納' })];
   });
   if (!releases.length || releases.length > 5000) throw new SweepError('SOURCE', { cause: 'malformed', operation: 'news' });
   return releases;
@@ -180,7 +182,7 @@ async function fetchSource(source, window, context, continuation, cachedItems = 
   entries = entries.map(value => ({ ...value, fetchedAt: Object.hasOwn(value, 'fetchedAt') ? value.fetchedAt : record.fetchedAt }));
   recordItemDates(record, entries, window);
   if (record.limit && record.oldestAvailableAt && record.oldestAvailableAt > window.since) { record.historicalCoverage = 'partial'; record.reasonCode ||= 'SOURCE_RETENTION_GAP'; }
-  const inWindow = entries.filter(entry => !entry.updatedAt && !entry.publishedAt || (entry.updatedAt || entry.publishedAt) >= window.since && (entry.updatedAt || entry.publishedAt) <= window.until);
+  const inWindow = entries.filter(entry => newsWindowStatus(entry, window) !== 'outside');
   record.itemCount = inWindow.length; record.elapsedMs = context.monotonicNow() - started;
   record.baselineComplete = record.status === 'ok' && ['apple', 'kev'].includes(source.kind);
   record.windowComplete = record.status === 'ok' && record.historicalCoverage !== 'partial';
@@ -192,19 +194,32 @@ async function fetchSource(source, window, context, continuation, cachedItems = 
   return result;
 }
 
-/** Keep unknown dates separate from a verified empty time window, including deferred detail results.
+/** Count confirmed, overlapping and unknown dates without treating a calendar month as a publication day.
+ * Source receipts and category receipts call this with their own item scope.
+ * @returns Separate date availability, precision and confirmed/possible window counts.
+ * @example itemDateCounts(entries, { since, until })
+ */
+function itemDateCounts(entries, window) {
+  const ranges = entries.map(newsDateRange), statuses = entries.map(entry => newsWindowStatus(entry, window));
+  return { datedCount: ranges.filter(Boolean).length, undatedCount: ranges.filter(range => !range).length,
+    impreciseCount: ranges.filter(range => range?.precision === 'month').length,
+    datedItemCount: statuses.filter(status => status === 'confirmed').length,
+    uncertainItemCount: statuses.filter(status => status === 'possible').length };
+}
+
+/** Keep uncertain dates separate from a verified empty time window, including deferred detail results.
  * {@link fetchSource} and its bounded progress snapshots call this after collecting source items.
  * @example recordItemDates(record, entries, { since, until })
  */
 function recordItemDates(record, entries, window) {
-  const dated = entries.map(entry => entry.updatedAt || entry.publishedAt).filter(Boolean).sort();
+  const dated = entries.map(newsDateRange).filter(range => range && range.precision !== 'month').map(range => range.start).sort();
   record.oldestAvailableAt = dated[0] || null; record.newestAvailableAt = dated.at(-1) || null;
-  record.datedCount = dated.length; record.undatedCount = entries.length - dated.length;
-  record.datedItemCount = dated.filter(date => date >= window.since && date <= window.until).length;
-  if (record.undatedCount) {
+  Object.assign(record, itemDateCounts(entries, window));
+  record.unclassifiedCount = entries.filter(entry => entry.categoryStatus === 'unconfirmed').length;
+  if (record.undatedCount || record.uncertainItemCount) {
     record.historicalCoverage = 'partial'; record.windowComplete = false;
     if (record.status === 'ok') record.status = 'partial';
-    record.reasonCode ||= 'SOURCE_UNDATED_ITEMS';
+    record.reasonCode ||= record.uncertainItemCount ? 'SOURCE_DATE_PRECISION' : 'SOURCE_UNDATED_ITEMS';
   }
 }
 
@@ -395,7 +410,8 @@ export async function fetchNews(options = {}) {
       const sources = SOURCES.map(source => progress.get(source.name)?.record || { name: source.name, sourceId: source.id, categories: source.categories, primary: source.primary,
         url: source.url, schema: source.schema, status: 'partial', contentFetched: false, freshness: 'missing', itemCount: 0, window, reasonCode: 'SOURCE_NOT_STARTED' });
       const items = [...new Map([...progress.values()].flatMap(value => value.items).map(value => [`${value.sourceId}:${value.id}`, value])).values()]
-        .sort((a, b) => String(b.updatedAt || b.publishedAt).localeCompare(String(a.updatedAt || a.publishedAt)) || a.id.localeCompare(b.id));
+        .map(value => ({ value, date: newsDateRange(value)?.start || '' }))
+        .sort((a, b) => b.date.localeCompare(a.date) || a.value.id.localeCompare(b.value.id)).map(entry => entry.value);
       const sourceContinuations = {};
       for (const source of SOURCES) {
         const queue = continuationQueues.get(source.name) || [];
@@ -408,13 +424,20 @@ export async function fetchNews(options = {}) {
         const records = sources.filter(source => source.primary !== false && source.categories?.includes(category.id));
         const fetched = records.filter(source => source.contentFetched === true && source.freshness === 'fresh');
         const fresh = fetched.filter(source => source.datedCount > 0 || source.itemCount === 0 && source.undatedCount === 0 && source.windowComplete === true);
-        const undatedCount = fetched.reduce((total, source) => total + (source.undatedCount || 0), 0);
+        // The maintained source list proves retrieval coverage; only the article's own product assignment supplies its counts.
+        const categoryItems = items.filter(entry => entry.categories?.includes(category.id));
+        const counts = itemDateCounts(categoryItems, window);
+        const unclassified = [...new Map([...categoryItems.filter(entry => entry.categoryStatus === 'unconfirmed'),
+          ...fetched.flatMap(source => progress.get(source.name)?.cachedItems || []).filter(entry => entry.categoryStatus === 'unconfirmed' && newsWindowStatus(entry, window) !== 'outside')]
+          .map(entry => [`${entry.sourceId}:${entry.id}`, entry])).values()];
+        const unclassifiedCount = unclassified.length;
         return { category: category.id, required: category.required, status: fresh.length ? 'fresh' : 'partial', sourceIds: records.map(source => source.sourceId),
           fetchedAt: fresh.map(source => source.fetchedAt).filter(Boolean).sort().at(-1) || null,
-          undatedCount, datedItemCount: fetched.reduce((total, source) => total + (source.datedItemCount || 0), 0),
-          windowStatus: fresh.length && records.every(source => source.windowComplete === true) ? 'complete' : 'partial',
-          reasonCode: fresh.length ? undatedCount ? 'PRIMARY_SOURCE_FETCHED_WITH_UNDATED_ITEMS' : 'PRIMARY_SOURCE_FETCHED'
-            : undatedCount ? 'PRIMARY_SOURCE_UNDATED_ITEMS' : 'PRIMARY_SOURCE_UNAVAILABLE' };
+          ...counts, unclassifiedCount,
+          windowStatus: fresh.length && !counts.uncertainItemCount && !counts.undatedCount && !unclassifiedCount && records.every(source => source.windowComplete === true) ? 'complete' : 'partial',
+          reasonCode: !fetched.length ? 'PRIMARY_SOURCE_UNAVAILABLE' : counts.uncertainItemCount ? 'PRIMARY_SOURCE_DATE_PRECISION' : unclassifiedCount ? 'PRIMARY_SOURCE_CATEGORY_UNCONFIRMED'
+            : fresh.length ? counts.undatedCount ? 'PRIMARY_SOURCE_FETCHED_WITH_UNDATED_ITEMS' : 'PRIMARY_SOURCE_FETCHED'
+              : counts.undatedCount ? 'PRIMARY_SOURCE_UNDATED_ITEMS' : 'PRIMARY_SOURCE_UNAVAILABLE' };
       });
       return { schemaVersion: 2, fetchedAt: new Date(context.wallNow()).toISOString(), window, sources, items, categoryCoverage,
         sourceRegistry: sourceRegistryCoverage(context.wallNow()), sourceCursors: { ...sourceCursors }, sourceContinuations, iocDiscovery,
@@ -506,7 +529,7 @@ export async function fetchNews(options = {}) {
           } catch (error) { failures++; ssl.record.diagnostic = safeDiagnostic(error, 'SOURCE', 'news'); }
         }
       }));
-      ssl.cachedItems = parsed; ssl.items = parsed.filter(value => !value.updatedAt && !value.publishedAt || (value.updatedAt || value.publishedAt) >= since && (value.updatedAt || value.publishedAt) <= until);
+      ssl.cachedItems = parsed; ssl.items = parsed.filter(value => newsWindowStatus(value, window) !== 'outside');
       ssl.record.itemCount = ssl.items.length; ssl.record.contentFetched = parsed.length > 0;
       if (parsed.length) ssl.record.freshness = 'fresh';
       ssl.record.status = failures || allPaths.length > parsed.length ? 'partial' : 'ok'; ssl.record.historicalCoverage = 'partial';
@@ -521,7 +544,7 @@ export async function fetchNews(options = {}) {
       brew.cachedItems = brew.homebrew.records.map(value => item(brewSource, { id: value.id, title: value.id, url: value.sourceUrl, publishedAt: value.published,
         updatedAt: value.modified, aliases: value.aliases, products: value.affected.map(entry => entry.name), severity: value.severity,
         fetchedAt: brew.homebrew.fetchedAt, reasonCode: 'HOMEBREW_PATCH_SCOPE_ONLY', affected: value.affected, fixed: value.affected.flatMap(entry => entry.fixed.map(version => ({ name: entry.name, version }))) }));
-      brew.items = brew.cachedItems.filter(value => !value.updatedAt && !value.publishedAt || (value.updatedAt || value.publishedAt) >= since && (value.updatedAt || value.publishedAt) <= until);
+      brew.items = brew.cachedItems.filter(value => newsWindowStatus(value, window) !== 'outside');
       brew.record.itemCount = brew.items.length; brew.record.contentFetched = brew.cachedItems.length > 0 || brew.homebrew.status === 'complete'; brew.record.freshness = brew.homebrew.freshness;
       brew.record.status = brew.homebrew.status === 'complete' ? 'ok' : 'partial'; brew.record.historicalCoverage = brew.record.status === 'ok' ? 'complete' : 'partial';
       brew.record.reasonCode = 'HOMEBREW_PATCH_SCOPE_ONLY'; brew.record.windowComplete = brew.record.status === 'ok';
@@ -541,6 +564,10 @@ function restoreItems(values, source) {
   if (!Array.isArray(values) || values.length > 5000) return [];
   return values.filter(value => value && validAdvisoryId(value.id)).map(value => item(source, {
     id: value.id, title: value.title, summary: value.summary, url: value.url, publishedAt: value.publishedAt, updatedAt: value.updatedAt, fetchedAt: iso(value.fetchedAt),
+    publishedMonth: value.publishedMonth, updatedMonth: value.updatedMonth,
+    datePrecision: ['day', 'month', 'unknown'].includes(value.datePrecision) ? value.datePrecision : undefined,
+    dateSemantics: ['vendor-last-updated', 'kev-added'].includes(value.dateSemantics) ? value.dateSemantics : undefined,
+    products: (Array.isArray(value.products) ? value.products : []).filter(product => typeof product === 'string').slice(0, 100).map(product => plain(product).slice(0, 250)),
     aliases: (Array.isArray(value.aliases) ? value.aliases : []).filter(validAdvisoryId).slice(0, 50), severity: normalizeSeverity(value.severity, source.name),
     severityEvidence: (Array.isArray(value.severityEvidence) ? value.severityEvidence : []).slice(0, 10).map(entry => normalizeSeverity(entry, source.name)),
     advisoryType: source.advisoryType, withdrawnAt: iso(value.withdrawnAt), needsReview: false,
