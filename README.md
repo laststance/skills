@@ -18,9 +18,9 @@ Agent skills for AI coding assistants. Install via [skills.sh](https://skills.sh
 
 ![mac-security-sweepの5段階。名前と版を読む、公開の注意報を調べる、照合する、侵害の根拠と未確認範囲を分ける、日本語レポートを保存する。](docs/mac-security-sweep/walkthrough.gif)
 
-[⏯ 一時停止できる動画](docs/mac-security-sweep/walkthrough.mp4) · [🖼 静止画](docs/mac-security-sweep/walkthrough-poster.png) · [👆 自分のペースで進めるHTML](docs/mac-security-sweep/walkthrough.html)
+[⏯ MP4動画をダウンロード](https://github.com/laststance/skills/raw/refs/heads/main/docs/mac-security-sweep/walkthrough.mp4) · [🖼 静止画](docs/mac-security-sweep/walkthrough-poster.png) · [👆 自分のペースで進めるHTML](docs/mac-security-sweep/walkthrough.html)
 
-HTMLはリポジトリを取得してブラウザで開くと、「前へ・次へ・再生」で操作できます。図を見るだけでMacのスキャンが始まることはありません。
+MP4はダウンロード後、お使いの動画プレーヤーで再生・一時停止できます。HTMLはリポジトリを取得してブラウザで開くと、「前へ・次へ・再生」で操作できます。図を見るだけでMacのスキャンが始まることはありません。
 
 **ここからは読むだけの説明です。** 動画の `example 1.0.0` と `GHSA-fixture-positive` は、[同梱の合成テストを実行した結果](skills/mac-security-sweep/references/examples/positive-partial/report.md)に基づきます。実在の脆弱性や、誰かのMacの監査結果ではありません。理解しやすい順に見せており、実際にはニュース取得と棚卸しなどの一部を並列に進めます。
 
