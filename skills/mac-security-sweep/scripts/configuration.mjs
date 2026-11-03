@@ -24,7 +24,7 @@ const STRUCTURES = Object.fromEntries(Object.entries({
   discoveryContinuation: 'schemaVersion signature complete queue files projects roots page acknowledgedFiles depthLimited',
   queue: 'directory root scope depth offset identity', files: 'path scope format size modifiedAt sourceIdentity observationStatus', roots: 'path scope identity',
   adaptiveNews: 'baselines pendingProductIds homebrew', homebrew: 'schemaVersion snapshotId fetchedAt tree records pendingPaths', tree: 'path sha',
-  assessmentSnapshot: 'id title status advisoryId package version evidence scope incident advisoryType aliases impact reasonCode queriedAt queryComplete historyScope conflictingEvidence verifiedAt observedAt assessmentBasis',
+  assessmentSnapshot: 'id title product status advisoryId package version evidence scope incident advisoryType aliases impact reasonCode queriedAt queryComplete historyScope conflictingEvidence verifiedAt observedAt assessmentBasis',
   locale: 'requestedLanguage canonicalLanguage translationStatus',
   queryAssessments: 'package version queriedAt complete status advisoryIds historyScope',
   package: 'name ecosystem distribution distributionRelease architecture sourcePackage sourceVersion binaryName binaryVersion purlType provenanceStatus distributionConflict', severity: 'level rank score method raw source evaluated', severityDetails: 'method raw source type score',
@@ -65,6 +65,7 @@ export function validateProgress(state) {
     const [key, value] = pending.pop();
     if (OBJECT_PROGRESS.has(key) && (!value || typeof value !== 'object' || Array.isArray(value))) reject();
     if (ARRAY_PROGRESS.has(key) && !Array.isArray(value)) reject();
+    if (key === 'product' && value !== null && (typeof value !== 'string' || value.length > 500)) reject();
     // GitHubの修正版は文字列、Homebrew/OSVの修正版一覧は配列になる。
     if (key === 'fixed' && value !== null && typeof value !== 'string' && (!Array.isArray(value) || value.some(item => typeof item !== 'string' && (!item || typeof item !== 'object' || Array.isArray(item))))) reject();
     if (DATES.has(key) && value !== null && (typeof value !== 'string' || !/^\d{4}-\d\d-\d\d(?:T[\d:.]+Z)?$/.test(value) || !Number.isFinite(Date.parse(value)))) reject();

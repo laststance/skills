@@ -2,11 +2,39 @@ import { createHash } from 'node:crypto';
 import { boundedJson } from './safe-io.mjs';
 import { SweepError, safeDiagnostic } from './diagnostics.mjs';
 import { normalizeSeverity, validAdvisoryId } from './assessment.mjs';
+import { HOMEBREW_RECENT_COMMITS } from './source-request-policy.mjs';
 
 const TREE = 'https://api.github.com/repos/Homebrew/advisory-database/git/trees/main?recursive=1';
 const RAW = 'https://raw.githubusercontent.com/Homebrew/advisory-database/main/';
 const PATH = /^advisories\/BREW-[A-Za-z0-9@+_.-]{1,240}\.json$/;
 const VERSION = /^\d+(?:\.\d+){0,5}(?:_\d+)?$/;
+const MAX_TREE_RECORDS = 20000;
+
+/** 最新の公式変更に含まれるpathを現在treeのblobへ束縛する。ニュース取得が名前順より先に読む対象を決める。
+ * @example await recentBrewPaths(context, tree)
+ */
+async function recentBrewPaths(context, tree, maxRecords) {
+  const response = await context.request(HOMEBREW_RECENT_COMMITS, { sourceId: 'homebrew', maxBytes: 512 * 1024 });
+  if (!response.ok) throw new SweepError('HTTP', { cause: 'http', operation: 'baseline' });
+  const commits = boundedJson(await response.text());
+  if (!Array.isArray(commits) || commits.length !== 1 || !/^[a-f0-9]{40}$/.test(commits[0]?.sha || '')) throw new SweepError('SOURCE', { cause: 'malformed', operation: 'baseline' });
+  const sha = commits[0].sha;
+  const detail = await context.request(`https://api.github.com/repos/Homebrew/advisory-database/commits/${sha}?per_page=100`, { sourceId: 'homebrew', authorizedCommits: new Set([sha]) });
+  if (!detail.ok) throw new SweepError('HTTP', { cause: 'http', operation: 'baseline' });
+  const data = boundedJson(await detail.text());
+  if (data.sha !== sha || !/^[a-f0-9]{40}$/.test(data.commit?.tree?.sha || '') || !Array.isArray(data.files) || data.files.length > 100) throw new SweepError('SOURCE', { cause: 'malformed', operation: 'baseline' });
+  const current = new Map(tree.map(entry => [entry.path, entry.sha])), paths = [];
+  for (const file of data.files) {
+    // 削除済み・告知以外は本文の取得対象にしない。
+    if (file.status === 'removed' || !PATH.test(file.filename || '')) continue;
+    if (!/^[a-f0-9]{40}$/.test(file.sha || '') || current.get(file.filename) !== file.sha) throw new SweepError('SOURCE', { cause: 'mismatch', operation: 'baseline' });
+    paths.push(file.filename);
+  }
+  const limited = /rel="next"/.test(detail.headers.get('link') || '');
+  return { commit: sha, checkedAt: new Date(context.wallNow()).toISOString(), paths,
+    indexStatus: paths.length && !limited ? 'complete' : 'partial', status: 'partial',
+    reasonCode: limited ? 'LATEST_COMMIT_FILE_LIMIT' : paths.length > maxRecords ? 'LATEST_COMMIT_RECORD_LIMIT' : paths.length ? 'LATEST_COMMIT_BOUND_TO_TREE' : 'LATEST_COMMIT_WITHOUT_CURRENT_RECORD' };
+}
 
 /** 公式DBのversion_revisionを比較する。曖昧なupstream版は未評価にする。 @example compareBrewVersions('3.0.1_1', '3.0.1_2') */
 export function compareBrewVersions(left, right) {
@@ -55,21 +83,21 @@ function restoreBrewRecord(value) {
 }
 
 /** 端末構成を送らず固定repository全体の公開snapshotを有限に取得する。adaptive段階が呼ぶ。 @example fetchHomebrewAdvisories(context, previous) */
-export async function fetchHomebrewAdvisories(context, previous = {}, { maxRecords = 80, refresh = true, indexOnly = false, preferredFormulae = [], onProgress = async () => {} } = {}) {
+export async function fetchHomebrewAdvisories(context, previous = {}, { maxRecords = 80, refresh = true, indexOnly = false, preferRecent = false, recentSnapshot, preferredFormulae = [], onProgress = async () => {} } = {}) {
   if (!Number.isSafeInteger(maxRecords) || maxRecords < 1 || maxRecords > 80) throw new SweepError('CONFIG', { cause: 'limit', operation: 'baseline' });
   const now = context.wallNow();
-  let tree = [], records = [], snapshotId = null, fetchedAt = null, pendingOrder = [], verifiedThisRun = false;
+  let tree = [], records = [], snapshotId = null, fetchedAt = null, pendingOrder = [], verifiedThisRun = false, recentUpdates = recentSnapshot;
   const attempted = new Set();
   const diagnostics = [];
   const fresh = previous.schemaVersion === 1 && Number.isFinite(Date.parse(previous.fetchedAt)) && now - Date.parse(previous.fetchedAt) >= 0 && now - Date.parse(previous.fetchedAt) < 86400000;
-  if (fresh && /^[a-f0-9]{40}$/.test(previous.snapshotId || '') && Array.isArray(previous.tree) && previous.tree.length <= 10000
+  if (fresh && /^[a-f0-9]{40}$/.test(previous.snapshotId || '') && Array.isArray(previous.tree) && previous.tree.length <= MAX_TREE_RECORDS
     && previous.tree.every(entry => PATH.test(entry.path || '') && /^[a-f0-9]{40}$/.test(entry.sha || ''))) {
     tree = previous.tree.map(entry => ({ path: entry.path, sha: entry.sha }));
     records = (Array.isArray(previous.records) ? previous.records : []).map(restoreBrewRecord).filter(Boolean).filter(value => tree.some(entry => entry.path === `advisories/${value.id}.json`));
     snapshotId = previous.snapshotId; fetchedAt = previous.fetchedAt;
     // 継続順序は同じ検証済みtreeのpathだけ復元し、秘密や任意URLを採用しない。
     const known = new Set(tree.map(entry => entry.path));
-    if (Array.isArray(previous.pendingPaths) && previous.pendingPaths.length <= 10000) pendingOrder = previous.pendingPaths.filter(value => typeof value === 'string' && known.has(value));
+    if (Array.isArray(previous.pendingPaths) && previous.pendingPaths.length <= MAX_TREE_RECORDS) pendingOrder = previous.pendingPaths.filter(value => typeof value === 'string' && known.has(value));
   }
   try {
     if (refresh || !snapshotId) {
@@ -78,11 +106,20 @@ export async function fetchHomebrewAdvisories(context, previous = {}, { maxRecor
       const data = boundedJson(await response.text(), { maxRecords: 200000 });
       if (!/^[a-f0-9]{40}$/.test(data.sha || '') || !Array.isArray(data.tree) || data.truncated === true) throw new SweepError('SOURCE', { cause: 'malformed', operation: 'baseline' });
       const candidates = data.tree.filter(entry => entry.type === 'blob' && entry.path?.startsWith('advisories/') && entry.path.endsWith('.json'));
-      if (candidates.length > 10000 || candidates.some(entry => !PATH.test(entry.path) || !/^[a-f0-9]{40}$/.test(entry.sha || '') || entry.size > 2 * 1024 ** 2)) throw new SweepError('CAPACITY', { cause: 'limit', operation: 'baseline' });
+      if (candidates.length > MAX_TREE_RECORDS || candidates.some(entry => !PATH.test(entry.path) || !/^[a-f0-9]{40}$/.test(entry.sha || '') || entry.size > 2 * 1024 ** 2)) throw new SweepError('CAPACITY', { cause: 'limit', operation: 'baseline' });
       // Cached records are reusable only when the freshly fetched tree has the same immutable identity.
       if (snapshotId !== data.sha) records = [];
       tree = candidates.map(entry => ({ path: entry.path, sha: entry.sha })).sort((a, b) => a.path.localeCompare(b.path));
       snapshotId = data.sha; fetchedAt = new Date(now).toISOString(); verifiedThisRun = true;
+    }
+    if (preferRecent) {
+      try {
+        recentUpdates = await recentBrewPaths(context, tree, maxRecords);
+        pendingOrder = [...recentUpdates.paths, ...pendingOrder];
+      } catch (error) {
+        diagnostics.push(safeDiagnostic(error, 'SOURCE', 'baseline'));
+        recentUpdates = { indexStatus: 'partial', status: 'partial', checkedAt: new Date(context.wallNow()).toISOString(), paths: [], reasonCode: 'LATEST_COMMIT_UNAVAILABLE' };
+      }
     }
     const completed = new Set(records.map(record => `advisories/${record.id}.json`));
     const byPath = new Map(tree.map(entry => [entry.path, entry]));
@@ -128,9 +165,19 @@ export async function fetchHomebrewAdvisories(context, previous = {}, { maxRecor
   const queue = [...new Set([...pendingOrder, ...tree.map(entry => entry.path)])];
   const pendingPaths = [...queue.filter(path => !attempted.has(path)), ...queue.filter(path => attempted.has(path))].filter(path => !completed.has(path));
   const complete = snapshotId !== null && pendingPaths.length === 0 && diagnostics.length === 0;
+  // 最新変更のmetadataと本文取得を別々に確認し、indexだけの成功を全件取得としない。
+  if (recentUpdates) {
+    const contentPending = recentUpdates.paths.filter(path => !completed.has(path)).length;
+    const verifiedIndex = recentUpdates.indexStatus === 'complete';
+    recentUpdates = { ...recentUpdates, contentFetched: recentUpdates.paths.length - contentPending, pending: contentPending,
+      status: verifiedIndex && contentPending === 0 ? 'complete' : 'partial',
+      reasonCode: !verifiedIndex ? recentUpdates.reasonCode : contentPending ? recentUpdates.paths.length > maxRecords ? 'LATEST_COMMIT_RECORD_LIMIT' : 'LATEST_COMMIT_BODIES_PENDING' : 'LATEST_COMMIT_BOUND_TO_TREE' };
+  }
   return { records, diagnostics, status: complete ? 'complete' : 'partial', freshness: verifiedThisRun || !refresh && fresh ? 'fresh' : fetchedAt || previous.fetchedAt ? 'stale' : 'missing',
-    fetchedAt, coverage: [{ area: 'homebrew-advisory-database', status: complete ? 'complete' : 'partial', count: records.length, pending: pendingPaths.length,
-      reason: '公式DBの収録済みpatch修正だけを比較。未収録・cask・custom tapを無脆弱性と判定しない' }],
+    fetchedAt, recentUpdates, coverage: [{ area: 'homebrew-advisory-database', status: complete ? 'complete' : 'partial', count: records.length, pending: pendingPaths.length,
+      reason: '公式DBの収録済みpatch修正だけを比較。未収録・cask・custom tapを無脆弱性と判定しない' },
+    ...(recentUpdates?.status === 'partial' ? [{ area: 'homebrew-latest-changes', status: 'partial', reasonCode: recentUpdates.reasonCode, count: recentUpdates.contentFetched, pending: recentUpdates.pending,
+      reason: '公式の直近変更と本文を現在のtreeで全件確認できない。取得済みの告知だけを保持' }] : [])],
     continuation: { schemaVersion: 1, snapshotId, fetchedAt, tree, records, pendingPaths } };
 }
 

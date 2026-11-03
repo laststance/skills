@@ -110,10 +110,15 @@ async function fetchSource(source, window, context, continuation, cachedItems = 
   try {
     if (source.kind === 'github' || source.kind === 'github-repository' || source.kind === 'redhat') {
       const url = new URL(source.url);
-      url.search = new URLSearchParams(source.kind === 'github' ? { type: source.advisoryType, modified: `${window.since}..${window.until}`, sort: 'updated', direction: 'desc', per_page: '100' }
+      url.search = new URLSearchParams(source.kind === 'github' ? { type: source.advisoryType, modified: githubModifiedWindow(window), sort: 'updated', direction: 'desc', per_page: '100' }
         : source.kind === 'github-repository' ? { state: 'published', sort: 'updated', direction: 'desc', per_page: '100' }
           : { after: new Date(Date.parse(window.since) - DAY).toISOString().slice(0, 10), before: new Date(Date.parse(window.until) + DAY).toISOString().slice(0, 10), per_page: '100', page: '1' }).toString();
       let next = continuation || url.href;
+      // 旧版のミリ秒付き継続URLも同じ窓の秒境界へ修正し、履歴とcursorを保持する。
+      if (source.kind === 'github' && continuation) {
+        if (!validContinuation(continuation, source, window)) throw new SweepError('SOURCE', { cause: 'boundary', operation: 'news' });
+        const address = new URL(continuation); address.searchParams.set('modified', githubModifiedWindow(window)); next = address.href;
+      }
       const visited = new Set();
       while (next && record.pages < maxPages) {
         if (visited.has(next)) throw new SweepError('SOURCE', { cause: 'boundary', operation: 'news' });
@@ -138,7 +143,7 @@ async function fetchSource(source, window, context, continuation, cachedItems = 
       }
       if (next) { record.status = 'partial'; record.reasonCode = 'SOURCE_PAGE_LIMIT'; }
     } else if (source.kind === 'homebrew') {
-      homebrew = await fetchHomebrewAdvisories(context, {}, { indexOnly: true });
+      homebrew = await fetchHomebrewAdvisories(context, {}, { indexOnly: true, preferRecent: true });
       record.pages = 1; record.fetchedAt = homebrew.fetchedAt; record.freshness = homebrew.freshness;
       record.status = homebrew.freshness === 'fresh' ? 'partial' : 'error'; record.reasonCode = 'SOURCE_DETAILS_PENDING';
       record.contentFetched = homebrew.continuation.tree.length === 0 && homebrew.status === 'complete';
@@ -209,10 +214,19 @@ function recordItemDates(record, entries, window) {
 function validContinuation(address, source, window) {
   if (!validatePublicRequest(address)) return false;
   const url = new URL(address);
-  if (source.kind === 'github') return url.pathname === '/advisories' && url.searchParams.get('type') === source.advisoryType && url.searchParams.get('modified') === `${window.since}..${window.until}`;
+  if (source.kind === 'github') return url.pathname === '/advisories' && url.searchParams.get('type') === source.advisoryType && [githubModifiedWindow(window), `${window.since}..${window.until}`].includes(url.searchParams.get('modified'));
   if (source.kind === 'github-repository') return [new URL(source.url).pathname, `/repositories/${source.repositoryId}/security-advisories`].includes(url.pathname);
   return source.kind === 'redhat' && url.origin === 'https://access.redhat.com' && url.pathname === '/hydra/rest/securitydata/cve.json'
     && url.searchParams.get('after') === new Date(Date.parse(window.since) - DAY).toISOString().slice(0, 10) && url.searchParams.get('before') === new Date(Date.parse(window.until) + DAY).toISOString().slice(0, 10);
+}
+
+/** GitHubが受け付ける秒精度へ外向きに丸める。取得・継続検証が使い、返却記事は元の正確な窓で再選別する。
+ * @example githubModifiedWindow({since:'2026-10-04T12:00:00.125Z',until:'2026-11-03T12:00:00.125Z'})
+ */
+function githubModifiedWindow(window) {
+  const since = new Date(Math.floor(Date.parse(window.since) / 1000) * 1000).toISOString().replace('.000Z', 'Z');
+  const until = new Date(Math.ceil(Date.parse(window.until) / 1000) * 1000).toISOString().replace('.000Z', 'Z');
+  return `${since}..${until}`;
 }
 
 /**
@@ -333,7 +347,7 @@ export async function fetchAdaptiveNews(inventory, options = {}) {
     }
     const homebrewPresent = (inventory.homebrew?.formulae || inventory.homebrewFormulae || []).length + (inventory.homebrew?.casks || inventory.homebrewCasks || []).length > 0;
     const currentBrew = options.commonNews?.homebrew;
-    const homebrew = homebrewPresent ? await fetchHomebrewAdvisories(context, currentBrew?.continuation || previous.homebrew, { refresh: !currentBrew?.fetchedAt, preferredFormulae: (inventory.homebrew?.formulae || inventory.homebrewFormulae || []).map(value => value.name), ...options.homebrewOptions, onProgress: saveAdaptive }) : currentBrew || { records: [], coverage: [], status: 'not-applicable' };
+    const homebrew = homebrewPresent ? await fetchHomebrewAdvisories(context, currentBrew?.continuation || previous.homebrew, { refresh: !currentBrew?.fetchedAt, recentSnapshot: currentBrew?.recentUpdates, preferredFormulae: (inventory.homebrew?.formulae || inventory.homebrewFormulae || []).map(value => value.name), ...options.homebrewOptions, onProgress: saveAdaptive }) : currentBrew || { records: [], coverage: [], status: 'not-applicable' };
     const result = { schemaVersion: 2, fetchedAt: new Date(context.wallNow()).toISOString(), items: [], sources: sources.sort((a, b) => a.name.localeCompare(b.name)),
       securityUpdates: updates.sort((a, b) => a.productId.localeCompare(b.productId) || a.fixedVersion.localeCompare(b.fixedVersion)), products, productCoverage, homebrew,
       continuation: { baselines, pendingProductIds: pendingProductIds.sort(), homebrew: homebrew.continuation },
@@ -501,7 +515,9 @@ export async function fetchNews(options = {}) {
     }
     const brewSource = SOURCES.find(value => value.kind === 'homebrew'), brew = progress.get(brewSource.name);
     if (brew?.homebrew?.freshness === 'fresh') {
-      brew.homebrew = await fetchHomebrewAdvisories(context, brew.homebrew.continuation, { refresh: false });
+      const recentUpdates = brew.homebrew.recentUpdates, initialDiagnostics = brew.homebrew.diagnostics;
+      brew.homebrew = await fetchHomebrewAdvisories(context, brew.homebrew.continuation, { refresh: false, recentSnapshot: recentUpdates });
+      brew.homebrew.diagnostics = [...initialDiagnostics, ...brew.homebrew.diagnostics];
       brew.cachedItems = brew.homebrew.records.map(value => item(brewSource, { id: value.id, title: value.id, url: value.sourceUrl, publishedAt: value.published,
         updatedAt: value.modified, aliases: value.aliases, products: value.affected.map(entry => entry.name), severity: value.severity,
         fetchedAt: brew.homebrew.fetchedAt, reasonCode: 'HOMEBREW_PATCH_SCOPE_ONLY', affected: value.affected, fixed: value.affected.flatMap(entry => entry.fixed.map(version => ({ name: entry.name, version }))) }));

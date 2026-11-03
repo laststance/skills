@@ -2,6 +2,23 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { renderReport, safeSourceUrl, escapeReportText } from '../scripts/report.mjs';
 import { normalizeLanguage, resolveLanguage, localizeDiagnostic } from '../scripts/locale.mjs';
+import { matchRule, matchSecurityReleases } from '../scripts/match.mjs';
+
+test('English product assessments show product names and observed versions instead of internal Japanese rule titles', () => {
+  // Arrange
+  const inventory = { generatedAt: '2026-11-03T00:00:00Z', host: { osVersion: '27.2' }, runtimes: [
+    { name: 'node', version: '24.22.1' }, { name: 'node', version: '26.12.1' },
+  ], coverage: [{ area: 'runtimes', status: 'complete' }] };
+  const rule = { id: 'fixture-node-fixed', title: '内蔵ライブラリの修正確認', kind: 'runtime', runtimeName: 'node', verified: true,
+    verifiedAt: '2026-11-03', supportedMajors: [24, 26], affectedRanges: ['>=24.0.0, <24.22.1', '>=26.0.0, <26.12.1'], sourceUrl: 'https://nodejs.org/en/blog/vulnerability/example' };
+  // Act
+  const findings = [matchRule(inventory, rule), ...matchSecurityReleases(inventory, [{ title: 'macOS 27.2', url: 'https://support.apple.com/en-us/100100' }])];
+  const report = renderReport({ locale: resolveLanguage({ explicit: 'EN' }), inventory, match: { findings }, finishedAt: '2026-11-03T00:00:00Z' });
+  // Assert
+  assert.match(report, /node 24\.22\.1, 26\.12\.1/);
+  assert.match(report, /macOS 27\.2/);
+  assert.doesNotMatch(report, /内蔵ライブラリ|セキュリティ更新|を確認/);
+});
 
 test('an explicit language overrides the conversation and saved preference', () => {
   // Arrange

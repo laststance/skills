@@ -78,6 +78,8 @@ function editorIdentity(value) {
  */
 function matchVersionRule(inventory, rule, result) {
   let candidates = [], complete = false;
+  // 製品の識別子を説明用タイトルと分離し、レポートの言語が変わっても保持する。
+  result.product = rule.kind === 'os' ? 'macOS' : rule.runtimeName || (rule.applicationNames || []).join(' / ');
   if (['runtime-component', 'runtime'].includes(rule.kind)) {
     candidates = (inventory.runtimes || []).filter(runtime => runtime.name === rule.runtimeName)
       .map(runtime => ({ version: rule.kind === 'runtime' ? runtime.version : runtime[rule.component], runtimeVersion: runtime.version,
@@ -457,7 +459,7 @@ export function matchProductBaselines(inventory, updates) {
       // ESRは同じメジャー系統の更新だけを比較し、別branchを脆弱性境界として適用しない。
       if (channel === 'esr' && app.version?.split('.')[0] !== update.fixedVersion.split('.')[0]) continue;
       findings.push({ id: `product-update:${app.bundleId || app.name}:${update.channel}:${update.fixedVersion}`, title: `${app.name} ${app.version || '版不明'}：公式セキュリティ更新 ${update.fixedVersion}`,
-        status: '可能性あり', category: 'update-review', incident: false, fixed: update.fixedVersion, scope: '端末', sources: update.urls || [update.sourceUrl],
+        product: app.name, version: app.version, status: '可能性あり', category: 'update-review', incident: false, fixed: update.fixedVersion, scope: '端末', sources: update.urls || [update.sourceUrl],
         reason: '公式の修正済みリリース履歴に未到達または版比較不能。CVEの影響開始版と実行条件は個別告知で確認する',
         impact: { kind: 'installed-version-review', compromise: 'unconfirmed', installationConfirmed: true }, localEvidence: [app.path].filter(Boolean), evidence: [app.path].filter(Boolean),
         installationEvidence: [{ path: app.path, version: app.version }], advisoryReferences: update.advisoryIds });
@@ -492,7 +494,7 @@ export function matchSecurityReleases(inventory, releases) {
       const compared = compareVersions(app.version, latest.version);
       findings.push({ id: `security-update:${app.bundleId || app.name}:${latest.version}`, title: `${app.name} ${app.version}：セキュリティ更新 ${latest.version} を確認`,
         status: compared === null || compared < 0 ? '可能性あり' : '影響なし', category: 'update-review', incident: false, scope: '端末', sources: [latest.url], fixed: latest.version,
-        version: app.version, historyScope: 'official-release-index', assessmentBasis: product.name === 'macOS' ? 'same-major-security-release' : 'official-security-release',
+        product: app.name, version: app.version, historyScope: 'official-release-index', assessmentBasis: product.name === 'macOS' ? 'same-major-security-release' : 'official-security-release',
         reasonCode: compared === null || compared < 0 ? 'security-release-review' : 'security-release-reached',
         reason: compared === null || compared < 0 ? '公式リリース表の更新に未到達または版比較不能。対象OS・各CVEの影響開始版・実行条件は本文で確認する'
           : '確認した公式更新候補に到達。当該更新候補の適用確認だけであり、製品全体の無脆弱性・無侵害の証明ではない', evidence: [app.path].filter(Boolean), localEvidence: [app.path].filter(Boolean),

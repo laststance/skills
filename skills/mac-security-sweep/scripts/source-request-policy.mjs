@@ -1,6 +1,7 @@
 import { SOURCES, MOZILLA_SOURCES } from './source-registry.mjs';
 
-export const SOURCE_PUBLIC_GETS = new Set([...SOURCES, ...MOZILLA_SOURCES].map(source => source.url));
+export const HOMEBREW_RECENT_COMMITS = 'https://api.github.com/repos/Homebrew/advisory-database/commits?path=advisories&per_page=1';
+export const SOURCE_PUBLIC_GETS = new Set([...SOURCES, ...MOZILLA_SOURCES].map(source => source.url).concat(HOMEBREW_RECENT_COMMITS));
 export const SOURCE_REFERENCE_HOSTS = new Set([
   ...[...SOURCES, ...MOZILLA_SOURCES].map(source => new URL(source.url).hostname),
   'github.com', 'osv.dev', 'nvd.nist.gov', 'www.cve.org', 'chromereleases.googleblog.com',
@@ -19,6 +20,8 @@ export function validateSourceRequest(address, options = {}) {
   if (url.protocol !== 'https:' || url.username || url.password || url.port && url.port !== '443' || url.hash || url.href.length > 8192) return false;
   if (SOURCE_PUBLIC_GETS.has(url.href)) return true;
   if (url.origin === 'https://api.github.com') {
+    const commit = url.pathname.match(/^\/repos\/Homebrew\/advisory-database\/commits\/([a-f0-9]{40})$/)?.[1];
+    if (commit) return url.search === '?per_page=100' && options.authorizedCommits instanceof Set && options.authorizedCommits.has(commit);
     const source = SOURCES.find(entry => entry.kind === 'github-repository' &&
       [new URL(entry.url).pathname, `/repositories/${entry.repositoryId}/security-advisories`].includes(url.pathname));
     if (!source) return false;

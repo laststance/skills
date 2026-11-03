@@ -144,7 +144,8 @@ function detailFor(finding, details) {
 
 /** Keep the observed target separate from editorial titles and untranslated source summaries. @example targetText(finding, 'en') */
 function targetText(finding, language) {
-  const identity = [finding.package?.name || finding.product || finding.productId, finding.version].filter(Boolean).join(' ');
+  const versions = finding.version || [...new Set((finding.runtimeEvidence || []).map(item => item.version).filter(Boolean))].join(', ');
+  const identity = [finding.package?.name || finding.product || finding.productId, versions].filter(Boolean).join(' ');
   return escapeReportText(identity || finding.title || finding.advisoryId || finding.id || TEXT[language].unknown);
 }
 

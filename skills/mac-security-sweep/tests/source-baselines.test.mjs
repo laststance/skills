@@ -212,8 +212,32 @@ test('過去期間が未完了でも今回の30日照会を先に成功させて
   assert.equal(source.lastSuccessfulAt, '2026-11-03T00:00:00.000Z');
   assert.equal(source.missingWindow, undefined);
   const calls = requested.filter(url => url.includes('/advisories?') && url.includes('type=reviewed'));
-  assert.equal(new URL(calls[0]).searchParams.get('modified'), '2026-10-04T00:00:00.000Z..2026-11-03T00:00:00.000Z');
-  assert.equal(calls[1], address.href);
+  assert.equal(new URL(calls[0]).searchParams.get('modified'), '2026-10-04T00:00:00Z..2026-11-03T00:00:00Z');
+  assert.equal(new URL(calls[1]).searchParams.get('modified'), '2026-10-20T00:00:00Z..2026-11-01T00:00:00Z');
+  assert.equal(new URL(calls[1]).searchParams.get('after'), 'last-page');
   assert.equal(result.sourceCursors[name], '2026-11-03T00:00:00.000Z');
   assert.equal(result.sourceContinuations[name], undefined);
+});
+
+test('GitHubの秒精度の検索でミリ秒境界を取りこぼさず期間外の記事をレポートへ混ぜない', async () => {
+  // Arrange
+  const since = '2026-10-04T12:00:00.123Z', until = '2026-11-03T12:00:00.123Z', calls = [];
+  const records = [
+    { ghsa_id: 'GHSA-before', summary: 'Before exact window', updated_at: '2026-10-04T12:00:00Z' },
+    { ghsa_id: 'GHSA-current', summary: 'Inside exact window', updated_at: '2026-11-02T12:00:00Z' },
+    { ghsa_id: 'GHSA-after', summary: 'After exact window', updated_at: '2026-11-03T12:00:01Z' },
+  ];
+  const context = createRunContext({ budgetMs: 120000, wallNow: () => Date.parse(until), fetchImpl: async address => {
+    const url = new URL(address);
+    if (url.pathname !== '/advisories') return new Response('', { status: 503 });
+    calls.push(url); return Response.json(records.map(value => ({ ...value, ghsa_id: `${value.ghsa_id}-${url.searchParams.get('type')}` })));
+  } });
+  // Act
+  const result = await fetchNews({ context, previous: {}, since, until });
+  await context.close();
+  // Assert
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls.map(url => url.searchParams.get('modified')), ['2026-10-04T12:00:00Z..2026-11-03T12:00:01Z', '2026-10-04T12:00:00Z..2026-11-03T12:00:01Z']);
+  assert.deepEqual(result.items.map(value => value.id).sort(), ['GHSA-current-malware', 'GHSA-current-reviewed']);
+  assert.deepEqual(result.window, { since, until });
 });

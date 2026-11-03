@@ -126,7 +126,7 @@ test('new source history, distro identity, query dates and language survive a co
       items: [{ id: 'CVE-2026-1234', sourceId: 'github-reviewed', categories: ['linux'], fetchedAt: '2026-11-03T00:00:00Z', datePrecision: 'day', dateSemantics: 'published', ongoing: false, distribution: 'debian', distributionRelease: '12', fixed: null, secret: 'SENTINEL_SECRET' }],
       backlog: [{ url: 'https://api.github.com/advisories?after=older', window, items: [] }] } },
     packageContinuation: { query: { queries: [{ key: 'fixture', fingerprint: 'fixture', pageToken: null, complete: true, vulns: [], queriedAt: '2026-11-03T00:00:00Z', historyScope: 'osv-all-records-for-exact-version' }] } },
-    assessmentSnapshot: [{ id: 'CVE-2026-1234', status: '可能性高', observedAt: '2026-11-03T00:00:00Z',
+    assessmentSnapshot: [{ id: 'CVE-2026-1234', product: 'OpenSSL', status: '可能性高', observedAt: '2026-11-03T00:00:00Z',
       package: { name: 'openssl', ecosystem: 'Debian:12', distribution: 'debian', distributionRelease: '12', sourcePackage: 'openssl', sourceVersion: '3.0.14-1~deb12u2', binaryName: 'libssl3', binaryVersion: '3.0.14-1~deb12u2', architecture: 'arm64', purlType: 'deb', provenanceStatus: 'verified-public-record', distributionConflict: false } }],
   };
   // Act
@@ -141,6 +141,7 @@ test('new source history, distro identity, query dates and language survive a co
   assert.equal(actual.packageContinuation.query.queries[0].queriedAt, '2026-11-03T00:00:00Z');
   assert.equal(actual.assessmentSnapshot[0].package.sourceVersion, '3.0.14-1~deb12u2');
   assert.equal(actual.assessmentSnapshot[0].observedAt, '2026-11-03T00:00:00Z');
+  assert.equal(actual.assessmentSnapshot[0].product, 'OpenSSL');
   assert.equal(actual.locale.requestedLanguage, 'es');
   assert.equal((await fs.readFile(path.join(saved.evidenceDirectory, 'continuation.json'), 'utf8')).includes('SENTINEL'), false);
 });

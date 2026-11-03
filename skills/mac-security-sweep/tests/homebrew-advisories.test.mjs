@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { compareBrewVersions, parseBrewAdvisory, fetchHomebrewAdvisories, matchHomebrew } from '../scripts/homebrew-advisories.mjs';
 import { createRunContext } from '../scripts/runtime.mjs';
 import { aggregateAdvisories } from '../scripts/assessment.mjs';
+import { HOMEBREW_RECENT_COMMITS, validateSourceRequest } from '../scripts/source-request-policy.mjs';
 
 const NOW = Date.parse('2026-11-03T00:00:00Z');
 const RECORD = {
@@ -149,4 +150,125 @@ test('先頭の恒久失敗を末尾へ回し次回以降に未試行のHomebrew
   assert.deepEqual(runs[2].continuation.pendingPaths, [paths[0]]);
   assert.equal(runs[2].status, 'partial');
   assert.equal(JSON.stringify(runs).includes('SENTINEL'), false);
+});
+
+test('一万件を超える公式Homebrew indexでも有限の本文取得と未処理履歴を保持する', async () => {
+  // Arrange
+  const record = { ...RECORD, id: 'BREW-example-00000' }, body = JSON.stringify(record);
+  const sha = createHash('sha1').update(`blob ${Buffer.byteLength(body)}\0`).update(body).digest('hex');
+  const tree = { sha: 'a'.repeat(40), truncated: false, tree: Array.from({ length: 16000 }, (_, index) => ({ path: `advisories/BREW-example-${String(index).padStart(5, '0')}.json`, type: 'blob', sha, size: 1000 })) };
+  const calls = [];
+  const context = createRunContext({ budgetMs: 120000, wallNow: () => NOW, fetchImpl: async url => { calls.push(String(url)); return new Response(String(url).includes('/git/trees/') ? JSON.stringify(tree) : body); } });
+  // Act
+  const result = await fetchHomebrewAdvisories(context, {}, { maxRecords: 1 });
+  await context.close();
+  // Assert
+  assert.equal(result.freshness, 'fresh');
+  assert.equal(result.status, 'partial');
+  assert.equal(result.continuation.tree.length, 16000);
+  assert.equal(result.continuation.pendingPaths.length, 15999);
+  assert.deepEqual(result.records.map(value => value.id), ['BREW-example-00000']);
+  assert.equal(calls.length, 2);
+});
+
+test('Homebrew indexが二万件を超えた場合は本文取得せず未確認として停止する', async () => {
+  // Arrange
+  const tree = { sha: 'a'.repeat(40), truncated: false, tree: Array.from({ length: 20001 }, (_, index) => ({ path: `advisories/BREW-example-${index}.json`, type: 'blob', sha: 'b'.repeat(40), size: 1000 })) };
+  let calls = 0;
+  const context = createRunContext({ budgetMs: 120000, wallNow: () => NOW, fetchImpl: async () => { calls++; return Response.json(tree); } });
+  // Act
+  const result = await fetchHomebrewAdvisories(context);
+  await context.close();
+  // Assert
+  assert.equal(result.freshness, 'missing');
+  assert.equal(result.status, 'partial');
+  assert.equal(result.records.length, 0);
+  assert.equal(result.diagnostics[0].code, 'MSS_CAPACITY');
+  assert.equal(calls, 1);
+});
+
+test('Homebrewの最新変更を現在treeのblobで検証し名前順の古い告知より先に取得する', async () => {
+  // Arrange
+  const old = { ...RECORD, id: 'BREW-a-old', modified: '2020-01-01T00:00:00Z' }, latest = { ...RECORD, id: 'BREW-z-latest' };
+  const bodies = new Map([old, latest].map(value => [`advisories/${value.id}.json`, JSON.stringify(value)]));
+  const tree = { sha: 'a'.repeat(40), truncated: false, tree: [...bodies].map(([path, text]) => ({ path, type: 'blob', sha: createHash('sha1').update(`blob ${Buffer.byteLength(text)}\0`).update(text).digest('hex') })) };
+  const commit = 'c'.repeat(40), latestPath = 'advisories/BREW-z-latest.json', fetched = [];
+  const context = createRunContext({ budgetMs: 120000, wallNow: () => NOW, fetchImpl: async address => {
+    const url = String(address);
+    if (url.includes('/git/trees/')) return Response.json(tree);
+    if (url === HOMEBREW_RECENT_COMMITS) return Response.json([{ sha: commit }]);
+    if (url.includes(`/commits/${commit}`)) return Response.json({ sha: commit, commit: { tree: { sha: tree.sha } }, files: [{ filename: latestPath, sha: tree.tree[1].sha, status: 'modified' }] });
+    const path = url.split('/main/')[1]; fetched.push(path); return new Response(bodies.get(path));
+  } });
+  // Act
+  const index = await fetchHomebrewAdvisories(context, {}, { indexOnly: true, preferRecent: true });
+  const result = await fetchHomebrewAdvisories(context, index.continuation, { maxRecords: 1, refresh: false, recentSnapshot: index.recentUpdates });
+  await context.close();
+  // Assert
+  assert.deepEqual(fetched, ['advisories/BREW-z-latest.json']);
+  assert.deepEqual(result.records.map(value => value.id), ['BREW-z-latest']);
+  assert.deepEqual(result.continuation.pendingPaths, ['advisories/BREW-a-old.json']);
+  assert.equal(index.recentUpdates.indexStatus, 'complete');
+  assert.equal(index.recentUpdates.status, 'partial');
+  assert.equal(index.recentUpdates.pending, 1);
+  assert.equal(result.recentUpdates.status, 'complete');
+  assert.equal(result.recentUpdates.contentFetched, 1);
+  assert.equal(index.recentUpdates.commit, commit);
+});
+
+test('Homebrewの最新commitが現在treeと食い違う場合やファイルページが残る場合は未確認を保持する', async () => {
+  // Arrange
+  const path = 'advisories/BREW-example.json', commit = 'c'.repeat(40), blob = 'b'.repeat(40);
+  const tree = { sha: 'a'.repeat(40), truncated: false, tree: [{ path, type: 'blob', sha: blob }] };
+  const run = async ({ mismatch, next }) => {
+    const context = createRunContext({ budgetMs: 120000, wallNow: () => NOW, fetchImpl: async address => {
+      const url = String(address);
+      if (url.includes('/git/trees/')) return Response.json(tree);
+      if (url === HOMEBREW_RECENT_COMMITS) return Response.json([{ sha: commit }]);
+      return Response.json({ sha: commit, commit: { tree: { sha: tree.sha } }, files: [{ filename: path, sha: mismatch ? 'd'.repeat(40) : blob }] }, { headers: next ? { link: '<https://api.github.com/next>; rel="next"' } : {} });
+    } });
+    try { return await fetchHomebrewAdvisories(context, {}, { indexOnly: true, preferRecent: true }); } finally { await context.close(); }
+  };
+  // Act
+  const mismatch = await run({ mismatch: true });
+  const paged = await run({ next: true });
+  // Assert
+  assert.equal(mismatch.recentUpdates.status, 'partial');
+  assert.deepEqual(mismatch.recentUpdates.paths, []);
+  assert.equal(mismatch.diagnostics[0].cause, 'mismatch');
+  assert.equal(paged.recentUpdates.status, 'partial');
+  assert.equal(paged.recentUpdates.reasonCode, 'LATEST_COMMIT_FILE_LIMIT');
+  assert.deepEqual(paged.recentUpdates.paths, [path]);
+});
+
+test('Homebrew commit本文は直前の公式一覧のSHAだけを許可し任意repositoryや追加pageへ接続しない', () => {
+  // Arrange
+  const sha = 'a'.repeat(40), options = { authorizedCommits: new Set([sha]) };
+  // Act / Assert
+  assert.equal(validateSourceRequest(HOMEBREW_RECENT_COMMITS), true);
+  assert.equal(validateSourceRequest(`https://api.github.com/repos/Homebrew/advisory-database/commits/${sha}?per_page=100`, options), true);
+  assert.equal(validateSourceRequest(`https://api.github.com/repos/Homebrew/advisory-database/commits/${sha}?per_page=100`), false);
+  assert.equal(validateSourceRequest(`https://api.github.com/repos/attacker/advisory-database/commits/${sha}?per_page=100`, options), false);
+  assert.equal(validateSourceRequest(`https://api.github.com/repos/Homebrew/advisory-database/commits/${sha}?per_page=100&page=2`, options), false);
+});
+
+test('Homebrewの最新変更が八十本文を超える場合は最新変更全体を取得済みにしない', async () => {
+  // Arrange
+  const commit = 'c'.repeat(40), sha = 'b'.repeat(40);
+  const tree = { sha: 'a'.repeat(40), tree: Array.from({ length: 81 }, (_, index) => ({ path: `advisories/BREW-example-${index}.json`, type: 'blob', sha })) };
+  const context = createRunContext({ budgetMs: 120000, wallNow: () => NOW, fetchImpl: async address => {
+    const url = String(address);
+    if (url.includes('/git/trees/')) return Response.json(tree);
+    if (url === HOMEBREW_RECENT_COMMITS) return Response.json([{ sha: commit }]);
+    return Response.json({ sha: commit, commit: { tree: { sha: tree.sha } }, files: tree.tree.map(entry => ({ filename: entry.path, sha })) });
+  } });
+  // Act
+  const result = await fetchHomebrewAdvisories(context, {}, { indexOnly: true, preferRecent: true });
+  await context.close();
+  // Assert
+  assert.equal(result.recentUpdates.indexStatus, 'complete');
+  assert.equal(result.recentUpdates.status, 'partial');
+  assert.equal(result.recentUpdates.reasonCode, 'LATEST_COMMIT_RECORD_LIMIT');
+  assert.equal(result.recentUpdates.pending, 81);
+  assert.equal(result.coverage.find(value => value.area === 'homebrew-latest-changes').status, 'partial');
 });
