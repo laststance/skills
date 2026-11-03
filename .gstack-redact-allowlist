@@ -7,3 +7,7 @@ https://user:secret@registry.npmjs.org
 https://user:SENTINEL_SECRET@github.com
 https://user:SENTINEL_SECRET@private.example
 https://user:SENTINEL_SECRET@private.example')
+
+# Synthetic URLs used only to assert rejection by report/source URL policies.
+https://user:password@osv.dev
+https://user:secret@openssl-library.org${path}`,
