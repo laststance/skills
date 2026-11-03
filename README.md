@@ -8,7 +8,11 @@
 
 Agent skills for AI coding assistants. Install via [skills.sh](https://skills.sh).
 
+<a id="mac-security-sweep"></a>
+
 ## 🛡️ mac-security-sweep — 最新の脆弱性情報を収集、実行したMacに被害がないか確認
+
+[日本語](#mac-security-sweep) | [English](docs/mac-security-sweep/README.en.md)
 
 ### インストール
 
@@ -25,6 +29,8 @@ npx skills add -g laststance/skills --skill mac-security-sweep
 ### mac-security-sweep 動作の流れ
 
 ![mac-security-sweep 動作の流れ](docs/mac-security-sweep/walkthrough.gif)
+
+[SKILL.md（スキル本文）](skills/mac-security-sweep/SKILL.md)
 
 [MP4動画をダウンロード](https://github.com/laststance/skills/raw/refs/heads/main/docs/mac-security-sweep/walkthrough.mp4) · [静止画](docs/mac-security-sweep/walkthrough-poster.png) · [操作できるHTML](docs/mac-security-sweep/walkthrough.html)
 
