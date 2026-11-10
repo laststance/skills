@@ -107,6 +107,7 @@ Read the current source files to verify which findings are already addressed. Tr
 - **FIXED** requires current-code evidence; after committing, attach the fix commit and relevant validation result.
 - **NOT_FIXED** includes findings whose applicability or resolution has not yet been verified.
 - **SKIPPED** requires an explicit reason (for example, invalid finding, no longer applicable, or an accepted low-value nitpick). Being outside the diff, on an older commit, or absent from the newest review is not a skip reason.
+- An inline finding SKIPPED as a **false positive** (an invalid finding) also needs its thread reply (Step 5a) before the thread is resolved. Write `SKIPPED (false positive)` and the reason in its row.
 
 Do not drop an older audit row merely because the latest review omits it. Fetch failures and unexplained empty results block a clean audit.
 
@@ -120,6 +121,8 @@ For each NOT_FIXED item:
 4. **Update** the audit table status to FIXED
 
 **Priority order**: Critical → Minor → Nitpick (skip nitpicks if low value)
+
+When reading the code shows a finding is a false positive, change nothing for it: mark it `SKIPPED (false positive)` with the evidence, and answer it in Step 5a.
 
 ## Step 3: Validate
 
@@ -141,9 +144,19 @@ git commit -m "fix: resolve CodeRabbit review findings
 git push origin <branch>
 ```
 
-## Step 5: Resolve Fixed Threads
+## Step 5: Resolve Fixed and Answered Threads
 
-After pushing, resolve all threads for issues that have been fixed.
+### 5a. Reply to False Positives First
+
+Before resolving anything, reply to every inline thread whose row is `SKIPPED (false positive)` (Principle 8). One reply per thread, starting with `@coderabbitai`, saying why the finding does not apply and pointing at the evidence:
+
+> @coderabbitai This is a false positive: `parseRange()` already rejects an empty list at `src/parseRange.ts:42`, and the test "rejects an empty list" covers it. No change.
+
+Post it with **Mutation: Reply to a Thread** in [references/github-graphql-api.md](../references/github-graphql-api.md#mutation-reply-to-a-thread). When the project has its own posting helper (for example one that scans text before it goes to a public repository), use that. The reply is public on a public repository: no secrets or private paths. CodeRabbit may answer with a **Learnings added** section; read its answer on the next fetch, and when it disputes the reason with a real point, treat the finding as NOT_FIXED again.
+
+### 5b. Resolve
+
+After pushing, resolve all threads for issues that have been fixed, and the false positives answered in 5a.
 
 Run the resolve script:
 ```bash
@@ -152,7 +165,7 @@ bash ~/.claude/skills/coderabbit-resolver/scripts/resolve-threads.sh $OWNER $REP
 
 Or resolve manually with the GraphQL mutation for each thread ID.
 
-**Important**: Only resolve threads you have actually fixed. Do NOT blindly resolve all threads.
+**Important**: Only resolve threads you have actually fixed or answered in 5a. Do NOT blindly resolve all threads. `resolve-threads.sh` resolves every unresolved CodeRabbit thread on the PR, so run it only once each of them is fixed or has its 5a reply; otherwise resolve thread by thread.
 
 For outside-diff findings, there is no thread to resolve. Update the audit row with the fix commit, current code location, and validation evidence (or a justified skip reason). Include these dispositions and source links in the final report. If posting a GitHub response is authorized, use a PR issue comment linking the original review and the evidence. Do not attempt `resolveReviewThread` with a review ID, or wait for the historical review body to disappear.
 

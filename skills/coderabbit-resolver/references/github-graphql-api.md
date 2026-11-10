@@ -61,6 +61,27 @@ mutation($threadId: ID!) {
 - Mutation is idempotent — calling on already-resolved thread is safe (no error)
 - Requires write access to the repository
 
+## Mutation: Reply to a Thread
+
+Answers a finding in its own thread, for example a false positive before it is resolved (SKILL.md Principle 8). Write the reply to a file first, so the shell never sees its text:
+
+```bash
+THREAD_ID="PRRT_kwDOxxxxxxxxx"
+REPLY_FILE=reply.md   # starts with "@coderabbitai", states the reason and the evidence
+
+gh api graphql -f query='
+mutation($threadId: ID!, $body: String!) {
+  addPullRequestReviewThreadReply(input: { pullRequestReviewThreadId: $threadId, body: $body }) {
+    comment { url }
+  }
+}' -f threadId="$THREAD_ID" -F body=@"$REPLY_FILE"
+```
+
+**Key facts:**
+- Takes the same `PRRT_` thread ID as `resolveReviewThread`; the REST alternative is `POST /repos/{owner}/{repo}/pulls/{pull_number}/comments/{comment_id}/replies` with the thread's first comment's database ID
+- A reply on the line-level comment gives CodeRabbit the file and context for a learning; a general PR comment gives a vaguer one
+- Reply first, then resolve: resolving collapses the thread and keeps the reply
+
 ## Query: Get Review Bodies (Outside-Diff Comments)
 
 Outside-diff findings are embedded in `PullRequestReview.body`, not resolvable inline threads. The `/issues/{pr}/comments` endpoint used for walkthrough/rate-limit comments does not return these review bodies.

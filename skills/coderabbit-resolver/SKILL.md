@@ -34,7 +34,7 @@ Outside-diff findings live in review bodies and have no resolvable thread ID. Tr
 
 The workflow runs in a loop:
 1. Extract unresolved CodeRabbit inline threads AND all CodeRabbit review bodies, including older outside-diff findings
-2. Verify each finding against current code; fix issues or record why already fixed/skipped, and resolve applicable inline threads
+2. Verify each finding against current code; fix real issues, answer each false positive in its thread with the reason (Principle 8), or record why already fixed/skipped, and resolve applicable inline threads
 3. Commit → Push → Wait for CI + CodeRabbit re-review (or, in `cli` mode, CI + CodeRabbit CLI re-review)
 4. Re-fetch both sources after every re-review and before merge. Repeat until: zero unresolved threads AND zero unaudited/unaddressed outside-diff findings AND all CI checks pass AND (CodeRabbit reviewed current HEAD OR a CLI review passed the `CR_CLI_LOG` gate)
 
@@ -69,6 +69,10 @@ Top-level `sleep` is blocked by Claude Code's Bash policy and burns the 5-minute
 ### Principle 7: `cli` Mode Disables the GitHub Bot
 
 When the invocation includes `cli` or `--cli`, the GitHub bot must not review this PR. Put `@coderabbitai ignore` on its own line in the **PR description** (`scripts/ensure-cli-ignore.sh`) and keep it there — a comment with the same text does nothing. Review every HEAD with `cli-review.sh` and pass the gate with `CR_CLI_MODE=1` plus `CR_CLI_LOG`. Do not post `@coderabbitai review` / `full review` / `resume`, and do not run `wait-for-ratelimit.sh` (it posts `full review`). If the CLI cannot run, stop and ask the user.
+
+### Principle 8: Explain a False Positive, Then Resolve It
+
+When verification shows an inline finding is a false positive (the code is already correct, the finding's premise is wrong, or it contradicts the repository's documented rules), change no code. Reply in that finding's thread, addressed to `@coderabbitai`, with the reason and its evidence (file and line, the test that covers it, the documented rule, an observed result), then resolve the thread. CodeRabbit reads the reply, may answer with a **Learnings added** section, and applies the learning to the repository's later reviews, so the same false positive stops coming back. Reply on the specific inline comment, never as a general PR comment: a line-level reply gives a learning tied to that file and context. Never resolve a false positive without its reply, and never put `@coderabbitai review` / `full review` in it. An outside-diff false positive has no thread: its reason goes in the audit row (Step 5 says when a PR comment is allowed).
 </essential_principles>
 
 <intake>
@@ -143,6 +147,7 @@ All in `workflows/`:
 <success_criteria>
 A successful coderabbit-resolver invocation (single PR):
 - [ ] All CodeRabbit review threads resolved (zero unresolved)
+- [ ] Every false-positive inline finding has a reply in its own thread, addressed to `@coderabbitai`, with the reason and evidence, posted before that thread was resolved
 - [ ] All outside-diff review body findings audited against current HEAD: FIXED with evidence or SKIPPED with a reason; none unaudited or NOT_FIXED
 - [ ] All CI checks passing (green, none pending, failed or cancelled), including fixes for unrelated CI failures
 - [ ] CodeRabbit reviewed HEAD (a review on that commit), or, when no PR-side review covers HEAD, a CLI review of HEAD passed the `CR_CLI_LOG` gate
