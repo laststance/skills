@@ -26,10 +26,11 @@ const PROTECTED_TREES = [
 ];
 const VM_RE = /(^Docker\.raw$|\.(vmdk|qcow2|vdi|pvm|utm|vmwarevm|vhdx)$)/i;
 const REPO_DISPOSABLE = new Set(['.next', '.turbo', 'node_modules']);
-// Recipes cleaned through the package manager's own CLI; their payloads are
+// Recipes cleaned through the package manager's own CLI — plus `trash`, which
+// detection only assigns to stale versioned stores. Their payloads are
 // content-addressed blobs, so a protected-looking filename inside a package
 // (vendored fixtures, a shipped `.git`) must not protect the whole store.
-const MANAGED_STORE_RECIPES = new Set(['npm-cache', 'pnpm-store', 'uv-cache']);
+const MANAGED_STORE_RECIPES = new Set(['npm-cache', 'pnpm-store', 'uv-cache', 'trash']);
 
 /**
  * Return why a path must never be cleaned, or null.

@@ -87,6 +87,28 @@ test('a detected pnpm store with a vendored protected-looking name inside stays 
   await fx.cleanup();
 });
 
+// protects: leftover stores surface for review | fails_when: an older versioned store beside the live one is invisible or blocked by package payload names | no_claim: pnpm presence on the host
+test('a stale versioned pnpm store beside the live one is detected as a trash candidate', async () => {
+  // Arrange
+  const fx = await makeFixture();
+  const storeDir = path.join(fx.home, 'Library', 'pnpm', 'store');
+  const live = path.join(storeDir, 'v11');
+  const stale = path.join(storeDir, 'v10');
+  await writeBytes(path.join(live, 'files', 'a'), 100);
+  await writeBytes(path.join(stale, 'files', 'b', 'Cookies'), 200);
+  const session = await newSession(fx);
+  session.cli = { pnpm: { exe: '/opt/pnpm/pnpm', version: '10.0.0', storePath: live, storeDir } };
+  await session.startScan();
+  // Act
+  const staleCandidate = session.ensureCandidate(session.scan.tree.findByPath(stale));
+  const liveCandidate = session.ensureCandidate(session.scan.tree.findByPath(live));
+  // Assert
+  assert.equal(staleCandidate.recipe, 'trash');
+  assert.equal(staleCandidate.risk, 'unassessed');
+  assert.equal(liveCandidate.recipe, 'pnpm-store');
+  await fx.cleanup();
+});
+
 // protects: safe needs evidence | fails_when: a name, size or age alone enables selection | no_claim: documentation truth
 test('a .next folder is not preselected until the agent supplies local and documentation evidence', async () => {
   // Arrange
