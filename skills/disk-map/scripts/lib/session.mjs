@@ -63,7 +63,7 @@ export class Session {
     this.running = null;
     this.agent = { leaseUntil: 0, lastSeenAt: null, everConnected: false, connected: false };
     this.journalFile = path.join(config.runDir, 'journal.jsonl');
-    this.mailbox = new Mailbox({ file: path.join(config.runDir, 'mailbox.jsonl'), onChange: () => this.bump() });
+    this.mailbox = new Mailbox({ file: path.join(config.runDir, 'mailbox.jsonl'), onChange: () => this.bump(), spillDir: path.join(config.runDir, 'events') });
     this.policyCtx = { home: this.config.home, stateDir: this.config.stateDir, skillDir: this.config.skillDir, cli: null,
       preservedPaths: () => [...this.candidates.values()].filter((candidate) => candidate.assessment?.risk === 'protected' || (candidate.decision?.choice === 'keep' && candidate.decision.revision === this.revision)).map((candidate) => ({ path: candidate.path, keep: candidate.assessment?.risk !== 'protected' })),
     };
