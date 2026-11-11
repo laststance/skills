@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { FLAG } from '../scripts/lib/scanner.mjs';
 import { effectiveRisk, protectionReason } from '../scripts/lib/policy.mjs';
-import { VIEWER, idFor, makeFixture, reviewAssessment, safeAssessment, scannedSession } from './helpers.mjs';
+import { VIEWER, idFor, makeFixture, newSession, reviewAssessment, safeAssessment, scannedSession, writeBytes } from './helpers.mjs';
 
 const ctx = { home: '/Users/me', stateDir: '/Users/me/Library/Application Support/disk-map', skillDir: '/opt/skills/disk-map' };
 
@@ -42,6 +42,49 @@ test('credentials, broad folders, repository roots and app bundles are never act
   // Assert
   assert.deepEqual(reasons, cases.map(([, reason]) => reason));
   assert.equal(protectionReason({ path: '/Users/me/code/app/.next', kind: 'dir', flags: 0, repoRoot: '/Users/me/code/app' }, ctx), null);
+});
+
+// protects: managed stores stay assessable and other folders name the culprit | fails_when: a vendored protected-looking filename blocks a whole store, or the reason hides which path is protected | no_claim: package internals are safe
+test('a managed package store skips descendant protection while a plain folder names the offending path', () => {
+  // Arrange
+  const store = { path: '/Users/me/Library/pnpm/store/v11', kind: 'dir', flags: FLAG.HAS_PROTECTED_DESC, recipe: 'pnpm-store', protectedDesc: '/Users/me/Library/pnpm/store/v11/files/ab/pkg/.git' };
+  const plain = { ...store, recipe: null };
+  // Act
+  const reasons = [protectionReason(store, ctx), protectionReason(plain, ctx)];
+  // Assert
+  assert.deepEqual(reasons, [null, 'Contains protected data at "files/ab/pkg/.git" (credentials, site data or a Git repository).']);
+});
+
+// protects: scan flags reach the candidate reason | fails_when: the recorded descendant path is lost between scan and policy | no_claim: path format
+test('a folder protected by a scanned descendant names the offending path', async () => {
+  // Arrange
+  const fx = await makeFixture();
+  const dir = path.join(fx.home, 'Library', 'Caches', 'SomeApp');
+  await writeBytes(path.join(dir, 'Cookies'), 100);
+  const session = await scannedSession(fx);
+  // Act
+  const candidate = session.ensureCandidate(session.scan.tree.findByPath(dir));
+  // Assert
+  assert.equal(candidate.risk, 'protected');
+  assert.equal(candidate.reason, 'Contains protected data at "Cookies" (credentials, site data or a Git repository).');
+  await fx.cleanup();
+});
+
+// protects: a real store path reaches assessment | fails_when: the detected store recipe does not lift descendant protection | no_claim: pnpm presence on the host
+test('a detected pnpm store with a vendored protected-looking name inside stays assessable', async () => {
+  // Arrange
+  const fx = await makeFixture();
+  const store = path.join(fx.home, 'Library', 'pnpm', 'store', 'v11');
+  await writeBytes(path.join(store, 'files', 'ab', 'Cookies'), 100);
+  const session = await newSession(fx);
+  session.cli = { pnpm: { exe: '/opt/pnpm/pnpm', version: '10.0.0', storePath: store, storeDir: path.dirname(store) } };
+  await session.startScan();
+  // Act
+  const candidate = session.ensureCandidate(session.scan.tree.findByPath(store));
+  // Assert
+  assert.equal(candidate.recipe, 'pnpm-store');
+  assert.equal(candidate.risk, 'unassessed');
+  await fx.cleanup();
 });
 
 // protects: safe needs evidence | fails_when: a name, size or age alone enables selection | no_claim: documentation truth

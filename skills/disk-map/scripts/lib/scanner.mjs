@@ -251,6 +251,7 @@ export function createScan({
       depth: parent >= 0 ? tree.nodes[parent].depth + 1 : 0,
       children: [],
       flags: 0,
+      protectedDesc: null,
       boundary: null,
       denied: false,
       listed: false,
@@ -273,10 +274,12 @@ export function createScan({
   };
 
   // Propagate a flag to a node and its ancestors; stop early when already set.
-  const markUp = (index, flag) => {
+  // `desc` records the offending path so reasons can name it (first wins).
+  const markUp = (index, flag, desc = null) => {
     for (let cursor = index; cursor >= 0; cursor = tree.nodes[cursor].parent) {
       if (tree.nodes[cursor].flags & flag) break;
       tree.nodes[cursor].flags |= flag;
+      if (desc) tree.nodes[cursor].protectedDesc = desc;
     }
   };
 
@@ -289,10 +292,10 @@ export function createScan({
 
   const handleEntry = (parent, name, stat) => {
     stats.entries += 1;
-    if (isProtectedName(name)) markUp(parent, FLAG.HAS_PROTECTED_DESC);
+    if (isProtectedName(name)) markUp(parent, FLAG.HAS_PROTECTED_DESC, path.join(tree.realPathOf(parent), name));
     if (name === '.git') {
       tree.nodes[parent].flags |= FLAG.REPO_ROOT;
-      markUp(parent, FLAG.HAS_PROTECTED_DESC);
+      markUp(parent, FLAG.HAS_PROTECTED_DESC, path.join(tree.realPathOf(parent), name));
     }
     if (stat.isSymbolicLink()) {
       stats.symlinks += 1;

@@ -258,6 +258,7 @@ export class Session {
       subtreeDigest: null,
       complete: node.kind === 'dir' ? node.complete : node.boundary === null,
       flags: node.flags,
+      protectedDesc: node.protectedDesc ?? null,
       repoRoot: repoIndex >= 0 ? tree.pathOf(repoIndex) : tree.enclosingRepoRoot,
       recipe: detectRecipe(target, node, { home: this.config.home, cli: this.cli }),
       category: categoryFor(target, this.config.home),

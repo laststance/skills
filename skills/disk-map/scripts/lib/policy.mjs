@@ -26,6 +26,10 @@ const PROTECTED_TREES = [
 ];
 const VM_RE = /(^Docker\.raw$|\.(vmdk|qcow2|vdi|pvm|utm|vmwarevm|vhdx)$)/i;
 const REPO_DISPOSABLE = new Set(['.next', '.turbo', 'node_modules']);
+// Recipes cleaned through the package manager's own CLI; their payloads are
+// content-addressed blobs, so a protected-looking filename inside a package
+// (vendored fixtures, a shipped `.git`) must not protect the whole store.
+const MANAGED_STORE_RECIPES = new Set(['npm-cache', 'pnpm-store', 'uv-cache']);
 
 /**
  * Return why a path must never be cleaned, or null.
@@ -70,7 +74,10 @@ export function protectionReason(candidate, ctx) {
   const flags = candidate.flags ?? 0;
   if (flags & FLAG.PROTECTED_MARK) return 'Protected: credentials or browser site data.';
   if (flags & FLAG.REPO_ROOT) return 'Protected: repository or worktree root.';
-  if (flags & FLAG.HAS_PROTECTED_DESC) return 'Contains protected data (credentials, site data or a Git repository).';
+  if (flags & FLAG.HAS_PROTECTED_DESC && !MANAGED_STORE_RECIPES.has(candidate.recipe)) {
+    const inner = candidate.protectedDesc && isInside(candidate.protectedDesc, target) ? ` at ${JSON.stringify(path.relative(target, candidate.protectedDesc))}` : '';
+    return `Contains protected data${inner} (credentials, site data or a Git repository).`;
+  }
   if (flags & FLAG.HAS_BOUNDARY_DESC) return 'Contains another volume or an unscanned depth.';
   if (candidate.repoRoot) {
     const parts = path.relative(candidate.repoRoot, target).split(path.sep);
