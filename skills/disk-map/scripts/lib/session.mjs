@@ -360,7 +360,9 @@ export class Session {
     const status = await this.mailbox.answer(messageId);
     if (status === 'unknown') throw new HttpError(404, 'unknown-message', 'No such message.');
     if (status === 'not-delivered') throw new HttpError(409, 'not-delivered', 'Message was not delivered to the agent yet.');
-    if (status === 'duplicate') return { ok: true, duplicate: true };
+    // `assess` may consume the messageId first; that must not swallow the
+    // agent's first real reply — only a second reply is a duplicate.
+    if (status === 'duplicate' && this.chat.some((entry) => entry.role === 'agent' && entry.replyTo === messageId)) return { ok: true, duplicate: true };
     const asked = this.chat.find((entry) => entry.id === messageId);
     if (asked) asked.status = 'answered';
     const stale = revision !== this.revision || (message.payload?.revision !== undefined && message.payload.revision !== revision);
