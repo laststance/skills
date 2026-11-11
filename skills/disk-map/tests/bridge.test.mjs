@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fsp from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -172,6 +173,26 @@ test('an expired lease redelivers the same message ID and a repeated answer is i
   assert.deepEqual([again.messageId, again.delivery, again.redelivered], [posted.id, 2, true]);
   assert.deepEqual(answers, ['ok', 'duplicate']);
   assert.equal(afterAnswer, null);
+  await fx.cleanup();
+});
+
+// protects: big events survive the agent's output limit | fails_when: a scan brief arrives truncated or the spill file is unreadable | no_claim: output-limit internals
+test('a payload over the small-body limit spills to a file the event points at', async () => {
+  // Arrange
+  const fx = await makeFixture();
+  const box = new Mailbox({ file: path.join(fx.base, 'mailbox.jsonl'), spillDir: path.join(fx.base, 'events') });
+  // Act
+  await box.post('chat', { text: 'hi' });
+  await box.post('scan-complete', { candidates: 'x'.repeat(70 * 1024) });
+  const small = await box.next(10);
+  const big = await box.next(10);
+  // Assert
+  assert.equal(small.payload.text, 'hi');
+  assert.equal(big.payload.spilled, true);
+  assert.equal(big.payload.payloadBytes > 64 * 1024, true);
+  assert.equal(JSON.parse(await fsp.readFile(big.payload.payloadFile, 'utf8')).candidates.length, 70 * 1024);
+  const stat = await fsp.stat(big.payload.payloadFile);
+  assert.equal(stat.mode & 0o777, 0o600);
   await fx.cleanup();
 });
 

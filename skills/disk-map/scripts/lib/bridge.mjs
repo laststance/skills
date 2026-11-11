@@ -5,7 +5,7 @@ import http from 'node:http';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { RECIPES } from './recipes.mjs';
-import { UUID_RE, appendJsonl, newId, newSecret, secretEquals } from './util.mjs';
+import { UUID_RE, appendJsonl, ensurePrivateDir, newId, newSecret, secretEquals } from './util.mjs';
 
 export const LEASE_MS = 60_000;
 const SMALL_BODY = 64 * 1024;
@@ -34,10 +34,11 @@ export class HttpError extends Error {
  * await box.answer(event.messageId);    // 'ok', later calls → 'duplicate'
  */
 export class Mailbox {
-  constructor({ file, leaseMs = LEASE_MS, onChange = () => {}, now = Date.now }) {
+  constructor({ file, leaseMs = LEASE_MS, onChange = () => {}, now = Date.now, spillDir = null }) {
     this.file = file;
     this.leaseMs = leaseMs;
     this.onChange = onChange;
+    this.spillDir = spillDir;
     this.now = now;
     this.messages = new Map();
     this.waiters = new Set();
@@ -45,7 +46,19 @@ export class Mailbox {
   }
 
   async post(kind, payload) {
-    const message = { id: newId(), kind, payload, createdAt: new Date().toISOString(), state: 'pending', deliveries: 0, leaseUntil: 0 };
+    const id = newId();
+    // A large payload (a full scan brief) spills to a file so the agent's
+    // tool output cannot truncate mid-JSON; the event carries the path.
+    if (this.spillDir) {
+      const payloadBytes = Buffer.byteLength(JSON.stringify(payload));
+      if (payloadBytes > SMALL_BODY) {
+        await ensurePrivateDir(this.spillDir);
+        const file = path.join(this.spillDir, `${id}.json`);
+        await fsp.writeFile(file, JSON.stringify(payload, null, 2), { mode: 0o600 });
+        payload = { spilled: true, payloadFile: file, payloadBytes, note: 'Full payload too large for the event; read the JSON file at payloadFile.' };
+      }
+    }
+    const message = { id, kind, payload, createdAt: new Date().toISOString(), state: 'pending', deliveries: 0, leaseUntil: 0 };
     this.messages.set(message.id, message);
     await appendJsonl(this.file, { type: 'message', id: message.id, kind, payload, createdAt: message.createdAt });
     this.wake();

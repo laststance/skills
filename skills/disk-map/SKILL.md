@@ -56,6 +56,7 @@ node <skill-dir>/scripts/disk-map.mjs next --session <session> --timeout 25
 
 - If an investigation takes longer than ~40 s, run `heartbeat --session <session>` so the viewer keeps showing you as connected. The viewer marks you disconnected 60 s after your last call and pauses new cleanup plans.
 - A message with `redelivered: true` was not answered before its lease expired; answer it once.
+- When `payload.spilled` is true, the full event JSON is at `payload.payloadFile` (private to the run dir); read that file instead of expecting fields inline.
 - Keep servicing the loop between your own tool calls. Do not end your turn while the user is still using the viewer unless the host forces it; if it does, tell the user how to resume (ask you to "continue the disk-map loop").
 
 ## 3. Assess
