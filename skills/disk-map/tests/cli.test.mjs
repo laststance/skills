@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -49,5 +49,23 @@ test('a CLI session scans, delivers the scan event, accepts a reply, and stops w
   assert.equal(stopped.json.stopped, true);
   assert.equal(await fsp.access(stopped.json.reports.operationsCsv).then(() => true, () => false), true);
   assert.deepEqual([afterStop.code, afterStop.json.error], [4, 'runtime-unreachable']);
+  await fx.cleanup();
+});
+
+// protects: the lease survives between turns | fails_when: watch dies with the session running or never exits after it stops | no_claim: scheduler integration
+test('watch heartbeats until the session stops, then exits on its own', async () => {
+  // Arrange
+  const fx = await makeFixture();
+  const started = run('start', '--root', fx.home, '--home', fx.home, '--state-dir', fx.state, '--trash-dir', fx.trash);
+  const session = started.json.session;
+  const watcher = spawn(process.execPath, [cliPath, 'watch', '--session', session, '--interval', '1'], { stdio: 'ignore' });
+  const exited = new Promise((resolve) => watcher.once('exit', resolve));
+  // Act
+  run('stop', '--session', session);
+  const code = await Promise.race([exited, new Promise((resolve) => setTimeout(() => resolve('timeout'), 15_000))]);
+  watcher.kill('SIGKILL');
+  // Assert
+  assert.equal(started.code, 0);
+  assert.notEqual(code, 'timeout');
   await fx.cleanup();
 });

@@ -344,7 +344,7 @@ export async function startBridge(session, { assetsDir }) {
       if (req.headers.origin !== undefined || req.headers['sec-fetch-site'] || req.headers['sec-fetch-dest']) throw new HttpError(403, 'bad-origin', 'Browser requests cannot use agent endpoints.');
       requireAgent(req);
       if (method === 'GET' && pathname === '/agent/next') {
-        const timeout = Math.min(Math.max(Number(url.searchParams.get('timeout') ?? 25) || 25, 1), 25);
+        const timeout = Math.min(Math.max(Number(url.searchParams.get('timeout') ?? 25) || 25, 1), 300);
         return send(res, 200, await session.nextEvent(timeout * 1000));
       }
       if (method === 'GET' && pathname === '/agent/status') return send(res, 200, session.agentSummary());
