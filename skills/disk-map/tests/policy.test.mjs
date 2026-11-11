@@ -167,7 +167,7 @@ test('a build folder whose project has an open working directory is downgraded t
   await session.assess({ scanId: session.scanId, revision: session.revision, assessments: [safeAssessment(id)] });
   // Assert
   assert.equal(session.candidates.get(id).risk, 'review');
-  assert.match(session.candidates.get(id).reason, /open file/);
+  assert.match(session.candidates.get(id).reason, /busy-app \(pid 1\) holds src/);
   await fx.cleanup();
 });
 

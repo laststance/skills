@@ -209,13 +209,25 @@ export async function listProcesses(ctx) {
 }
 
 /**
- * Paths currently open (including working directories) by the user's
- * processes under `target`, via one fixed `lsof` call. Null when unknown.
+ * Open handles (files and working directories) the user's processes hold
+ * under `target`, via one fixed `lsof` call. Null when unknown.
+ *
+ * @returns `{ pid, command, path }[]` — `command` is the process name so
+ *   review reasons can say *who* holds the handle.
  */
 export async function openPathsUnder(target, ctx) {
-  const result = await (ctx.exec ?? runFixed)(ctx.lsofPath ?? '/usr/sbin/lsof', ['-nP', '-u', String(ctx.uid), '-Fn'], { timeoutMs: 30_000 });
+  const result = await (ctx.exec ?? runFixed)(ctx.lsofPath ?? '/usr/sbin/lsof', ['-nP', '-u', String(ctx.uid), '-Fpcn'], { timeoutMs: 30_000 });
   if (!result.stdout && result.code !== 0) return null;
-  return result.stdout.split('\n').filter((line) => line.startsWith('n/')).map((line) => line.slice(1)).filter((p) => isSameOrInside(p, target));
+  // Each record starts with `p<pid>`, then `c<command>` once, then fd/`n` lines.
+  const handles = [];
+  let pid = null;
+  let command = null;
+  for (const line of result.stdout.split('\n')) {
+    if (line.startsWith('p')) { pid = line.slice(1); command = null; }
+    else if (line.startsWith('c')) { command = line.slice(1); }
+    else if (line.startsWith('n/') && isSameOrInside(line.slice(1), target)) handles.push({ pid, command, path: line.slice(1) });
+  }
+  return handles;
 }
 
 /** `git check-ignore` with fixed argv; true only when Git says the path is ignored. */
@@ -253,7 +265,20 @@ export async function checkRecipe(recipe, candidate, ctx) {
     const scope = recipe === 'build-output' ? path.dirname(candidate.path) : candidate.path;
     const open = await openPathsUnder(scope, ctx);
     if (!open) return { ok: false, reason: 'Could not check open files; usage is unknown.' };
-    if (open.length) return { ok: false, busy: true, reason: `${open.length} open file(s) or working folder(s) are inside this location.` };
+    if (open.length) {
+      // Name the top offenders (one per process) so the user knows what to quit.
+      const seen = new Set();
+      const offenders = [];
+      for (const handle of open) {
+        const key = `${handle.pid}:${handle.command}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const held = handle.path === scope ? 'the folder itself' : path.basename(handle.path);
+        offenders.push(`${handle.command ?? 'a process'} (pid ${handle.pid ?? '?'}) holds ${held}`);
+        if (offenders.length === 3) break;
+      }
+      return { ok: false, busy: true, reason: `${open.length} open file(s) or working folder(s) inside: ${offenders.join('; ')}.` };
+    }
   }
   return { ok: true };
 }

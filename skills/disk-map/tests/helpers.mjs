@@ -49,7 +49,7 @@ export async function makeFixture() {
 export function fakeExec({ processes = [], openFiles = [], tools = {} } = {}) {
   return async (file, args, options) => {
     if (file === '/bin/ps') return { code: 0, stdout: processes.join('\n'), stderr: '', timedOut: false };
-    if (file === '/usr/sbin/lsof') return { code: 0, stdout: openFiles.map((target) => `p1\nn${target}`).join('\n'), stderr: '', timedOut: false };
+    if (file === '/usr/sbin/lsof') return { code: 0, stdout: openFiles.map((target) => `p1\ncbusy-app\nn${target}`).join('\n'), stderr: '', timedOut: false };
     if (file === '/usr/bin/git') return runFixed(file, args, options);
     if (tools[file]) return tools[file](args);
     return { code: 127, stdout: '', stderr: 'not found', timedOut: false, spawnError: 'ENOENT' };
