@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { FLAG } from '../scripts/lib/scanner.mjs';
 import { effectiveRisk, protectionReason } from '../scripts/lib/policy.mjs';
-import { VIEWER, idFor, makeFixture, newSession, reviewAssessment, safeAssessment, scannedSession, writeBytes } from './helpers.mjs';
+import { VIEWER, fakeExec, idFor, makeFixture, newSession, reviewAssessment, safeAssessment, scannedSession, writeBytes } from './helpers.mjs';
 
 const ctx = { home: '/Users/me', stateDir: '/Users/me/Library/Application Support/disk-map', skillDir: '/opt/skills/disk-map' };
 
@@ -160,7 +160,6 @@ test('a .next folder is not preselected until the agent supplies local and docum
 test('a build folder whose project has an open working directory is downgraded to review', async () => {
   // Arrange
   const fx = await makeFixture();
-  const { fakeExec } = await import('./helpers.mjs');
   const session = await scannedSession(fx, { exec: fakeExec({ openFiles: [path.join(fx.project, 'src')] }) });
   const id = idFor(session, path.join(fx.project, '.next'));
   // Act
@@ -168,6 +167,33 @@ test('a build folder whose project has an open working directory is downgraded t
   // Assert
   assert.equal(session.candidates.get(id).risk, 'review');
   assert.match(session.candidates.get(id).reason, /busy-app \(pid 1\) holds src/);
+  await fx.cleanup();
+});
+
+// protects: npm cache stays reachable on MCP machines | fails_when: a resident exec daemon blocks the recipe, or a real install does not | no_claim: every npm wrapper name
+test('a resident npm exec daemon does not block npm-cache but an install does', async () => {
+  // Arrange
+  const fx = await makeFixture();
+  const npmRoot = path.join(fx.home, '.npm');
+  await writeBytes(path.join(npmRoot, '_cacache', 'index-v5', 'a'), 2000);
+  const sessions = {};
+  for (const [key, processes] of Object.entries({ daemon: ['/usr/local/bin/npm exec firecrawl-mcp'], installer: ['npm install -g left-pad'] })) {
+    const session = await newSession(fx, { exec: fakeExec({ processes }) });
+    session.cli = { npm: { exe: '/fake/npm', version: '11.0.0', cacheRoot: npmRoot } };
+    await session.startScan();
+    sessions[key] = session;
+  }
+  // Act
+  for (const session of Object.values(sessions)) {
+    const id = idFor(session, path.join(npmRoot, '_cacache'));
+    await session.assess({ scanId: session.scanId, revision: session.revision, assessments: [{ ...safeAssessment(id, 'npm-cache'), purpose: 'npm cache' }] });
+  }
+  // Assert
+  const cache = path.join(npmRoot, '_cacache');
+  assert.equal(sessions.daemon.candidates.get(idFor(sessions.daemon, cache)).risk, 'safe');
+  const blocked = sessions.installer.candidates.get(idFor(sessions.installer, cache));
+  assert.equal(blocked.risk, 'review');
+  assert.match(blocked.reason, /npm install -g left-pad/);
   await fx.cleanup();
 });
 

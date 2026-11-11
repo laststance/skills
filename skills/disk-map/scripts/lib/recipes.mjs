@@ -56,7 +56,9 @@ export const GOOGLE_UPDATER_CACHES = ['Library/Caches/com.google.GoogleUpdater',
 const DERIVED_RE = /^.+-[a-z]{28}$/;
 const CLI_TOOLS = { 'npm-cache': 'npm', 'pnpm-store': 'pnpm', 'uv-cache': 'uv' };
 const BUSY = {
-  'npm-cache': /(^|\/)(npm|npx|npm-cli\.js|npx-cli\.js)(\s|$)/,
+  // Only cache-mutating invocations contend; resident `npm exec`/`npx`
+  // daemons (e.g. MCP servers) hold the name but never write the cache.
+  'npm-cache': /(^|[\s/])(npm|npm-cli\.js)\s+(i|install|ci|add|update|up|prune|publish|link|ln|dedupe|rebuild|rb|uninstall|remove|rm|r|cache)(\s|$)/,
   'pnpm-store': /(^|\/)(pnpm|pnpm\.cjs|pnpm\.js)(\s|$)/,
   'uv-cache': /(^|\/)uv(\s|$)/,
   'derived-data': /(\/Xcode\.app\/|(^|\/)(xcodebuild|XCBBuildService|swift-frontend)(\s|$))/,
@@ -260,7 +262,7 @@ export async function checkRecipe(recipe, candidate, ctx) {
   const ownerPattern = recipe === 'app-cache' ? appCacheLeaf(candidate.path, ctx.home)?.owner : null;
   const busyPattern = BUSY[recipe];
   const busy = processes.find((line) => (ownerPattern && line.includes(ownerPattern)) || (busyPattern && busyPattern.test(line)));
-  if (busy) return { ok: false, busy: true, reason: 'The owning application or tool is running. Quit it first; disk-map never stops apps.' };
+  if (busy) return { ok: false, busy: true, reason: `The owning application or tool is running (${busy.slice(0, 120)}). Quit it first; disk-map never stops apps.` };
   if (operationOf(recipe) !== 'cli') {
     const scope = recipe === 'build-output' ? path.dirname(candidate.path) : candidate.path;
     const open = await openPathsUnder(scope, ctx);
