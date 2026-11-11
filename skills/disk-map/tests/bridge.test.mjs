@@ -131,6 +131,27 @@ test('a viewer question reaches the agent with its candidate path and the reply 
   await live.close();
 });
 
+// protects: an assess and a reply can both answer one message | fails_when: a reply after assess is dropped as a duplicate | no_claim: answer ordering guarantees
+test('an assess that answers a chat does not swallow the following text reply', async () => {
+  // Arrange
+  const live = await liveBridge();
+  const target = path.join(live.fx.project, '.next');
+  const candidateId = idFor(live.session, target);
+  await request(live.port, { route: '/agent/next?timeout=1', headers: live.agent });
+  await request(live.port, { method: 'POST', route: '/api/chat', headers: live.viewer, body: { scanId: live.session.scanId, candidateIds: [candidateId], text: 'Delete this?' } });
+  const event = await request(live.port, { route: '/agent/next?timeout=2', headers: live.agent });
+  // Act
+  const assessed = await request(live.port, { method: 'POST', route: '/agent/assessments', headers: live.agent, body: { scanId: live.session.scanId, revision: 0, messageId: event.json.messageId, assessments: [{ candidateId, risk: 'review', purpose: 'build output', reason: 'not git-ignored here', consequences: [], evidence: [], recipe: 'trash', question: 'Trash it?' }] } });
+  const reply = await request(live.port, { method: 'POST', route: '/agent/responses', headers: live.agent, body: { messageId: event.json.messageId, revision: 0, text: 'It is build output.', candidateIds: [candidateId] } });
+  const second = await request(live.port, { method: 'POST', route: '/agent/responses', headers: live.agent, body: { messageId: event.json.messageId, revision: 0, text: 'again' } });
+  const state = await request(live.port, { route: '/api/state?after=-1', headers: live.viewer });
+  // Assert
+  assert.equal(assessed.status, 200);
+  assert.deepEqual([reply.json.duplicate, second.json.duplicate], [false, true]);
+  assert.deepEqual(state.json.chat.map((message) => [message.role, message.text]), [['user', 'Delete this?'], ['agent', 'It is build output.']]);
+  await live.close();
+});
+
 // protects: reconnecting causes no duplicates | fails_when: a leased message gets a new ID or a repeated reply shows twice | no_claim: host auto-resume
 test('an expired lease redelivers the same message ID and a repeated answer is ignored', async () => {
   // Arrange
