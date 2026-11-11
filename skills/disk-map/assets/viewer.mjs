@@ -199,20 +199,26 @@ async function setSelected(ids, selected) {
 }
 
 function recRow(candidate, { checkbox, question }) {
-  const box = checkbox ? h('input', {
+  const needsAnswer = candidate.risk === 'review' && candidate.decision !== 'trash';
+  const input = checkbox ? h('input', {
     type: 'checkbox',
     checked: candidate.selected,
-    disabled: !live() || (candidate.risk === 'review' && candidate.decision !== 'trash'),
-    title: candidate.risk === 'review' && candidate.decision !== 'trash' ? t('answerFirst') : null,
+    disabled: !live() || needsAnswer,
+    title: needsAnswer ? t('answerFirst') : null,
     'aria-label': `${t('include')}: ${candidate.name}`,
+    style: needsAnswer ? { pointerEvents: 'none' } : null,
     onchange: (event) => setSelected([candidate.id], event.target.checked),
   }) : h('span');
+  // A dead checkbox read as a broken UI — clicks open the review dialog.
+  const box = needsAnswer
+    ? h('button', { type: 'button', class: 'check-hint', disabled: !live(), title: t('answerFirst'), 'aria-label': `${t('review')}: ${candidate.name}`, onclick: () => openReview(candidate.id) }, input)
+    : input;
   const row = h('div', { class: 'rec', 'data-candidate': candidate.id },
     box,
     h('div', {}, h('button', { type: 'button', class: 'title', onclick: () => openDrawer(candidate.id) }, candidate.purpose || candidate.name), h('div', { class: 'meta' }, operationLabel(candidate)), h('div', { class: 'meta' }, shortPath(candidate.path))),
     h('span', { class: 'size' }, fmt(candidate.allocatedBytes)));
   if (question) {
-    row.append(h('div', { class: 'question' }, h('span', {}, candidate.question || candidate.reason), h('button', { type: 'button', disabled: !live(), onclick: () => openReview(candidate.id) }, t('review'))));
+    row.append(h('div', { class: 'question' }, h('span', {}, candidate.question || candidate.reason), needsAnswer ? h('span', { class: 'hint' }, t('answerFirst')) : null, h('button', { type: 'button', disabled: !live(), onclick: () => openReview(candidate.id) }, t('review'))));
   }
   return row;
 }

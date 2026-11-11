@@ -130,6 +130,9 @@ table.list td button.link { color: var(--text); text-decoration: none; text-alig
 .rec .title { font-weight: 600; border: 0; background: none; padding: 0; text-align: left; word-break: break-word; }
 .rec .meta { font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); word-break: break-all; }
 .rec .question { grid-column: 2 / 4; background: var(--review-bg); border-radius: 8px; padding: 6px 9px; font-size: 13px; display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.rec .question .hint { color: var(--review); font-weight: 600; white-space: nowrap; }
+.check-hint { border: 0; background: none; padding: 0; color: inherit; cursor: pointer; line-height: 0; }
+.check-hint:disabled { cursor: not-allowed; }
 .rec .size { font-weight: 600; white-space: nowrap; }
 .recs-body { max-height: 46vh; overflow: auto; }
 details.blocked summary { cursor: pointer; color: var(--muted); margin-top: 12px; }

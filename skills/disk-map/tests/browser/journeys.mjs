@@ -143,7 +143,9 @@ await step('E2 manual checkbox changes the selected count and persists', async (
 await step('E3 review dialog scopes consent to the listed path', async () => {
   const row = page.locator('#recs .rec', { hasText: 'Old screen recordings' });
   check(await row.locator('input[type="checkbox"]').isDisabled(), 'review checkbox enabled before an answer');
-  await row.getByRole('button', { name: 'Review' }).click();
+  check(await row.locator('.hint').isVisible(), 'answer hint not visible');
+  await row.locator('.check-hint').click(); // the disabled checkbox itself opens the dialog
+  check(await page.locator('#review-dialog').evaluate((dialog) => dialog.open), 'dialog did not open from the disabled checkbox');
   const listed = await page.locator('#review-body ul.mono li').allTextContents();
   check(listed.length === 1 && listed[0].startsWith(path.join(fx.home, 'Movies', 'old-demo')), `listed ${listed}`);
   await noLiteralNull('review dialog');
