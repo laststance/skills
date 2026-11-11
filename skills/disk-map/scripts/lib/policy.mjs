@@ -60,7 +60,9 @@ export function protectionReason(candidate, ctx) {
   }
   const rel = path.relative(home, target);
   if (BROAD.includes(rel)) return 'Too broad to act on; choose a specific folder inside it.';
-  if (APP_DATA_PARENTS.includes(path.dirname(rel))) return "A whole application's data folder is never a cleanup target.";
+  // Verified residue may hold an uninstalled app's whole data folder — review
+  // decides; every other protection still applies.
+  if (APP_DATA_PARENTS.includes(path.dirname(rel)) && !candidate.residue) return "A whole application's data folder is never a cleanup target.";
   for (const [tree, label] of PROTECTED_TREES) {
     if (isSameOrInside(rel, tree) || isInside(tree, rel)) return `Protected: ${label}.`;
   }
@@ -75,7 +77,7 @@ export function protectionReason(candidate, ctx) {
   const flags = candidate.flags ?? 0;
   if (flags & FLAG.PROTECTED_MARK) return 'Protected: credentials or browser site data.';
   if (flags & FLAG.REPO_ROOT) return 'Protected: repository or worktree root.';
-  if (flags & FLAG.HAS_PROTECTED_DESC && !MANAGED_STORE_RECIPES.has(candidate.recipe)) {
+  if (flags & FLAG.HAS_PROTECTED_DESC && !MANAGED_STORE_RECIPES.has(candidate.recipe) && !candidate.residue) {
     const inner = candidate.protectedDesc && isInside(candidate.protectedDesc, target) ? ` at ${JSON.stringify(path.relative(target, candidate.protectedDesc))}` : '';
     return `Contains protected data${inner} (credentials, site data or a Git repository).`;
   }

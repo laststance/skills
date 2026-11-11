@@ -6,6 +6,7 @@ import { HttpError, LEASE_MS, Mailbox, validateAssessment } from './bridge.mjs';
 import { checkConfirmation, executeEntry, restoreEntry, sealPlan } from './cleanup.mjs';
 import { categoryFor, effectiveRisk, eligibleAction, findOverlap, protectionReason, reconcileSelection } from './policy.mjs';
 import { GOOGLE_UPDATER_CACHES, appCacheLeaf, checkRecipe, commandText, detectRecipe, operationOf, recipeDocs, resolveCli } from './recipes.mjs';
+import { detectResidue } from './residue.mjs';
 import { spaceMetrics as metricsImpl, writeReports } from './report.mjs';
 import { createScan, subtreeDigest, volumeInfo } from './scanner.mjs';
 import { formatBytes } from '../../assets/treemap.mjs';
@@ -150,7 +151,7 @@ export class Session {
     this.recipeCtx.cli = this.cli;
     this.cachedRecipeCtx.cli = this.cli;
     this.phase = result.cancelled ? 'cancelled' : 'complete';
-    const changed = this.discoverCandidates(previous);
+    const changed = await this.discoverCandidates(previous);
     this.bump();
     if (!this.stopping) {
       await this.mailbox.post('scan-complete', this.scanBrief(changed));
@@ -167,7 +168,7 @@ export class Session {
   }
 
   /** Create candidates for recipe matches and carry unchanged earlier ones. */
-  discoverCandidates(previous) {
+  async discoverCandidates(previous) {
     const tree = this.scan.tree;
     const home = this.config.home;
     const exact = new Set([...GOOGLE_UPDATER_CACHES.map((rel) => path.join(home, rel))]);
@@ -199,6 +200,16 @@ export class Session {
       if (!quick) continue;
       const target = tree.pathOf(index);
       if (detectRecipe(target, node, { home, cli: this.cli }) || exact.has(target)) this.ensureCandidate(index);
+    }
+    // Residue of uninstalled apps becomes review candidates; the note tells
+    // the agent why it surfaced (e.g. no installed app matches the name).
+    for (const hit of await detectResidue({ home, tree, exec: this.recipeCtx.exec, appDirs: this.config.appDirs })) {
+      const index = tree.findByPath(hit.path);
+      if (index === undefined) continue;
+      const candidate = this.ensureCandidate(index);
+      if (candidate.residue) continue;
+      candidate.residue = hit;
+      this.evaluate(candidate);
     }
     return changed;
   }
@@ -263,6 +274,7 @@ export class Session {
       recipe: detectRecipe(target, node, { home: this.config.home, cli: this.cli }),
       category: categoryFor(target, this.config.home),
       assessment: null,
+      residue: null,
       readiness: null,
       decision: null,
       selected: false,
@@ -301,6 +313,7 @@ export class Session {
       candidateId: candidate.id, path: candidate.path, kind: candidate.kind, allocatedBytes: candidate.allocatedBytes, logicalBytes: candidate.logicalBytes,
       complete: candidate.complete, risk: candidate.risk, reason: candidate.reason, recipe: candidate.assessment?.recipe ?? candidate.recipe,
       detectedRecipe: candidate.recipe, protected: Boolean(candidate.protection), repoRoot: candidate.repoRoot, revision: candidate.revision,
+      residue: candidate.residue?.note ?? null,
       purpose: candidate.purpose, question: candidate.question,
     };
   }
