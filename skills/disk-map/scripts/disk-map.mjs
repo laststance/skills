@@ -150,13 +150,14 @@ const COMMON = { session: { type: 'string' }, timeout: { type: 'string' }, file:
 const SPECS = {
   start: { root: { type: 'string' }, 'state-dir': { type: 'string' }, locale: { type: 'string' }, home: { type: 'string' }, 'trash-dir': { type: 'string' }, open: { type: 'boolean' }, 'file-node-threshold': { type: 'string' } },
   serve: { 'run-dir': { type: 'string' } },
-  next: COMMON, heartbeat: COMMON, respond: COMMON, assess: COMMON, status: COMMON, stop: COMMON,
+  next: COMMON, heartbeat: COMMON, watch: { ...COMMON, interval: { type: 'string' } }, respond: COMMON, assess: COMMON, status: COMMON, stop: COMMON,
 };
 
 const USAGE = `Usage:
   disk-map.mjs start [--root ABS_PATH] [--state-dir ABS_PATH] [--locale en|ja] [--open]
   disk-map.mjs next --session ABS_PATH --timeout 25
   disk-map.mjs heartbeat --session ABS_PATH
+  disk-map.mjs watch --session ABS_PATH [--interval 45]
   disk-map.mjs respond --session ABS_PATH --file ABS_JSON
   disk-map.mjs assess --session ABS_PATH --file ABS_JSON
   disk-map.mjs status --session ABS_PATH
@@ -179,13 +180,23 @@ async function main() {
   const session = await readSession(values.session);
   switch (command) {
     case 'next': {
-      const timeout = Math.min(Math.max(Number(values.timeout ?? 25) || 25, 1), 25);
+      const timeout = Math.min(Math.max(Number(values.timeout ?? 25) || 25, 1), 300);
       const event = await call(session, 'GET', `/agent/next?timeout=${timeout}`, null, (timeout + 15) * 1000);
       print(event);
       return process.exit(event.type === 'session-ended' ? EXIT.ended : EXIT.ok);
     }
     case 'heartbeat':
       return print(await call(session, 'POST', '/agent/heartbeat', {}));
+    case 'watch': {
+      // Detached lease-keeper for turn-based agents: heartbeats until the
+      // session ends (exit 0) or the runtime disappears (exit 4 via `call`).
+      const interval = Math.min(Math.max(Number(values.interval ?? 45) || 45, 1), 55) * 1000;
+      for (;;) {
+        const beat = await call(session, 'POST', '/agent/heartbeat', {});
+        if (beat.ended) return print({ ok: true, watch: 'ended' });
+        await new Promise((resolve) => setTimeout(resolve, interval));
+      }
+    }
     case 'respond':
       return print(await call(session, 'POST', '/agent/responses', await readBodyFile(values.file)));
     case 'assess':

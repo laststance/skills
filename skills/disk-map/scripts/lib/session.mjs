@@ -116,7 +116,7 @@ export class Session {
 
   heartbeat() {
     this.mailbox.renew();
-    return { ok: true, ...this.agentStatus() };
+    return { ok: true, ended: this.ended, ...this.agentStatus() };
   }
 
   agentSummary() {

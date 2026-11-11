@@ -55,6 +55,7 @@ node <skill-dir>/scripts/disk-map.mjs next --session <session> --timeout 25
 | exit 4 (unreachable) | The runtime stopped. Tell the user; offer to start a new session. |
 
 - If an investigation takes longer than ~40 s, run `heartbeat --session <session>` so the viewer keeps showing you as connected. The viewer marks you disconnected 60 s after your last call and pauses new cleanup plans.
+- If your host yields between turns, start `watch --session <session>` once in the background: it heartbeats every ~45 s until the session ends and exits on its own. `next --timeout` accepts up to 300 s for a single long poll.
 - A message with `redelivered: true` was not answered before its lease expired; answer it once.
 - When `payload.spilled` is true, the full event JSON is at `payload.payloadFile` (private to the run dir); read that file instead of expecting fields inline.
 - Keep servicing the loop between your own tool calls. Do not end your turn while the user is still using the viewer unless the host forces it; if it does, tell the user how to resume (ask you to "continue the disk-map loop").
