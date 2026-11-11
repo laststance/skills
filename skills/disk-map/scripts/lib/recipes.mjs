@@ -155,6 +155,9 @@ export function detectRecipe(candidatePath, node, ctx) {
   if (appCacheLeaf(candidatePath, ctx.home)) return 'app-cache';
   if (ctx.cli?.npm?.cacheRoot && candidatePath === path.join(ctx.cli.npm.cacheRoot, '_cacache')) return 'npm-cache';
   if (ctx.cli?.pnpm?.storePath && candidatePath === ctx.cli.pnpm.storePath) return 'pnpm-store';
+  // A versioned sibling of the live store is a leftover from a previous pnpm
+  // major; nothing prunes it but `store prune`, so only Trash applies.
+  if (ctx.cli?.pnpm?.storeDir && /^v\d+$/.test(name) && path.dirname(candidatePath) === ctx.cli.pnpm.storeDir) return 'trash';
   if (ctx.cli?.uv?.cacheDir && candidatePath === ctx.cli.uv.cacheDir) return 'uv-cache';
   return null;
 }
