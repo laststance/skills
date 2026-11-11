@@ -14,6 +14,21 @@ import { canonicalJson, identityMismatch, identityOf, newId, runFixed, sumBytes,
 
 const MAP_PREVIEW = 40;
 const PAGE = 300;
+const MICRO_BYTES = 1024 * 1024;
+
+/** Candidates too small to list individually: unassessed and under 1 MB. */
+const isMicroCandidate = (candidate) => candidate.risk === 'unassessed' && BigInt(candidate.allocatedBytes) < BigInt(MICRO_BYTES);
+
+/** Bucket items by a grouping key into a Map, preserving insertion order. */
+function groupBy(items, keyOf) {
+  const groups = new Map();
+  for (const item of items) {
+    const key = keyOf(item);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(item);
+  }
+  return groups;
+}
 
 /**
  * One live disk-map session. The HTTP bridge maps routes onto its methods.
@@ -235,7 +250,23 @@ export class Session {
       phase: this.phase,
       volume: this.volume,
       coverage: this.coverage(),
-      candidates: [...this.candidates.values()].map((candidate) => this.candidateContext(candidate)),
+      candidates: (() => {
+        const contexts = [...this.candidates.values()].map((candidate) => this.candidateContext(candidate));
+        // Tiny unassessed candidates roll up per recipe/category so a swarm of
+        // 4 KB items cannot crowd the list; members stay individually
+        // assessable via `candidateIds`.
+        const micro = [...groupBy(contexts.filter(isMicroCandidate), (context) => context.detectedRecipe ?? context.category ?? 'other').entries()].map(([, members]) => ({
+          rolledUp: true,
+          candidateIds: members.map((member) => member.candidateId),
+          paths: members.map((member) => member.path),
+          count: members.length,
+          allocatedBytes: String(members.reduce((sum, member) => sum + BigInt(member.allocatedBytes), 0n)),
+          detectedRecipe: members[0].detectedRecipe,
+          risk: 'unassessed',
+          reason: `${members.length} tiny item(s) under 1 MB each; assess individually via candidateIds if any matters.`,
+        }));
+        return contexts.filter((context) => !isMicroCandidate(context)).concat(micro);
+      })(),
       largest: largest.slice(0, 40).map(({ index, alloc, target }) => ({ candidateId: tree.idOf(index), path: target, allocatedBytes: String(alloc), category: categoryFor(target, home) })),
       changedCandidateIds: changed,
       instructions: 'Assess candidates with `assess`. Safe requires a recipe, local + documentation evidence and consequences. Unknown ownership → review with a question. Never assess by name, size or age alone.',
@@ -752,7 +783,26 @@ export class Session {
     return {
       seq: this.seq, scanId: this.scanId, revision: this.revision, locale: this.config.locale, root: this.displayRoot(), home: this.config.home,
       phase: this.phase, progress: this.progress, volume: this.volume, coverage: this.coverage(), summary: this.summary(), agent: this.agentStatus(),
-      candidates: [...this.candidates.values()].filter((candidate) => candidate.recipe || candidate.assessment || candidate.risk !== 'unassessed').sort((a, b) => Number(BigInt(b.allocatedBytes) - BigInt(a.allocatedBytes))).slice(0, 500).map((candidate) => this.viewCandidate(candidate)),
+      candidates: (() => {
+        const visible = [...this.candidates.values()].filter((candidate) => candidate.recipe || candidate.assessment || candidate.risk !== 'unassessed');
+        const rows = visible.filter((candidate) => !isMicroCandidate(candidate)).sort((a, b) => Number(BigInt(b.allocatedBytes) - BigInt(a.allocatedBytes))).slice(0, 500).map((candidate) => this.viewCandidate(candidate));
+        // Same roll-up as the agent brief, in viewer row shape.
+        const micro = [...groupBy(visible.filter(isMicroCandidate), (candidate) => candidate.recipe ?? candidate.category ?? 'other').entries()].map(([key, members]) => {
+          const parents = [...new Set(members.map((member) => path.dirname(member.path)))];
+          return {
+            id: `rollup:${key}`, rolledUp: true, count: members.length, paths: members.map((member) => member.path),
+            name: `${members.length} tiny items under 1 MB`, path: parents.length === 1 ? parents[0] : `${parents.length} locations`,
+            kind: 'dir', revision: this.revision,
+            allocatedBytes: sumBytes(members.map((member) => member.allocatedBytes)), logicalBytes: sumBytes(members.map((member) => member.logicalBytes)), reclaimableBytes: null,
+            complete: members.every((member) => member.complete), risk: 'unassessed',
+            reason: `${members.length} tiny item(s) under 1 MB each — they appear individually once assessed.`,
+            purpose: '', consequences: [], evidence: [], recipe: members[0].recipe ?? null,
+            operation: null, command: null, question: null, decision: null, selected: false,
+            userUnchecked: false, category: members[0].category, assessed: false,
+          };
+        });
+        return [...rows, ...micro];
+      })(),
       chat: this.chat.slice(-200), outcomes: this.outcomes.slice(-500), metrics: this.metrics, ended: this.ended, reports: this.reports, recovered: this.config.recovered ?? [],
     };
   }

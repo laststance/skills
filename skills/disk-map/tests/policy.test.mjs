@@ -109,6 +109,33 @@ test('a stale versioned pnpm store beside the live one is detected as a trash ca
   await fx.cleanup();
 });
 
+// protects: candidate lists stay readable | fails_when: a swarm of sub-megabyte items crowds out meaningful candidates or a rolled-up item never returns | no_claim: exact roll-up shape beyond tested fields
+test('sub-megabyte unassessed candidates roll up into one row until assessed', async () => {
+  // Arrange
+  const fx = await makeFixture();
+  await writeBytes(path.join(fx.home, 'a', '.turbo', 'x'), 4_000);
+  await writeBytes(path.join(fx.home, 'b', '.turbo', 'x'), 8_000);
+  const session = await scannedSession(fx);
+  const microIds = [path.join(fx.home, 'a', '.turbo'), path.join(fx.home, 'b', '.turbo'), path.join(fx.project, '.next')].map((target) => idFor(session, target)).sort();
+  // Act
+  const brief = session.scanBrief([]);
+  const state = session.getState(-1);
+  await session.assess({ scanId: session.scanId, revision: session.revision, assessments: [reviewAssessment(microIds[0])] });
+  const after = session.getState(-1);
+  // Assert
+  const briefRollups = brief.candidates.filter((entry) => entry.rolledUp);
+  assert.equal(briefRollups.length, 1);
+  assert.equal(briefRollups[0].count, 3);
+  assert.deepEqual([...briefRollups[0].candidateIds].sort(), microIds);
+  assert.equal(brief.candidates.some((entry) => entry.candidateId === microIds[0]), false);
+  const stateRollup = state.candidates.find((entry) => entry.rolledUp);
+  assert.equal(stateRollup.count, 3);
+  assert.equal(state.candidates.some((entry) => entry.id === microIds[0]), false);
+  assert.equal(after.candidates.some((entry) => entry.id === microIds[0]), true);
+  assert.equal(after.candidates.find((entry) => entry.rolledUp).count, 2);
+  await fx.cleanup();
+});
+
 // protects: safe needs evidence | fails_when: a name, size or age alone enables selection | no_claim: documentation truth
 test('a .next folder is not preselected until the agent supplies local and documentation evidence', async () => {
   // Arrange
