@@ -4,7 +4,7 @@
 [![Claude Code](https://img.shields.io/badge/Claude_Code-compatible-D97757?style=flat-square&logo=claude&logoColor=white)](https://code.claude.com/docs/en/skills)
 [![Cursor](https://img.shields.io/badge/Cursor-compatible-000000?style=flat-square&logo=cursor&logoColor=white)](https://cursor.com/docs/skills)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-compatible-111827?style=flat-square&logo=openai&logoColor=white)](https://developers.openai.com/codex/skills)
-[![Skills](https://img.shields.io/badge/skills-35-2563EB?style=flat-square)](#available-skills)
+[![Skills](https://img.shields.io/badge/skills-25-2563EB?style=flat-square)](#available-skills)
 
 Agent skills for AI coding assistants. Install via [skills.sh](https://skills.sh).
 
@@ -46,35 +46,25 @@ npx skills add laststance/skills
 Install a specific skill:
 
 ```bash
-npx skills add laststance/skills --skill apollousa
 npx skills add laststance/skills --skill chrome-clean-install
-npx skills add laststance/skills --skill ci-hardening
 npx skills add laststance/skills --skill code-step-tour
 npx skills add laststance/skills --skill code-trace
 npx skills add laststance/skills --skill codebase-litter-audit
-npx skills add laststance/skills --skill coderabbit-resolver
 npx skills add laststance/skills --skill colorful-type
 npx skills add laststance/skills --skill component-hierarchy
 npx skills add laststance/skills --skill cookie
 npx skills add laststance/skills --skill deep-trace
 npx skills add laststance/skills --skill disk-map
 npx skills add laststance/skills --skill dnd
-npx skills add laststance/skills --skill electron-release
 npx skills add laststance/skills --skill explain
 npx skills add laststance/skills --skill explain-diff-html
 npx skills add laststance/skills --skill generating-codebase-wiki
-npx skills add laststance/skills --skill github-actions-pnpm-ci
-npx skills add laststance/skills --skill laststance-publish-skill
 npx skills add laststance/skills --skill learn-html
-npx skills add laststance/skills --skill load
 npx skills add laststance/skills --skill locate-ui-from-code
 npx skills add laststance/skills --skill mac-security-sweep
-npx skills add laststance/skills --skill oss-repo-setup
 npx skills add laststance/skills --skill pr-tour
 npx skills add laststance/skills --skill product-inspiration
 npx skills add laststance/skills --skill prop-drill
-npx skills add laststance/skills --skill react-query-key-jump
-npx skills add laststance/skills --skill save
 npx skills add laststance/skills --skill search
 npx skills add laststance/skills --skill source-grounded-research
 npx skills add laststance/skills --skill ts-pattern-refactor
@@ -87,35 +77,25 @@ npx skills add laststance/skills --skill visual-lint
 
 | Skill | Description | Dependencies |
 |-------|-------------|--------------|
-| [apollousa](skills/apollousa/) | Creates a GitHub PR for completed work, then runs the full CodeRabbit review, CI, merge, and cleanup loop. Pass `cli` to put `@coderabbitai ignore` in the PR body and review with the CodeRabbit CLI. | [coderabbit-resolver](skills/coderabbit-resolver/) **(required)**, [CodeRabbit CLI](https://docs.coderabbit.ai/cli) (required for `cli`) |
 | [chrome-clean-install](skills/chrome-clean-install/) | Refresh Chromium-based browsers by backing up profile/cache data, guiding a clean reinstall, and restoring bookmarks only. Handles Chrome, Chrome Canary, Edge, Brave, Arc, Dia, and custom Chromium browser paths. | [Node.js](https://nodejs.org/) **(required)** |
-| [ci-hardening](skills/ci-hardening/) | Port the skills-desktop GitHub Actions hardening baseline — CodeQL, Dependency Review, Scorecard, Dependabot, CODEOWNERS, pinned actions, least-privilege permissions, and branch/security settings. | [Node.js](https://nodejs.org/) **(required)**, [GitHub CLI](https://cli.github.com/) (recommended) |
 | [code-step-tour](skills/code-step-tour/) | Step-through sequence of a real code path: file tree on the left, one arrow per click, and the functions or callbacks on that step. For React, also shows the hook caller, the component hierarchy, and the Props or Context path. | [Node.js](https://nodejs.org/) **(required)** |
 | [code-trace](skills/code-trace/) | Interactive code execution path tracer. Explains how code flows from entry point to output with step-by-step navigation. | — |
 | [codebase-litter-audit](skills/codebase-litter-audit/) | Audit repositories for half-finished features, stale TODOs, no-op handlers, visible UI wired to stubs, disabled tests, stale docs, placeholder assets, suppressions, and other codebase litter that dead-code tools miss. | — |
-| [coderabbit-resolver](skills/coderabbit-resolver/) | Audits inline and outside-diff CodeRabbit findings, validates fixes, answers each false positive in its thread with the reason (so CodeRabbit keeps it as a learning) before resolving it, rechecks review evidence before merge, and cleans up. Supports `--bulk` for all open PRs. Pass `cli` to disable the GitHub bot (`@coderabbitai ignore`) and review with the CodeRabbit CLI. | [GitHub CLI](https://cli.github.com/) **(required)**, [jq](https://jqlang.org/) **(required)**, [CodeRabbit CLI](https://docs.coderabbit.ai/cli) (required for `cli`) |
 | [colorful-type](skills/colorful-type/) | Replace colorless primitives (`string`, `number`, `boolean`) with domain-rich types. Adds branded types, JSDoc, and named type aliases to communicate intent. | — |
 | [component-hierarchy](skills/component-hierarchy/) | Visualize where a React component sits in the Next.js tree (Page → target) as an ASCII diagram with file paths. Supports App Router and Pages Router. | — |
 | [cookie](skills/cookie/) | Copy Google Chrome's cookies into `playwright-cli` (macOS) so its browser inherits every logged-in session (GitHub, etc.). Decrypts via the macOS Keychain, loads per-cookie, verifies before navigating, and deletes the plaintext token files after. | `playwright-cli` **(required)**, Node.js **(required)** |
 | [deep-trace](skills/deep-trace/) | Line-by-line execution path tracer for PR diffs, git diffs, or specified code sections. Maps every line to its screen/URL, data flow, and execution context like a debugger's step-through. | [Serena MCP](https://github.com/oraios/serena) (recommended) |
 | [disk-map](skills/disk-map/) | Interactive macOS disk map with agent Chat, sanitized metadata probes, size-ordered candidate pages, and evidence-based cleanup after exact-manifest confirmation. Protects VM data and user Keep decisions; distinguishes parent-only protection from whole-subtree preservation. Reports cleanup and Trash restore completion, pauses idle sessions with explicit resume, and exports localized reports with honest space accounting. | [Node.js](https://nodejs.org/) 22+ **(required)**, macOS **(required)** |
 | [dnd](skills/dnd/) | Browser drag-and-drop QA via coordinate-based pointer ops, plus video + drop+10-frame evidence for motion-sensitive bugs (DragOverlay rollback, ghost return). Knowledge-injection skill loaded by browser-using skills (e.g. `ux-gap-detector`) before any browser interaction — ref-based `drag` returns false success on `dnd-kit` and similar libraries. | `playwright-cli` **(required)**, `ffmpeg` (recommended for frame extraction) |
-| [electron-release](skills/electron-release/) | Guides Electron app release process including build, code signing, notarization, and GitHub Release with auto-update support. | — |
 | [explain](skills/explain/) | Deep, systematic explanation of code, concepts, and system behavior. Always operates at advanced level with introspection markers and validation. | [Serena MCP](https://github.com/oraios/serena) (recommended), [Context7](https://github.com/upstash/context7) (recommended) |
 | [explain-diff-html](skills/explain-diff-html/) | Explains a diff, branch, or PR as one self-contained interactive HTML page — deep background, core intuition with toy-data figures, a grouped code walkthrough, and a five-question multiple-choice quiz that checks the reader actually understood the change. Explores surrounding code for context; diagrams are HTML, never ASCII. | — |
 | [generating-codebase-wiki](skills/generating-codebase-wiki/) | Generate a local DeepWiki-style static HTML site that explains a codebase with numbered chapters, mermaid diagrams that name real symbols, and path:line citations. | — |
-| [github-actions-pnpm-ci](skills/github-actions-pnpm-ci/) | Creates secure pnpm/Node GitHub Actions CI with SHA-pinned actions, pnpm store caching, frozen installs, lint/test/build/typecheck workflows, and Dependabot updates. | — |
-| [laststance-publish-skill](skills/laststance-publish-skill/) | Publishes a stable skill to the laststance/skills GitHub registry for distribution via `npx skills add`, or ships local edits to an already-published one. A new skill gets its README install command, table row, usage example (alphabetical), and badge count; an update re-checks its table row and resyncs the install with `npx skills update` after the push. | — |
 | [learn-html](skills/learn-html/) | Answers a general "how does X work?" question as one self-contained interactive HTML explainer (background → intuition → mechanics → quiz). Every factual claim must be sourced — docs lookup, a live measurement, or a repo grep — and anything unverified is flagged inline rather than smoothed into confident prose. Output language follows the question's language. | [Context7 MCP](https://github.com/upstash/context7) (recommended) |
-| [load](skills/load/) | Load project context from Serena MCP memory for session initialization. Discovers memories, reads `CRITICAL_*` rules, cross-referenced memories, and the latest session checkpoint, and keeps tooling decisions recorded by a different agent as history. | [Serena MCP](https://github.com/oraios/serena) **(required)** |
 | [locate-ui-from-code](skills/locate-ui-from-code/) | Code → screen: locate UI with on-screen highlight overlay (ring + file badge), reach logic branches (`debugger`, `if`, `useEffect`, handlers) by executing the user operations that trigger them, and capture DOM dump + highlighted screenshots. Agent runs the reach recipe itself and leaves the browser open for DevTools. Tool-agnostic — `cursor-ide-browser` MCP (Cursor), `playwright-cli` (Codex/Claude Code), chrome-devtools MCP when available. | `playwright-cli` (Codex/Claude Code), cursor-ide-browser MCP (Cursor), chrome-devtools MCP (recommended) |
 | [mac-security-sweep](skills/mac-security-sweep/) | Collects current security news before a read-only Mac inspection, then reports relevant vulnerabilities, scoped non-affected checks and compromise indicators in the conversation language. Preserves unknown coverage and keeps secrets local; remediation is proposal-only. | macOS **(required)**, [Node.js](https://nodejs.org/) 22+ **(required)**, [OSV-Scanner](https://github.com/google/osv-scanner) (recommended) |
-| [oss-repo-setup](skills/oss-repo-setup/) | Bring a TypeScript/pnpm repo to an OSS-ready baseline modeled on laststance/happy-dom-extended — ESLint + Prettier + Fallow + coverage tooling, Test/Build/TypeCheck/Lint/Format/Fallow/Security/Socket/Scorecard workflows with Codecov, SECURITY/CONTRIBUTING/CODE_OF_CONDUCT/TESTING/ARCHITECTURE/TODOS docs, and README badges, in four commits; pushes and repo settings only after confirmation. No Dependabot. | [Node.js](https://nodejs.org/) **(required)**, [pnpm](https://pnpm.io/) **(required)**, [GitHub CLI](https://cli.github.com/) **(required)** |
 | [pr-tour](skills/pr-tour/) | Live onboarding tour of newly implemented code. Runs the target app in a debug session — the vscode-debug-mcp bridge and playwright-cli attach to the same Chrome — pauses at curated breakpoints inside the new code while driving the real UI, narrates each stop in chat mapping UI moments to exact file:line, and writes a replayable tour artifact (before/after screenshots + deep-trace-extension replay table). | `playwright-cli` **(required)**, [Debug MCP Bridge](https://github.com/laststance/vscode-debug-mcp) **(required)**, [Serena MCP](https://github.com/oraios/serena) (recommended) |
 | [product-inspiration](skills/product-inspiration/) | Provides UI/feature implementation inspiration by researching top-tier apps. Implements all proposed patterns in _trials/ folder for hands-on evaluation. | [Tavily MCP](https://github.com/tavily-ai/tavily-mcp-server) (recommended) |
 | [prop-drill](skills/prop-drill/) | Trace React prop-drilling paths from origin definition to leaf consumers. Shows the original prop definition as a clickable code block, the full drilling route as a table, and a Mermaid flowchart. | [Serena MCP](https://github.com/oraios/serena) (recommended), [Context7](https://github.com/upstash/context7) (recommended) |
-| [react-query-key-jump](skills/react-query-key-jump/) | Jump from a TanStack React Query `queryKey` string (e.g. `getDrawing`) to the `useQuery` / `useInfiniteQuery` hook line where that key is defined. Skips `invalidateQueries` usage sites. | [ripgrep](https://github.com/BurntSushi/ripgrep) **(required)** |
-| [save](skills/save/) | Save session context to Serena MCP memory for cross-session persistence. Analyzes accomplishments, persists learnings, and creates session checkpoints tagged with the authoring agent, so agent-specific tooling decisions don't leak into Claude Code / Cursor / Codex sessions that share the same memory. | [Serena MCP](https://github.com/oraios/serena) **(required)** |
 | [search](skills/search/) | Iterative multi-tool research. Picks the best-fit tool (WebSearch, WebFetch, Exa, Perplexity, Tavily, Context7, DeepWiki) for the question type, then switches tool families across up to 3 passes until a citation-backed answer is reached. | [Exa MCP](https://github.com/exa-labs/exa-mcp-server) (recommended), [Perplexity MCP](https://github.com/ppl-ai/modelcontextprotocol) (recommended), [Tavily MCP](https://github.com/tavily-ai/tavily-mcp-server) (recommended), [Context7](https://github.com/upstash/context7) (recommended) |
 | [source-grounded-research](skills/source-grounded-research/) | Produces source-grounded research briefs with citations, contradiction handling, and query logs. Research-only — no implementation or speculative answers without sources. | [Context7](https://github.com/upstash/context7) (recommended), web search / MCP (recommended) |
 | [ts-pattern-refactor](skills/ts-pattern-refactor/) | Detect and refactor conditional code to ts-pattern's `match().with().exhaustive()`. Refactors JSX branching, chained ternaries, and discriminated-union dispatch — but deliberately leaves plain single-condition if-chains alone. Codifies syntactic-form × context judgment criteria. | [ts-pattern](https://github.com/gvergnaud/ts-pattern) **(required)**, [Context7](https://github.com/upstash/context7) (recommended), [Serena MCP](https://github.com/oraios/serena) (recommended) |
@@ -128,40 +108,26 @@ npx skills add laststance/skills --skill visual-lint
 After installation, invoke skills as slash commands in your AI coding assistant:
 
 ```
-/apollousa                        # Create PR, resolve CodeRabbit, merge, and clean up
-/apollousa cli                    # Create PR, review with CodeRabbit CLI (bot ignored), merge
 /chrome-clean-install Chrome Canary # Clean-refresh a Chromium browser profile/cache
-/ci-hardening                        # Port skills-desktop CI security baseline to this repo
 /code-step-tour checkout submit     # Step through a call path, including React props and context
 /code-trace                         # Trace code execution paths
 /codebase-litter-audit              # Find half-finished codebase litter
-/coderabbit-resolver 17             # Process PR #17
-/coderabbit-resolver 17 cli         # Process PR #17 via CodeRabbit CLI (bot ignored)
-/coderabbit-resolver --bulk         # Process all open PRs
-/coderabbit-resolver --bulk cli     # All open PRs via CodeRabbit CLI
 /colorful-type                       # Replace primitives with domain types
 /component-hierarchy Button.tsx      # ASCII tree from Page down to target component
 /cookie                             # Import Chrome cookies into a playwright-cli session
 /deep-trace 42                      # Trace PR #42 line-by-line
 /disk-map                           # Map Mac storage, chat about it, reviewed cleanup
 /dnd                                # Load drag-and-drop coordinate-based verification protocol
-/electron-release                   # Electron release workflow
 /explain src/auth/middleware.ts      # Deep code explanation
 /explain-diff-html 42               # Interactive HTML PR walkthrough + quiz
 /generating-codebase-wiki <repo>    # DeepWiki-style static HTML wiki of a codebase
-/github-actions-pnpm-ci             # Add secure pnpm GitHub Actions CI
-/laststance-publish-skill           # Publish or update a skill in laststance/skills
 /learn-html compositionend          # Sourced HTML explainer: background → mechanics → quiz
-/load                               # Load session context from Serena MCP
 /locate-ui-from-code FolderHeader     # Locate render target with screenshot + DOM dump
 /locate-ui-from-code src/Foo.tsx:139  # Locate UI + reach debugger/effect/handler at pinned line
 /mac-security-sweep                 # Security news first, then a read-only Mac assessment
-/oss-repo-setup                     # OSS-ready repo: CI, badges, community docs
 /pr-tour                             # Live debug-session tour of newly written code
 /product-inspiration                # Get UI/feature inspiration
 /prop-drill orderData OrderTable    # Trace prop-drilling path
-/react-query-key-jump getDrawing    # Jump to useQuery queryKey definition line
-/save                               # Save session context to Serena MCP
 /search what changed in React 19    # Iterative multi-tool research (Web + MCPs) until satisfied
 /source-grounded-research React 19  # Cited research brief (no code changes)
 /ts-pattern-refactor                # Sweep codebase for ts-pattern refactor opportunities
