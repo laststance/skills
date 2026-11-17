@@ -16,7 +16,7 @@ import { SCHEMA_VERSION, ensurePrivateDir, newId, runFixed, sleep, writePrivateJ
 
 const SCRIPT = fileURLToPath(import.meta.url);
 const SKILL_DIR = fs.realpathSync(path.resolve(path.dirname(SCRIPT), '..'));
-const EXIT = { ok: 0, usage: 1, preflight: 2, ended: 3, unreachable: 4, rejected: 5 };
+const EXIT = { ok: 0, usage: 1, preflight: 2, ended: 3, unreachable: 4, rejected: 5, paused: 6 };
 
 const print = (value) => process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
 const fail = (code, error, message, extra = {}) => {
@@ -150,7 +150,11 @@ const COMMON = { session: { type: 'string' }, timeout: { type: 'string' }, file:
 const SPECS = {
   start: { root: { type: 'string' }, 'state-dir': { type: 'string' }, locale: { type: 'string' }, home: { type: 'string' }, 'trash-dir': { type: 'string' }, open: { type: 'boolean' }, 'file-node-threshold': { type: 'string' } },
   serve: { 'run-dir': { type: 'string' } },
-  next: COMMON, heartbeat: COMMON, watch: { ...COMMON, interval: { type: 'string' } }, respond: COMMON, assess: COMMON, status: COMMON, stop: COMMON,
+  next: COMMON, heartbeat: COMMON, respond: COMMON, assess: COMMON, status: COMMON, stop: COMMON,
+  resume: COMMON,
+  candidates: { ...COMMON, revision: { type: 'string' }, kind: { type: 'string' }, cursor: { type: 'string' }, limit: { type: 'string' } },
+  probe: { ...COMMON, revision: { type: 'string' }, 'candidate-id': { type: 'string' } },
+  watch: { ...COMMON, interval: { type: 'string' } },
 };
 
 const USAGE = `Usage:
@@ -161,6 +165,9 @@ const USAGE = `Usage:
   disk-map.mjs respond --session ABS_PATH --file ABS_JSON
   disk-map.mjs assess --session ABS_PATH --file ABS_JSON
   disk-map.mjs status --session ABS_PATH
+  disk-map.mjs candidates --session ABS_PATH --revision N [--kind candidates|largest] [--cursor N] [--limit 1..20]
+  disk-map.mjs probe --session ABS_PATH --revision N --candidate-id UUID
+  disk-map.mjs resume --session ABS_PATH
   disk-map.mjs stop --session ABS_PATH`;
 
 async function main() {
@@ -183,7 +190,7 @@ async function main() {
       const timeout = Math.min(Math.max(Number(values.timeout ?? 25) || 25, 1), 300);
       const event = await call(session, 'GET', `/agent/next?timeout=${timeout}`, null, (timeout + 15) * 1000);
       print(event);
-      return process.exit(event.type === 'session-ended' ? EXIT.ended : EXIT.ok);
+      return process.exit(event.type === 'session-ended' ? EXIT.ended : event.type === 'session-paused' ? EXIT.paused : EXIT.ok);
     }
     case 'heartbeat':
       return print(await call(session, 'POST', '/agent/heartbeat', {}));
@@ -194,6 +201,10 @@ async function main() {
       for (;;) {
         const beat = await call(session, 'POST', '/agent/heartbeat', {});
         if (beat.ended) return print({ ok: true, watch: 'ended' });
+        if (beat.paused) {
+          print({ ok: true, watch: 'paused' });
+          return process.exit(EXIT.paused);
+        }
         await new Promise((resolve) => setTimeout(resolve, interval));
       }
     }
@@ -203,6 +214,16 @@ async function main() {
       return print(await call(session, 'POST', '/agent/assessments', await readBodyFile(values.file), 120_000));
     case 'status':
       return print(await call(session, 'GET', '/agent/status'));
+    case 'candidates': {
+      if (values.revision === undefined) fail(EXIT.usage, 'usage', '--revision is required; use the revision from status.');
+      const query = new URLSearchParams({ revision: values.revision, kind: values.kind ?? 'candidates', cursor: values.cursor ?? '0', limit: values.limit ?? '20' });
+      return print(await call(session, 'GET', `/agent/candidates?${query}`));
+    }
+    case 'probe':
+      if (values.revision === undefined || !values['candidate-id']) fail(EXIT.usage, 'usage', '--revision and --candidate-id are required.');
+      return print(await call(session, 'POST', '/agent/probe', { candidateId: values['candidate-id'], revision: Number(values.revision) }));
+    case 'resume':
+      return print(await call(session, 'POST', '/agent/resume', {}));
     case 'stop':
       return print(await call(session, 'POST', '/agent/stop', {}, 180_000));
     default:

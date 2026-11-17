@@ -5,9 +5,10 @@ import path from 'node:path';
 import { HttpError, LEASE_MS, Mailbox, validateAssessment } from './bridge.mjs';
 import { checkConfirmation, executeEntry, restoreEntry, sealPlan } from './cleanup.mjs';
 import { categoryFor, effectiveRisk, eligibleAction, findOverlap, protectionReason, reconcileSelection } from './policy.mjs';
-import { GOOGLE_UPDATER_CACHES, appCacheLeaf, checkRecipe, commandText, detectRecipe, operationOf, recipeDocs, resolveCli } from './recipes.mjs';
+import { GOOGLE_UPDATER_CACHES, appCacheLeaf, checkRecipe, commandText, detectRecipe, operationOf, recipeDocs, resolveCli, listProcesses } from './recipes.mjs';
+import { countByStatus, spaceMetrics as metricsImpl, writeReports } from './report.mjs';
+import { translate } from '../../assets/i18n.mjs';
 import { detectResidue } from './residue.mjs';
-import { spaceMetrics as metricsImpl, writeReports } from './report.mjs';
 import { createScan, subtreeDigest, volumeInfo } from './scanner.mjs';
 import { formatBytes } from '../../assets/treemap.mjs';
 import { canonicalJson, identityMismatch, identityOf, newId, runFixed, sumBytes, writePrivateJson } from './util.mjs';
@@ -42,7 +43,7 @@ function groupBy(items, keyOf) {
  */
 export class Session {
   constructor(config) {
-    this.config = { locale: 'en', fileNodeThreshold: 1024 * 1024, aliases: new Map(), uid: process.getuid(), ...config };
+    this.config = { locale: 'en', idleTimeoutMs: 180_000, fileNodeThreshold: 1024 * 1024, aliases: new Map(), uid: process.getuid(), ...config };
     this.scanId = newId();
     this.revision = 0;
     this.seq = 0;
@@ -61,11 +62,18 @@ export class Session {
     this.ended = false;
     this.stopping = false;
     this.running = null;
+    this.paused = false;
+    this.lastViewerActivity = Date.now();
+    this.pauseReport = null;
+    this.lastCompletion = null;
     this.agent = { leaseUntil: 0, lastSeenAt: null, everConnected: false, connected: false };
     this.journalFile = path.join(config.runDir, 'journal.jsonl');
     this.mailbox = new Mailbox({ file: path.join(config.runDir, 'mailbox.jsonl'), onChange: () => this.bump(), spillDir: path.join(config.runDir, 'events') });
     this.policyCtx = { home: this.config.home, stateDir: this.config.stateDir, skillDir: this.config.skillDir, cli: null,
-      preservedPaths: () => [...this.candidates.values()].filter((candidate) => candidate.assessment?.risk === 'protected' || (candidate.decision?.choice === 'keep' && candidate.decision.revision === this.revision)).map((candidate) => ({ path: candidate.path, keep: candidate.assessment?.risk !== 'protected' })),
+      preservedPaths: () => [...this.candidates.values()].filter((candidate) => candidate.assessment?.risk === 'protected' || (candidate.decision?.choice === 'keep' && candidate.decision.revision === this.revision)).map((candidate) => {
+        const keep = candidate.decision?.choice === 'keep' && candidate.decision.revision === this.revision;
+        return { path: candidate.path, keep, scope: keep ? 'subtree' : candidate.assessment.protectionScope ?? 'subtree' };
+      }),
     };
     const exec = this.config.exec ?? runFixed;
     this.recipeCtx = { home: this.config.home, uid: this.config.uid, exec, cli: null };
@@ -89,14 +97,27 @@ export class Session {
     this.agent.leaseUntil = now + LEASE_MS;
     this.agent.lastSeenAt = new Date(now).toISOString();
     this.agent.everConnected = true;
-    if (!this.agent.connected) {
+    if (!this.agent.connected && !this.paused) {
       this.agent.connected = true;
       this.bump();
     }
   }
 
   tick() {
-    const connected = Date.now() < this.agent.leaseUntil;
+    const connected = !this.paused && Date.now() < this.agent.leaseUntil;
+    const messages = this.mailbox.counts();
+    // Polling does not count as user activity; unresolved work keeps the agent attached.
+    if (!this.paused && !this.ended && !this.stopping && !this.running && this.phase === 'complete'
+      && messages.pending === 0 && messages.leased === 0 && Date.now() - this.lastViewerActivity >= this.config.idleTimeoutMs) {
+      this.paused = true;
+      this.agent.connected = false;
+      this.agent.leaseUntil = 0;
+      this.invalidatePlans();
+      this.pauseReport = this.exportSnapshot().catch(() => null);
+      this.mailbox.wake();
+      this.bump();
+      return;
+    }
     if (connected !== this.agent.connected) {
       this.agent.connected = connected;
       this.bump();
@@ -108,19 +129,49 @@ export class Session {
   }
 
   async nextEvent(timeoutMs) {
-    const event = await this.mailbox.next(timeoutMs);
+    const event = this.paused ? null : await this.mailbox.next(timeoutMs);
     this.touchAgent();
     if (event) return { type: 'event', ...event };
+    if (this.paused && !this.ended) {
+      await this.pauseReport;
+      return { type: 'session-paused', reports: this.reports, message: 'No user activity. Stop polling; the viewer remains read-only. On user request, run resume, then next.' };
+    }
     return this.ended ? { type: 'session-ended', message: 'The user ended this session in the viewer. Run `stop`.' } : { type: 'idle' };
   }
 
   heartbeat() {
     this.mailbox.renew();
-    return { ok: true, ended: this.ended, ...this.agentStatus() };
+    return { ok: true, ended: this.ended, paused: this.paused, ...this.agentStatus() };
   }
 
   agentSummary() {
-    return { scanId: this.scanId, revision: this.revision, phase: this.phase, ended: this.ended, progress: this.progress, agent: this.agentStatus(), summary: this.summary() };
+    return { scanId: this.scanId, revision: this.revision, phase: this.phase, ended: this.ended, paused: this.paused, completion: this.lastCompletion, reports: this.reports, progress: this.progress, agent: this.agentStatus(), summary: this.summary() };
+  }
+
+  /**
+   * Extend activity after viewer input or completed work, never browser polling.
+   * Called by the bridge and operation lifecycle so idle sessions can pause.
+   * @example
+   * session.touchViewer();
+   */
+  touchViewer() {
+    this.lastViewerActivity = Date.now();
+    return { ok: true, paused: this.paused };
+  }
+
+  /**
+   * Resume after a user request from the viewer or invoking agent.
+   * This only resumes investigation; expired cleanup consent is never restored.
+   * @example
+   * session.resume(); // { resumed: true }
+   */
+  resume() {
+    if (this.ended || this.stopping) throw new HttpError(409, 'session-ended', 'This session has ended.');
+    this.paused = false;
+    this.touchViewer();
+    this.invalidatePlans();
+    this.bump();
+    return { resumed: true, message: 'Ask the invoking agent to continue its disk-map loop.' };
   }
 
   // ---------------------------------------------------------------- scanning
@@ -166,6 +217,7 @@ export class Session {
     this.recipeCtx.cli = this.cli;
     this.cachedRecipeCtx.cli = this.cli;
     this.phase = result.cancelled ? 'cancelled' : 'complete';
+    this.touchViewer();
     const changed = await this.discoverCandidates(previous);
     this.bump();
     if (!this.stopping) {
@@ -229,47 +281,95 @@ export class Session {
     return changed;
   }
 
-  scanBrief(changed) {
+  /**
+   * Collect large home regions for agent investigation without flooding events.
+   * {@link Session.candidatePage} caches this size order once per scan revision.
+   * @example
+   * const regions = session.largestRegions();
+   */
+  largestRegions() {
     const tree = this.scan.tree;
-    const largest = [];
     const home = this.config.home;
     const floor = Math.min(50 * 1024 * 1024, tree.nodes[0].alloc / 100);
-    // Largest folders under home (depth-limited) for the agent to consider.
+    const largest = [];
     for (let index = 0; index < tree.nodes.length; index += 1) {
       const node = tree.nodes[index];
-      if (node.kind === 'symlink' || node.alloc < floor) continue;
+      if (node.removed || node.kind === 'symlink' || node.alloc < floor) continue;
       const target = tree.pathOf(index);
       if (!target.startsWith(`${home}/`) || target.split('/').length - home.split('/').length > 4) continue;
-      largest.push({ index, alloc: node.alloc, target });
+      largest.push({ candidateId: tree.idOf(index), path: target, allocatedBytes: String(node.alloc), category: categoryFor(target, home) });
     }
-    largest.sort((a, b) => b.alloc - a.alloc);
+    return largest.sort((a, b) => Number(BigInt(b.allocatedBytes) - BigInt(a.allocatedBytes)) || a.path.localeCompare(b.path));
+  }
+
+  /**
+   * Return a bounded, size-ordered page for the agent CLI. Revision binding
+   * prevents missing or repeating candidates after cleanup or a rescan.
+   * @example
+   * session.candidatePage({ revision: 0, kind: 'candidates', cursor: 0, limit: 8 });
+   */
+  candidatePage({ revision, kind = 'candidates', cursor = 0, limit = 20 }) {
+    this.assertRevision(this.scanId, revision);
+    if (this.phase === 'scanning' || !this.scan?.tree) throw new HttpError(409, 'scan-running', 'Wait for the scan to finish.');
+    if (!['candidates', 'largest'].includes(kind) || !Number.isSafeInteger(cursor) || cursor < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 20) throw new HttpError(400, 'invalid-field', 'Use kind candidates|largest, a nonnegative cursor and limit 1–20.');
+    if (this.largestRevision !== this.revision) {
+      this.largestCache = this.largestRegions();
+      this.candidatePageIds = [...this.candidates.values()]
+        .sort((a, b) => Number(BigInt(b.allocatedBytes) - BigInt(a.allocatedBytes)) || a.path.localeCompare(b.path))
+        .map((candidate) => candidate.id);
+      this.largestRevision = this.revision;
+    }
+    // Inspecting a new region must not shift already-issued page cursors.
+    const rows = kind === 'largest' ? this.largestCache : this.candidatePageIds.map((id) => this.candidateContext(this.candidates.get(id)));
+    const items = [];
+    let bytes = 0;
+    // Bound serialized detail as well as item count for long paths/reasons.
+    for (const item of rows.slice(cursor, cursor + limit)) {
+      const size = Buffer.byteLength(JSON.stringify(item));
+      if (items.length && bytes + size > 20_000) break;
+      items.push(item);
+      bytes += size;
+    }
+    return { scanId: this.scanId, revision, kind, total: rows.length, items, nextCursor: cursor + items.length < rows.length ? cursor + items.length : null };
+  }
+
+  /**
+   * Build the compact event after scanning; the CLI requests further pages on demand.
+   * @example
+   * const eventPayload = session.scanBrief(changedCandidateIds);
+   */
+  scanBrief(changed) {
+    const candidates = this.candidatePage({ revision: this.revision, limit: 8 });
+    const largest = this.candidatePage({ revision: this.revision, kind: 'largest', limit: 8 });
+    const { boundaries, ...coverage } = this.coverage();
     return {
-      scanId: this.scanId,
-      revision: this.revision,
-      root: this.displayRoot(),
-      phase: this.phase,
-      volume: this.volume,
-      coverage: this.coverage(),
-      candidates: (() => {
-        const contexts = [...this.candidates.values()].map((candidate) => this.candidateContext(candidate));
-        // Tiny unassessed candidates roll up per recipe/category so a swarm of
-        // 4 KB items cannot crowd the list; members stay individually
-        // assessable via `candidateIds`.
-        const micro = [...groupBy(contexts.filter(isMicroCandidate), (context) => context.detectedRecipe ?? context.category ?? 'other').entries()].map(([, members]) => ({
-          rolledUp: true,
-          candidateIds: members.map((member) => member.candidateId),
-          paths: members.map((member) => member.path),
-          count: members.length,
-          allocatedBytes: String(members.reduce((sum, member) => sum + BigInt(member.allocatedBytes), 0n)),
-          detectedRecipe: members[0].detectedRecipe,
-          risk: 'unassessed',
-          reason: `${members.length} tiny item(s) under 1 MB each; assess individually via candidateIds if any matters.`,
-        }));
-        return contexts.filter((context) => !isMicroCandidate(context)).concat(micro);
-      })(),
-      largest: largest.slice(0, 40).map(({ index, alloc, target }) => ({ candidateId: tree.idOf(index), path: target, allocatedBytes: String(alloc), category: categoryFor(target, home) })),
-      changedCandidateIds: changed,
-      instructions: 'Assess candidates with `assess`. Safe requires a recipe, local + documentation evidence and consequences. Unknown ownership → review with a question. Never assess by name, size or age alone.',
+      scanId: this.scanId, revision: this.revision, root: this.displayRoot(), phase: this.phase,
+      volume: this.volume, coverage, candidates: candidates.items, largest: largest.items,
+      candidateCount: candidates.total, largestCount: largest.total,
+      candidatesNextCursor: candidates.nextCursor, largestNextCursor: largest.nextCursor,
+      changedCandidateCount: changed.length,
+      instructions: 'Use candidates --revision N --kind candidates|largest --cursor N for more pages. Use probe --candidate-id UUID for sanitized local evidence. Assess exact leaves; container-only protection must use protectionScope: container.',
+    };
+  }
+
+  /**
+   * Gather local evidence for one scanned UUID without exposing process argv.
+   * Called by the probe CLI; it never writes an assessment or selects cleanup.
+   * @example
+   * await session.probeCandidate({ candidateId, revision: 0 });
+   */
+  async probeCandidate({ candidateId, revision }) {
+    this.assertRevision(this.scanId, revision);
+    const index = this.scan.tree.indexOf(candidateId);
+    if (index === undefined) throw new HttpError(404, 'unknown-candidate', 'No such candidate in this revision.');
+    const candidate = this.ensureCandidate(index);
+    const usage = await listProcesses(this.recipeCtx);
+    const recipe = candidate.recipe;
+    const readiness = recipe ? await checkRecipe(recipe, candidate, this.recipeCtx) : null;
+    const checkedAt = new Date().toISOString();
+    return { ...this.candidateContext(candidate), checkedAt, usage, readiness,
+      evidence: [{ kind: 'local', reference: `Metadata-only probe; complete=${candidate.complete}; recipe=${recipe ?? 'none'}; readiness=${readiness?.ok ?? 'unknown'}; ${readiness?.reason ?? 'No raw process arguments or file contents returned.'}`, checkedAt }],
+      documentation: recipeDocs(recipe, candidate.path, this.config.home),
     };
   }
 
@@ -362,6 +462,7 @@ export class Session {
     if (!Array.isArray(body.assessments) || body.assessments.length === 0 || body.assessments.length > 500) throw new HttpError(400, 'invalid-field', 'assessments must be a non-empty array (max 500).');
     if (this.phase === 'scanning') throw new HttpError(409, 'scan-running', 'Wait for the scan to finish.');
     const items = body.assessments.map(validateAssessment);
+    const before = new Map([...this.candidates.values()].map((candidate) => [candidate.id, { risk: candidate.risk, selected: candidate.selected }]));
     // Every new assessment voids manifests before any asynchronous readiness check.
     this.invalidatePlans();
     const results = [];
@@ -373,7 +474,8 @@ export class Session {
       }
       const candidate = this.ensureCandidate(index);
       const previous = candidate.assessment;
-      if (previous && ['risk', 'purpose', 'reason', 'question', 'recipe', 'consequences', 'evidence'].some((key) => canonicalJson(previous[key]) !== canonicalJson(item[key]))) {
+      // Reassessment revokes permission to Trash, never the user's choice to Keep.
+      if (previous && candidate.decision?.choice !== 'keep' && ['risk', 'purpose', 'reason', 'question', 'recipe', 'consequences', 'evidence', 'protectionScope'].some((key) => canonicalJson(previous[key]) !== canonicalJson(item[key]))) {
         candidate.decision = null;
       }
       candidate.assessment = { ...item, assessedAt: new Date().toISOString(), revision: this.revision };
@@ -397,7 +499,11 @@ export class Session {
     }
     if (body.messageId) await this.mailbox.answer(body.messageId);
     this.bump();
-    return { revision: this.revision, results };
+    const affected = [...this.candidates.values()].filter((candidate) => {
+      const previous = before.get(candidate.id);
+      return previous && (previous.risk !== candidate.risk || previous.selected !== candidate.selected);
+    }).map((candidate) => ({ candidateId: candidate.id, path: candidate.path, previous: before.get(candidate.id), risk: candidate.risk, selected: candidate.selected, reason: candidate.reason }));
+    return { revision: this.revision, results, affected };
   }
 
   async respond({ messageId, revision, text, candidateIds = [] }) {
@@ -420,6 +526,7 @@ export class Session {
 
   assertLive() {
     if (this.ended || this.stopping) throw new HttpError(409, 'session-ended', 'This session has ended.');
+    if (this.paused) throw new HttpError(409, 'session-paused', 'The session is paused. Resume before requesting new actions.');
   }
 
   assertRevision(scanId, revision) {
@@ -610,15 +717,16 @@ export class Session {
     }
     const after = await volumeInfo(this.config.root).catch(() => null);
     this.volume = after ?? this.volume;
-    if (plan.entries.some((entry) => entry.action === 'clean')) {
-      this.metrics = { planId: plan.id, ...spaceMetricsFor(plan.entries, results, before, after) };
-    }
+    this.metrics = { planId: plan.id, ...spaceMetricsFor(plan.entries, results, before, after) };
     this.applyOutcomes(results);
+    this.phase = 'complete';
+    this.touchViewer();
     this.reports = await this.writeAllReports().catch((error) => {
       this.log(`report failed: ${error.stack}`);
       return null;
     });
-    this.phase = 'complete';
+    this.lastCompletion = { planId: plan.id, operation: plan.entries.some((entry) => entry.action === 'clean') ? 'cleanup' : 'restore', revision: this.revision, counts: countByStatus(results), metrics: this.metrics, reports: this.reports };
+    await this.mailbox.post('operation-complete', { scanId: this.scanId, ...this.lastCompletion });
     this.bump();
     return results;
   }
@@ -753,7 +861,8 @@ export class Session {
       freeBytes: this.volume?.freeBytes ?? null,
       totalBytes: this.volume?.totalBytes ?? null,
       scannedBytes: scanned,
-      unaccountedBytes: used === null ? null : String(used > BigInt(scanned) ? used - BigInt(scanned) : 0n),
+      unaccountedBytes: used === null || !this.coverage().complete || BigInt(scanned) > used ? null : String(used - BigInt(scanned)),
+      accountingStatus: used === null ? 'unknown' : BigInt(scanned) > used ? 'allocated-exceeds-volume' : !this.coverage().complete ? 'incomplete' : 'comparable',
       safe: totals('safe'),
       review: totals('review'),
       selected: {
@@ -775,6 +884,7 @@ export class Session {
       recipe, operation, command: operation === 'cli' ? commandText(recipe, this.cli) : null, question: candidate.question,
       decision: candidate.decision?.revision === candidate.revision ? candidate.decision.choice : null, selected: candidate.selected,
       userUnchecked: candidate.userUnchecked, category: candidate.category, assessed: Boolean(candidate.assessment),
+      protectionScope: candidate.assessment?.risk === 'protected' ? candidate.assessment.protectionScope ?? 'subtree' : null,
     };
   }
 
@@ -782,20 +892,20 @@ export class Session {
     if (after === this.seq) return { seq: this.seq, unchanged: true, agent: this.agentStatus() };
     return {
       seq: this.seq, scanId: this.scanId, revision: this.revision, locale: this.config.locale, root: this.displayRoot(), home: this.config.home,
-      phase: this.phase, progress: this.progress, volume: this.volume, coverage: this.coverage(), summary: this.summary(), agent: this.agentStatus(),
+      phase: this.phase, paused: this.paused, completion: this.lastCompletion, progress: this.progress, volume: this.volume, coverage: this.coverage(), summary: this.summary(), agent: this.agentStatus(),
       candidates: (() => {
         const visible = [...this.candidates.values()].filter((candidate) => candidate.recipe || candidate.assessment || candidate.risk !== 'unassessed');
         const rows = visible.filter((candidate) => !isMicroCandidate(candidate)).sort((a, b) => Number(BigInt(b.allocatedBytes) - BigInt(a.allocatedBytes))).slice(0, 500).map((candidate) => this.viewCandidate(candidate));
-        // Same roll-up as the agent brief, in viewer row shape.
+        // The viewer groups tiny items; agent pages keep stable individual IDs.
         const micro = [...groupBy(visible.filter(isMicroCandidate), (candidate) => candidate.recipe ?? candidate.category ?? 'other').entries()].map(([key, members]) => {
           const parents = [...new Set(members.map((member) => path.dirname(member.path)))];
           return {
             id: `rollup:${key}`, rolledUp: true, count: members.length, paths: members.map((member) => member.path),
-            name: `${members.length} tiny items under 1 MB`, path: parents.length === 1 ? parents[0] : `${parents.length} locations`,
+            name: translate(this.config.locale, 'tinyItems', { n: members.length }), path: parents.length === 1 ? parents[0] : translate(this.config.locale, 'locations', { n: parents.length }),
             kind: 'dir', revision: this.revision,
             allocatedBytes: sumBytes(members.map((member) => member.allocatedBytes)), logicalBytes: sumBytes(members.map((member) => member.logicalBytes)), reclaimableBytes: null,
             complete: members.every((member) => member.complete), risk: 'unassessed',
-            reason: `${members.length} tiny item(s) under 1 MB each — they appear individually once assessed.`,
+            reason: translate(this.config.locale, 'tinyReason', { n: members.length }),
             purpose: '', consequences: [], evidence: [], recipe: members[0].recipe ?? null,
             operation: null, command: null, question: null, decision: null, selected: false,
             userUnchecked: false, category: members[0].category, assessed: false,
@@ -861,6 +971,7 @@ export class Session {
   async writeAllReports() {
     const summary = this.summary();
     const locale = this.config.locale;
+    const t = (key, vars) => translate(locale, key, vars);
     const tree = this.scan?.tree;
     const tiles = tree ? [...tree.nodes[0].children].sort((a, b) => tree.nodes[b].alloc - tree.nodes[a].alloc).slice(0, 60).map((index) => ({
       name: tree.nodes[index].name, path: tree.pathOf(index), allocatedBytes: String(tree.nodes[index].alloc), category: categoryFor(tree.pathOf(index), this.config.home), risk: this.candidates.get(tree.ids[index])?.risk ?? null,
@@ -868,10 +979,10 @@ export class Session {
     const snapshot = {
       generatedAt: new Date().toISOString(), locale, root: this.displayRoot(), revision: this.revision, coverage: this.coverage().complete ? 'complete' : 'partial',
       cards: [
-        { label: 'Free right now', value: formatBytes(summary.freeBytes, locale), note: summary.totalBytes ? ` of ${formatBytes(summary.totalBytes, locale)}` : '' },
-        { label: 'Verified cleanup', value: formatBytes(summary.safe.bytes, locale), note: ` ${summary.safe.count} items` },
-        { label: 'Needs review', value: formatBytes(summary.review.bytes, locale), note: ` ${summary.review.count} items` },
-        { label: 'Unaccounted', value: summary.unaccountedBytes === null ? 'unknown' : formatBytes(summary.unaccountedBytes, locale), note: ' outside the scanned folders' },
+        { label: t('free'), value: formatBytes(summary.freeBytes, locale), note: summary.totalBytes ? t('of', { total: formatBytes(summary.totalBytes, locale) }) : '' },
+        { label: t('safeCard'), value: formatBytes(summary.safe.bytes, locale), note: t('items', { n: summary.safe.count }) },
+        { label: t('reviewCard'), value: formatBytes(summary.review.bytes, locale), note: t('items', { n: summary.review.count }) },
+        { label: t('unaccounted'), value: summary.unaccountedBytes === null ? t('unknown') : formatBytes(summary.unaccountedBytes, locale), note: t(summary.accountingStatus === 'allocated-exceeds-volume' ? 'allocationMismatch' : summary.accountingStatus === 'incomplete' ? 'incompleteAccounting' : summary.accountingStatus === 'unknown' ? 'unknown' : 'outsideScan') },
       ],
       tiles,
       candidates: [...this.candidates.values()].filter((candidate) => candidate.assessment || candidate.recipe).map((candidate) => ({ ...this.viewCandidate(candidate) })),

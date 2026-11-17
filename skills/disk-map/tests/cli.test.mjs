@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import fsp from 'node:fs/promises';
+import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { makeFixture } from './helpers.mjs';
@@ -32,6 +33,10 @@ test('a CLI session scans, delivers the scan event, accepts a reply, and stops w
   const session = started.json.session;
   // Act
   const event = run('next', '--session', session, '--timeout', '10');
+  const page = run('candidates', '--session', session, '--revision', '0', '--limit', '1');
+  const probe = run('probe', '--session', session, '--revision', '0', '--candidate-id', page.json.items[0].candidateId);
+  const stale = run('candidates', '--session', session, '--revision', '3');
+  const resumed = run('resume', '--session', session);
   const replyFile = path.join(fx.base, 'reply.json');
   await fsp.writeFile(replyFile, JSON.stringify({ messageId: event.json.messageId, revision: 0, text: 'スキャンを確認しました。' }));
   const reply = run('respond', '--session', session, '--file', replyFile);
@@ -44,6 +49,9 @@ test('a CLI session scans, delivers the scan event, accepts a reply, and stops w
   // Assert
   assert.deepEqual([started.code, started.json.locale, started.json.root], [0, 'ja', fx.home]);
   assert.deepEqual([event.json.type, event.json.kind], ['event', 'scan-complete']);
+  assert.deepEqual([page.code, page.json.items.length, probe.code, stale.code, resumed.json.resumed], [0, 1, 0, 5, true]);
+  assert.equal(probe.json.path.endsWith('/shop/.next'), true);
+  assert.equal(stale.json.error, 'stale-revision');
   assert.deepEqual([reply.json.ok, reply.json.duplicate, duplicate.json.duplicate], [true, false, true]);
   assert.equal(mode, 0o600);
   assert.equal(stopped.json.stopped, true);
@@ -68,4 +76,27 @@ test('watch heartbeats until the session stops, then exits on its own', async ()
   assert.equal(started.code, 0);
   assert.notEqual(code, 'timeout');
   await fx.cleanup();
+});
+
+test('watch exits with the pause status instead of keeping an idle session alive', async (t) => {
+  // Arrange
+  const fx = await makeFixture();
+  const server = http.createServer((req, res) => {
+    req.resume();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, paused: true, ended: false }));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const file = path.join(fx.base, 'watch-session.json');
+  await fsp.writeFile(file, JSON.stringify({ origin: `http://127.0.0.1:${server.address().port}`, agentToken: 'fixture' }), { mode: 0o600 });
+  const watcher = spawn(process.execPath, [cliPath, 'watch', '--session', file, '--interval', '1'], { stdio: ['ignore', 'pipe', 'ignore'] });
+  let output = '';
+  watcher.stdout.on('data', (chunk) => { output += chunk; });
+  const timeout = setTimeout(() => watcher.kill('SIGKILL'), 5000);
+  t.after(async () => { clearTimeout(timeout); watcher.kill(); server.closeAllConnections(); server.close(); await fx.cleanup(); });
+  // Act
+  const code = await new Promise((resolve) => watcher.once('exit', resolve));
+  // Assert
+  assert.equal(code, 6);
+  assert.deepEqual(JSON.parse(output), { ok: true, watch: 'paused' });
 });

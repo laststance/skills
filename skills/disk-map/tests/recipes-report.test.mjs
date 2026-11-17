@@ -73,7 +73,7 @@ test('an exported snapshot has no script, no credentials and disabled live contr
   // Assert
   assert.equal(/<script|fetch\(|<form/i.test(html), false);
   assert.match(html, /default-src 'none'/);
-  assert.match(html, /<button type="button" disabled>Clean Up \(disabled in snapshot\)<\/button>/);
+  assert.match(html, /<button type="button" disabled>Clean Up<\/button>/);
   assert.equal(mode, 0o600);
   assert.equal(html.includes(VIEWER.id), false);
   clearInterval(session.timer);

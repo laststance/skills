@@ -43,6 +43,31 @@ async function liveBridge() {
   return { fx, session, bridge, origin, viewer, agent, token, close, port: bridge.port };
 }
 
+test('new investigation and resume endpoints retain role boundaries and polling cannot prevent a pause', async (t) => {
+  // Arrange
+  const live = await liveBridge();
+  t.after(async () => { await live.session.pauseReport; await live.close(); });
+  const scan = await live.session.nextEvent(1);
+  await live.session.mailbox.answer(scan.messageId);
+  const id = idFor(live.session, path.join(live.fx.project, '.next'));
+  // Act
+  const page = await request(live.port, { route: '/agent/candidates?revision=0&limit=1', headers: live.agent });
+  const omitted = await request(live.port, { route: '/agent/candidates', headers: live.agent });
+  const probe = await request(live.port, { route: '/agent/probe', method: 'POST', headers: live.agent, body: { candidateId: id, revision: 0 } });
+  const foreign = await request(live.port, { route: '/api/resume', method: 'POST', headers: { ...live.viewer, Origin: 'https://evil.example' }, body: {} });
+  live.session.lastViewerActivity = Date.now() - 181_000;
+  await request(live.port, { route: '/api/state', headers: live.viewer });
+  live.session.tick();
+  const paused = await request(live.port, { route: '/agent/next?timeout=1', headers: live.agent });
+  const resumed = await request(live.port, { route: '/api/resume', method: 'POST', headers: live.viewer, body: {} });
+  // Assert
+  assert.deepEqual([page.status, page.json.items.length, omitted.status, probe.status, foreign.status], [200, 1, 400, 200, 403]);
+  assert.equal(paused.json.type, 'session-paused');
+  assert.equal(resumed.json.resumed, true);
+  assert.equal(live.session.paused, false);
+  assert.equal(live.session.agentStatus().connected, false);
+});
+
 // protects: agent and viewer roles differ | fails_when: the agent credential can confirm or the viewer can assess | no_claim: compromised same-user process
 test('the agent credential cannot use viewer endpoints and the viewer cannot submit assessments', async () => {
   // Arrange

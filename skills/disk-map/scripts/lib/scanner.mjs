@@ -10,6 +10,7 @@ export const FLAG = {
   REPO_ROOT: 2, // contains `.git` (repository or worktree root)
   HAS_PROTECTED_DESC: 4, // the node or a descendant contains protected state
   HAS_BOUNDARY_DESC: 8, // a mount point or depth limit lies inside
+  HAS_VM_DESC: 16, // VM contents stay protected even in managed stores or app residue
 };
 
 const PROTECTED_NAMES = new Set([
@@ -37,12 +38,25 @@ export function isProtectedName(name) {
  * protectedNameReason('Example.app'); // 'Protected: application bundle.'
  */
 export function protectedNameReason(name) {
+  if (isVmName(name)) return 'Docker/VM disk: lifecycle operations are not supported in this release.';
   if (PROTECTED_NAMES.has(name) || name.endsWith('.keychain-db') || name.endsWith('.keychain')) return 'Protected: credentials or browser site data.';
   if (/\.app$/i.test(name)) return 'Protected: application bundle.';
   if (/\.(photoslibrary|musiclibrary|tvlibrary)$/i.test(name)) return 'Protected: library database.';
-  if (/(^Docker\.raw$|\.(vmdk|qcow2|vdi|pvm|utm|vmwarevm|vhdx)$)/i.test(name)) return 'Docker/VM disk: lifecycle operations are not supported in this release.';
   if (name === '.git') return 'Protected: repository metadata.';
   return null;
+}
+
+/**
+ * Recognize VM disks and managed containers without opening their contents.
+ * Scanning, execution checks and map categories share this rule so narrow
+ * scans cannot bypass protection inherited from a VM container.
+ *
+ * @example
+ * isVmName('disk.img'); // true
+ */
+export function isVmName(name) {
+  return /^(?:Docker\.raw|(?:disk|data|swap)\.img(?:\.raw)?|nvram\.bin|\.lume|\.tart|\.colima|\.orbstack|vm_bundles|claudevm\.bundle|HUAQ24HBR6\.dev\.orbstack)$/i.test(name)
+    || /\.(vmdk|qcow2|vdi|pvm|utm|vmwarevm|vhdx)$/i.test(name);
 }
 
 /**
@@ -293,6 +307,7 @@ export function createScan({
   const handleEntry = (parent, name, stat) => {
     stats.entries += 1;
     if (isProtectedName(name)) markUp(parent, FLAG.HAS_PROTECTED_DESC, path.join(tree.realPathOf(parent), name));
+    if (isVmName(name)) markUp(parent, FLAG.HAS_VM_DESC);
     if (name === '.git') {
       tree.nodes[parent].flags |= FLAG.REPO_ROOT;
       markUp(parent, FLAG.HAS_PROTECTED_DESC, path.join(tree.realPathOf(parent), name));

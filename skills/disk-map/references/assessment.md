@@ -6,7 +6,7 @@ An assessment is a proposal. The runtime applies its own eligibility rules and c
 
 | Kind | What counts | What does not |
 |---|---|---|
-| `local` | Output you observed on this Mac: `git -C <repo> check-ignore -q -- <path>` exit 0, `ps` shows the owner app is not running, the folder is the resolved `npm config get cache`, file dates/counts from `ls`/`stat` | A folder name, a size, an age, or "usually safe" |
+| `local` | `probe --revision N --candidate-id UUID` readiness and sanitized usage; `git check-ignore`, resolved tool cache roots, file dates/counts from `ls`/`stat` | Names, size, age, "usually safe", or raw process arguments |
 | `documentation` | An `https://` page from the tool or platform that says the data is regenerable (for example the recipe links below) | Blog posts that only recommend deleting; private filenames in a search query |
 
 Search documentation with generic product questions only ("Xcode DerivedData safe to delete"), never with private paths or file names.
@@ -25,6 +25,10 @@ Do not bulk-read file contents. Never read conversations, browser profiles (Cook
 The runtime protects these regardless of your proposal: credentials (`.ssh`, `.gnupg`, `.aws`, `.kube`, Keychains), browser site/auth stores (Cookies, Login Data, Sessions, Local Storage, IndexedDB, Service Worker), `~/Library/Preferences`, Mail/Messages/Safari/iCloud, the Chrome and Chrome Canary profiles, dotfiles in your home, agent settings (`~/.claude.json`, `~/.claude/settings.json`, `~/.codex/auth.json`, `~/.codex/config.toml`), repository and worktree roots, everything inside a Git work tree except `.next`, `.turbo` and `node_modules`, `*.app` bundles, Photos/Music libraries, Docker/VM disks, anything outside your home, folders that contain any of these, broad roots (`~`, `~/Library`, `~/Library/Caches`, `~/Library/Application Support`, `~/.cache`, …) and whole application data folders. A generic "yes" in chat cannot change this.
 
 Protection applies to children of protected containers and to containers holding protected descendants. A narrow `--root` scan retains the enclosing Git repository context. An agent's `protected` assessment or a user's **Keep** decision also prevents cleanup through a parent selection. The whole conflicting target is refused; disk-map never claims to exclude a child while recursively removing its parent.
+
+Agent `protected` assessments default to `protectionScope: "subtree"`. Use `"container"` when only deletion of the parent as a whole is prohibited, such as Cursor's data root with independently verified Cache/Code Cache leaves. It still blocks the parent and its ancestors. The `affected` assessment response reveals changed child/parent risk and selection. Runtime protections and user **Keep** remain stronger; changing the assessment cannot clear Keep. Lume/OrbStack/Tart/Colima containers, `disk.img`, `data.img`, `swap.img`, and recognized VM formats are runtime-protected, including narrow scans.
+
+Use `probe` for process evidence. It emits only known app/tool labels and readiness, never raw `ps` lines, argv or environment values. Do not use `ps aux`, `ps … args`, `pgrep -af`, or copy raw diagnostic output into evidence. Write explanations in the invocation language.
 
 ### Examples
 

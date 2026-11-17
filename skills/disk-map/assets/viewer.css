@@ -1,3 +1,5 @@
+[hidden] { display: none !important; }
+
 :root {
   --bg: #f4f4f1;
   --panel: #fff;
@@ -129,7 +131,9 @@ table.list td button.link { color: var(--text); text-decoration: none; text-alig
 .rec input[type="checkbox"] { width: 18px; height: 18px; margin: 2px 0 0; accent-color: #111; }
 .rec .title { font-weight: 600; border: 0; background: none; padding: 0; text-align: left; word-break: break-word; }
 .rec .meta { font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); word-break: break-all; }
-.rec .question { grid-column: 2 / 4; background: var(--review-bg); border-radius: 8px; padding: 6px 9px; font-size: 13px; display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.rec .question { grid-column: 2 / 4; background: var(--review-bg); border-radius: 8px; padding: 6px 9px; font-size: 13px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; align-items: center; }
+.rec .question > span:first-child { flex: 1 1 160px; }
+.rec .question button { white-space: nowrap; }
 .rec .question .hint { color: var(--review); font-weight: 600; white-space: nowrap; }
 .check-hint { border: 0; background: none; padding: 0; color: inherit; cursor: pointer; line-height: 0; }
 .check-hint:disabled { cursor: not-allowed; }
@@ -150,6 +154,7 @@ details.blocked summary { cursor: pointer; color: var(--muted); margin-top: 12px
 
 .results .outcome { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 13px; align-items: start; }
 .results .outcome .path { word-break: break-all; }
+#completion-actions:not([hidden]) { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 14px; }
 .status-succeeded { background: var(--safe-bg); color: var(--safe); }
 .status-failed, .status-interrupted { background: #fde7e5; color: var(--danger); }
 .status-skipped, .status-unknown { background: var(--review-bg); color: var(--review); }

@@ -2,79 +2,15 @@
 // the invoking agent, exact cleanup manifests, results and restore.
 // All file names and agent text are rendered as text, never as HTML.
 import { formatBytes, squarify } from '/treemap.mjs';
+import { translate, localizeReason } from '/i18n.mjs';
 
-const I18N = {
-  en: {
-    title: 'Disk map', rescan: 'Rescan', export: 'Export report', end: 'End session', free: 'Free right now', safeCard: 'Verified cleanup',
-    reviewCard: 'Needs review', unaccounted: 'Unaccounted', explorer: 'Explorer', explorerSub: 'Sized by allocated space. Select a region to inspect it.',
-    category: 'Category', cleanupMode: 'Cleanup', search: 'Search names', list: 'Folder contents', name: 'Name', allocated: 'Allocated', state: 'State',
-    more: 'Show more', recs: 'Recommendations', recsSub: 'Checked items enter the cleanup plan. Review items need your answer first.', results: 'Results',
-    chat: 'Chat with your agent', clear: 'Clear', ask: 'Ask about the selected region…', send: 'Send', selectSafe: 'Select safe', cleanUp: 'Clean Up',
-    of: 'of {total}', items: '{n} items', outsideScan: 'used but outside this scan', scanning: 'Scanning… {n} items · {bytes}', scanned: 'Read-only scan complete · revision {r}',
-    partial: 'Partial: {n} locations denied or unmapped', cancelled: 'Scan cancelled · partial snapshot', cleaning: 'Cleaning… do not quit the agent', ended: 'Session ended · live actions are disabled',
-    failed: 'Scan failed', agentOn: 'Agent connected', agentWait: 'Waiting for agent', agentOff: 'Agent disconnected',
-    reconnect: 'Ask the agent that started disk-map to continue its disk-map loop (`next`). New cleanup plans are paused until it reconnects.',
-    waitHelp: 'The agent that started disk-map answers here. It may take a moment to connect.', onHelp: 'Questions go to the agent that started this session.',
-    mapped: '{bytes} mapped', smallFiles: '{n} small files', other: '{n} more', safeGroup: 'Safe to remove', reviewGroup: 'Review first', waitingGroup: 'Waiting for agent',
-    blockedGroup: 'Not cleanable ({n})', review: 'Review', remove: 'Permanent removal', trash: 'Move to Trash', cli: 'Tool cleanup', restoreOp: 'Restore',
-    answerFirst: 'Answer the review question first', noItems: 'No candidates yet.', selected: '{n} selected · {bytes} represented · reclaimable {rec}', unknown: 'unknown',
-    noSelection: 'Nothing selected', path: 'Path', logical: 'Logical size', kind: 'Kind', risk: 'Assessment', purpose: 'Purpose', operation: 'Proposed operation',
-    command: 'Command', consequences: 'If removed', evidence: 'Evidence', question: 'Question', coverage: 'Coverage', complete: 'Complete', incomplete: 'Incomplete (denied, cancelled or still scanning)',
-    openFolder: 'Open folder', askChat: 'Ask in chat', include: 'Include in cleanup', close: 'Close', about: 'About: {name}', you: 'You', agent: 'Agent',
-    waitingReply: 'Waiting for the agent…', staleReply: 'This reply refers to an earlier scan revision.', keep: 'Keep', investigate: 'Investigate further',
-    reviewTitle: 'Review: {name}', reviewIntro: 'This decision applies only to these paths in scan revision {r}.', affected: 'Affected paths',
-    planTitle: 'Final cleanup manifest', planIntro: 'Only these exact targets will be processed. Confirm within {s} seconds.', confirm: 'Confirm cleanup',
-    cancel: 'Cancel', irreversible: 'Cannot be undone by disk-map', restorable: 'Restorable from Trash', irreversibleWarn: '{n} operation(s) cannot be undone. Regenerated caches do not bring back the old bytes.',
-    trashNote: 'Moving to Trash frees no space until you empty the Trash. disk-map never empties it.', conflicts: 'Excluded before planning', started: 'Cleanup started.',
-    restore: 'Restore', restoreBeside: 'Restore beside it', occupied: 'The original location is occupied. Nothing will be overwritten.', restoreTitle: 'Restore from Trash',
-    restoreIntro: 'The item moves back to the destination below. Confirm within {s} seconds.', destination: 'Destination', exported: 'Report written to {path}',
-    noSession: 'This viewer link was already used or is missing. Ask the agent for the session status.', expired: 'Viewer session expired. Ask the agent to start a new session.',
-    endedBanner: 'Session ended. Reports: {path}', excluded: '{n} protected item(s) inside are excluded', status_succeeded: 'Succeeded', status_failed: 'Failed', status_skipped: 'Skipped',
-    status_interrupted: 'Interrupted', status_unknown: 'Unknown', m_representedBytes: 'Represented by selection', m_estimatedReclaimableBytes: 'Estimated reclaimable',
-    m_permanentCleanupBytes: 'Permanently cleaned (allocated)', m_trashMovedBytes: 'Moved to Trash (not freed)', m_cliReportedBytes: 'Reported by tools', m_observedFreeDeltaBytes: 'Observed free-space change (whole volume)',
-    risk_safe: 'Safe', risk_review: 'Review', risk_protected: 'Protected', risk_blocked: 'Blocked', risk_unassessed: 'Not assessed',
-    cat_agent_history: 'Agent history', cat_your_files: 'Your files', cat_build_output: 'Build output', cat_dev_cache: 'Developer caches', cat_system_apps: 'System & apps', cat_docker_vm: 'Docker & VMs', cat_ai_models: 'AI models', cat_other: 'Other',
-    recovered: '{n} earlier operation(s) had no recorded result and were marked without replaying them.',
-  },
-  ja: {
-    title: 'ディスクマップ', rescan: '再スキャン', export: 'レポートを書き出す', end: 'セッションを終了', free: '現在の空き容量', safeCard: '確認済みの削除候補',
-    reviewCard: '確認が必要', unaccounted: '内訳なし', explorer: 'エクスプローラー', explorerSub: '割り当て容量で面積を表示。領域を選ぶと詳細を表示します。',
-    category: 'カテゴリ', cleanupMode: 'クリーンアップ', search: '名前で検索', list: 'フォルダの内容', name: '名前', allocated: '割り当て', state: '状態',
-    more: 'さらに表示', recs: 'おすすめ', recsSub: 'チェックした項目がクリーンアップ計画に入ります。確認項目は先に回答が必要です。', results: '結果',
-    chat: 'エージェントとチャット', clear: 'クリア', ask: '選んだ領域について質問…', send: '送信', selectSafe: '安全な項目を選択', cleanUp: 'クリーンアップ',
-    of: '/ {total}', items: '{n} 件', outsideScan: '使用中だがこのスキャン外', scanning: 'スキャン中… {n} 項目 · {bytes}', scanned: '読み取り専用スキャン完了 · リビジョン {r}',
-    partial: '一部のみ: {n} か所が拒否または未マップ', cancelled: 'スキャン中止 · 部分的なスナップショット', cleaning: 'クリーンアップ中… エージェントを終了しないでください', ended: 'セッション終了 · ライブ操作は無効です',
-    failed: 'スキャン失敗', agentOn: 'エージェント接続中', agentWait: 'エージェント待機中', agentOff: 'エージェント切断',
-    reconnect: 'disk-map を起動したエージェントに、disk-map ループ (`next`) の再開を依頼してください。再接続まで新しいクリーンアップ計画は停止します。',
-    waitHelp: 'disk-map を起動したエージェントがここで回答します。接続まで少し待ってください。', onHelp: '質問はこのセッションを起動したエージェントに届きます。',
-    mapped: '{bytes} をマップ済み', smallFiles: '小さなファイル {n} 個', other: 'ほか {n} 件', safeGroup: '安全に削除可能', reviewGroup: '先に確認', waitingGroup: 'エージェントの評価待ち',
-    blockedGroup: '削除できない項目 ({n})', review: '確認', remove: '完全に削除', trash: 'ゴミ箱に移動', cli: 'ツールでクリーンアップ', restoreOp: '復元',
-    answerFirst: '先に確認の質問に回答してください', noItems: '候補はまだありません。', selected: '{n} 件選択 · 対象 {bytes} · 回収見込み {rec}', unknown: '不明',
-    noSelection: '未選択', path: 'パス', logical: '論理サイズ', kind: '種類', risk: '評価', purpose: '用途', operation: '提案する操作',
-    command: 'コマンド', consequences: '削除した場合', evidence: '根拠', question: '質問', coverage: '網羅性', complete: '完全', incomplete: '不完全 (拒否・中止・スキャン中)',
-    openFolder: 'フォルダを開く', askChat: 'チャットで質問', include: 'クリーンアップに含める', close: '閉じる', about: '対象: {name}', you: 'あなた', agent: 'エージェント',
-    waitingReply: 'エージェントの回答を待っています…', staleReply: 'この回答は以前のスキャンリビジョンについてのものです。', keep: '残す', investigate: 'さらに調べる',
-    reviewTitle: '確認: {name}', reviewIntro: 'この判断はスキャンリビジョン {r} の以下のパスにだけ適用されます。', affected: '対象パス',
-    planTitle: '最終クリーンアップ一覧', planIntro: '以下の対象だけを処理します。{s} 秒以内に確定してください。', confirm: 'クリーンアップを確定',
-    cancel: 'キャンセル', irreversible: 'disk-map では元に戻せません', restorable: 'ゴミ箱から復元可能', irreversibleWarn: '{n} 件の操作は元に戻せません。再生成されたキャッシュは古いデータを戻しません。',
-    trashNote: 'ゴミ箱に移動しても、ゴミ箱を空にするまで空き容量は増えません。disk-map はゴミ箱を空にしません。', conflicts: '計画前に除外された項目', started: 'クリーンアップを開始しました。',
-    restore: '復元', restoreBeside: '横に復元', occupied: '元の場所は使用中です。何も上書きしません。', restoreTitle: 'ゴミ箱から復元',
-    restoreIntro: '以下の場所に戻します。{s} 秒以内に確定してください。', destination: '復元先', exported: 'レポートを書き出しました: {path}',
-    noSession: 'このビューアーリンクは使用済みか無効です。エージェントにセッション状態を確認してください。', expired: 'ビューアーセッションが期限切れです。エージェントに新しいセッションを依頼してください。',
-    endedBanner: 'セッションを終了しました。レポート: {path}', excluded: '内部の保護項目 {n} 件は除外されます', status_succeeded: '成功', status_failed: '失敗', status_skipped: 'スキップ',
-    status_interrupted: '中断', status_unknown: '不明', m_representedBytes: '選択の対象容量', m_estimatedReclaimableBytes: '回収見込み',
-    m_permanentCleanupBytes: '完全に削除 (割り当て)', m_trashMovedBytes: 'ゴミ箱へ移動 (未解放)', m_cliReportedBytes: 'ツールの報告値', m_observedFreeDeltaBytes: '観測した空き容量の変化 (ボリューム全体)',
-    risk_safe: '安全', risk_review: '要確認', risk_protected: '保護', risk_blocked: '不可', risk_unassessed: '未評価',
-    cat_agent_history: 'エージェント履歴', cat_your_files: 'あなたのファイル', cat_build_output: 'ビルド出力', cat_dev_cache: '開発キャッシュ', cat_system_apps: 'システムとアプリ', cat_docker_vm: 'Docker と VM', cat_ai_models: 'AI モデル', cat_other: 'その他',
-    recovered: '以前の操作 {n} 件は結果が記録されていなかったため、再実行せずに記録しました。',
-  },
-};
 const CATEGORIES = ['agent-history', 'your-files', 'build-output', 'dev-cache', 'system-apps', 'docker-vm', 'ai-models'];
 const RISK_ICON = { safe: '✓', review: '?', protected: '🔒', blocked: '⛔', unassessed: '·' };
 const MAP_TILES = 40;
 
 let locale = 'en';
-const t = (key, vars = {}) => (I18N[locale]?.[key] ?? I18N.en[key] ?? key).replace(/\{(\w+)\}/g, (_, name) => String(vars[name] ?? ''));
+const t = (key, vars = {}) => translate(locale, key, vars);
+const reason = (text) => localizeReason(text, locale);
 const fmt = (bytes) => (bytes === null || bytes === undefined ? t('unknown') : formatBytes(bytes, locale));
 const $ = (id) => document.getElementById(id);
 
@@ -127,7 +63,7 @@ for (const dialog of document.querySelectorAll('dialog')) {
 /** Home-relative display path for compact lists; dialogs keep the exact path. */
 const shortPath = (target) => (app.state?.home && target.startsWith(`${app.state.home}/`) ? `~${target.slice(app.state.home.length)}` : target);
 const candidateById = (id) => app.state?.candidates.find((candidate) => candidate.id === id) ?? null;
-const live = () => app.state && !app.state.ended;
+const live = () => app.state && !app.state.ended && !app.state.paused;
 
 // ------------------------------------------------------------------ rendering
 
@@ -135,6 +71,10 @@ function applyStaticText() {
   document.documentElement.lang = locale;
   for (const element of document.querySelectorAll('[data-i18n]')) element.textContent = t(element.dataset.i18n);
   for (const element of document.querySelectorAll('[data-i18n-placeholder]')) element.placeholder = t(element.dataset.i18nPlaceholder);
+  $('search').setAttribute('aria-label', t('search'));
+  $('chat-input').setAttribute('aria-label', t('message'));
+  $('crumbs').setAttribute('aria-label', t('breadcrumbs'));
+  document.title = t('title');
   $('legend').replaceChildren(...CATEGORIES.map((category) => h('li', {}, h('i', { class: `cat-${category}`, 'aria-hidden': 'true' }), t(`cat_${category.replace(/-/g, '_')}`))));
 }
 
@@ -143,6 +83,7 @@ function renderStatus() {
   const status = $('status');
   $('root').textContent = state.root;
   if (state.ended) status.textContent = t('ended');
+  else if (state.paused) status.textContent = t('paused');
   else if (state.phase === 'scanning') status.textContent = t('scanning', { n: (state.progress?.entries ?? 0).toLocaleString(locale), bytes: fmt(state.progress?.allocatedBytes ?? '0') });
   else if (state.phase === 'cleaning') status.textContent = t('cleaning');
   else if (state.phase === 'cancelled') status.textContent = t('cancelled');
@@ -160,7 +101,8 @@ function renderAgent() {
   const stateName = agent.connected ? 'connected' : agent.everConnected ? 'disconnected' : 'waiting';
   badge.dataset.state = stateName;
   badge.textContent = t({ connected: 'agentOn', disconnected: 'agentOff', waiting: 'agentWait' }[stateName]);
-  $('agent-help').textContent = t({ connected: 'onHelp', disconnected: 'reconnect', waiting: 'waitHelp' }[stateName]);
+  $('agent-help').textContent = app.state.paused ? t('pausedHelp') : t({ connected: 'onHelp', disconnected: 'reconnect', waiting: 'waitHelp' }[stateName]);
+  $('resume').hidden = !app.state.paused;
   renderFooter();
 }
 
@@ -173,7 +115,7 @@ function renderCards() {
   $('c-review').textContent = fmt(summary.review.bytes);
   $('c-review-note').textContent = t('items', { n: summary.review.count });
   $('c-unaccounted').textContent = fmt(summary.unaccountedBytes);
-  $('c-unaccounted-note').textContent = t('outsideScan');
+  $('c-unaccounted-note').textContent = t(summary.accountingStatus === 'allocated-exceeds-volume' ? 'allocationMismatch' : summary.accountingStatus === 'incomplete' ? 'incompleteAccounting' : 'outsideScan');
 }
 
 function riskBadge(risk) {
@@ -193,7 +135,7 @@ async function setSelected(ids, selected) {
     await api('POST', '/api/selection', { scanId: app.state.scanId, revision: app.state.revision, candidateIds: ids, selected });
     await refresh();
   } catch (error) {
-    banner(error.message);
+    banner(reason(error.message));
     await refresh();
   }
 }
@@ -218,7 +160,7 @@ function recRow(candidate, { checkbox, question }) {
     h('div', {}, h('button', { type: 'button', class: 'title', onclick: () => openDrawer(candidate.id) }, candidate.purpose || candidate.name), h('div', { class: 'meta' }, operationLabel(candidate)), h('div', { class: 'meta' }, shortPath(candidate.path))),
     h('span', { class: 'size' }, fmt(candidate.allocatedBytes)));
   if (question) {
-    row.append(h('div', { class: 'question' }, h('span', {}, candidate.question || candidate.reason), needsAnswer ? h('span', { class: 'hint' }, t('answerFirst')) : null, h('button', { type: 'button', disabled: !live(), onclick: () => openReview(candidate.id) }, t('review'))));
+    row.append(h('div', { class: 'question' }, h('span', {}, candidate.question || reason(candidate.reason)), needsAnswer ? h('span', { class: 'hint' }, t('answerFirst')) : null, h('button', { type: 'button', disabled: !live(), onclick: () => openReview(candidate.id) }, t('review'))));
   }
   return row;
 }
@@ -241,7 +183,7 @@ function renderRecs() {
     ...group(t('waitingGroup'), 'muted', waiting, {}),
   ];
   if (blocked.length) {
-    nodes.push(h('details', { class: 'blocked' }, h('summary', {}, t('blockedGroup', { n: blocked.length })), ...blocked.map((candidate) => h('div', { class: 'rec' }, h('span', {}, riskBadge(candidate.risk)), h('div', {}, h('button', { type: 'button', class: 'title', onclick: () => openDrawer(candidate.id) }, candidate.name), h('div', { class: 'meta' }, candidate.reason)), h('span', { class: 'size' }, fmt(candidate.allocatedBytes))))));
+    nodes.push(h('details', { class: 'blocked' }, h('summary', {}, t('blockedGroup', { n: blocked.length })), ...blocked.map((candidate) => h('div', { class: 'rec' }, h('span', {}, riskBadge(candidate.risk)), h('div', {}, h('button', { type: 'button', class: 'title', onclick: () => openDrawer(candidate.id) }, candidate.name), h('div', { class: 'meta' }, reason(candidate.reason))), h('span', { class: 'size' }, fmt(candidate.allocatedBytes))))));
   }
   container.replaceChildren(...(nodes.length ? nodes : [h('p', { class: 'sub' }, t('noItems'))]));
 }
@@ -249,11 +191,11 @@ function renderRecs() {
 function renderFooter() {
   const summary = app.state.summary.selected;
   $('sel-summary').textContent = summary.count ? t('selected', { n: summary.count, bytes: fmt(summary.allocatedBytes), rec: summary.reclaimableBytes === null ? t('unknown') : fmt(summary.reclaimableBytes) }) : t('noSelection');
-  const blockedReason = !live() ? t('ended') : app.state.phase !== 'complete' ? $('status').textContent : !app.state.agent.connected ? t('reconnect') : !summary.count ? t('noSelection') : null;
+  const blockedReason = !live() ? t(app.state.paused ? 'paused' : 'ended') : app.state.phase !== 'complete' ? $('status').textContent : !app.state.agent.connected ? t('reconnect') : !summary.count ? t('noSelection') : null;
   $('cleanup').disabled = Boolean(blockedReason);
   $('cleanup').title = blockedReason ?? '';
   $('select-safe').disabled = !live() || !app.state.candidates.some((candidate) => candidate.risk === 'safe' && !candidate.selected);
-  for (const id of ['rescan', 'export', 'end']) $(id).disabled = !live() && id !== 'export';
+  for (const id of ['rescan', 'export', 'end']) $(id).disabled = app.state.ended && id !== 'export';
   $('rescan').disabled = !live() || app.state.phase === 'scanning' || app.state.phase === 'cleaning';
   for (const element of $('composer').elements) element.disabled = !live();
 }
@@ -275,11 +217,16 @@ function renderChat() {
 function renderResults() {
   const outcomes = app.state.outcomes;
   $('results').hidden = !outcomes.length && !app.state.metrics;
+  const completion = app.state.completion;
+  $('completion-summary').textContent = completion ? t('completion', completion.counts) : '';
+  $('completion-actions').hidden = !completion || app.state.ended;
+  $('continue').disabled = !live();
+  $('restore-trash').disabled = !live() || !outcomes.some((item) => item.operation === 'trash' && item.status === 'succeeded' && !item.restored);
   const metrics = app.state.metrics;
   $('metrics').replaceChildren(...(metrics ? ['representedBytes', 'estimatedReclaimableBytes', 'permanentCleanupBytes', 'trashMovedBytes', 'cliReportedBytes', 'observedFreeDeltaBytes'].flatMap((key) => [h('span', { class: 'sub' }, t(`m_${key}`)), h('b', {}, fmt(metrics[key]))]) : []));
   $('outcomes').replaceChildren(...[...outcomes].reverse().map((outcome) => h('div', { class: 'outcome', 'data-operation': outcome.operationId },
     h('span', { class: `badge status-${outcome.status}` }, t(`status_${outcome.status}`)),
-    h('div', {}, h('div', { class: 'path mono' }, outcome.path), h('div', { class: 'sub' }, `${outcome.operation ?? ''} · ${outcome.reason}`), outcome.trashPath ? h('div', { class: 'sub mono' }, outcome.trashPath) : null, outcome.recoveryPath ? h('div', { class: 'sub mono' }, outcome.recoveryPath) : null),
+    h('div', {}, h('div', { class: 'path mono' }, outcome.path), h('div', { class: 'sub' }, `${t(outcome.operation === 'restore' ? 'restoreOp' : outcome.operation ?? 'unknown')} · ${reason(outcome.reason)}`), outcome.trashPath ? h('div', { class: 'sub mono' }, outcome.trashPath) : null, outcome.recoveryPath ? h('div', { class: 'sub mono' }, outcome.recoveryPath) : null),
     outcome.operation === 'trash' && outcome.status === 'succeeded' && outcome.trashPath && !outcome.restored ? h('button', { type: 'button', disabled: !live(), onclick: () => requestRestore(outcome.operationId, 'original') }, t('restore')) : h('span'))));
 }
 
@@ -290,6 +237,10 @@ function render() {
   renderChat();
   renderResults();
   renderAgent();
+  if (app.state.completion && app.announcedPlan !== app.state.completion.planId) {
+    app.announcedPlan = app.state.completion.planId;
+    banner(t('completion', app.state.completion.counts));
+  }
   if (app.state.recovered?.length && !app.recoveredShown) {
     app.recoveredShown = true;
     banner(t('recovered', { n: app.state.recovered.length }));
@@ -399,7 +350,7 @@ async function loadTree(parentId = app.parentId, { quiet = false } = {}) {
     app.parentId = tree.parent?.id ?? null;
   } catch (error) {
     if (error.code === 'unknown-node') return loadTree(null, { quiet });
-    if (!quiet) banner(error.message);
+    if (!quiet) banner(reason(error.message));
     return;
   }
   renderCrumbs();
@@ -427,7 +378,7 @@ function selectNode(entry) {
 
 function evidenceItem(item) {
   if (item.kind === 'documentation' && /^https:\/\//.test(item.reference)) return h('li', {}, h('a', { href: item.reference, target: '_blank', rel: 'noopener noreferrer' }, item.reference));
-  return h('li', {}, `${item.kind}: ${item.reference}`);
+  return h('li', {}, `${t(item.kind)}: ${item.reference}`);
 }
 
 function openDrawer(id, node = null) {
@@ -438,7 +389,7 @@ function openDrawer(id, node = null) {
     [t('path'), h('code', {}, entry.path ?? '')],
     [t('allocated'), fmt(entry.allocatedBytes)],
     [t('logical'), fmt(entry.logicalBytes ?? candidate?.logicalBytes)],
-    [t('risk'), h('span', {}, riskBadge(risk), ' ', candidate?.reason ?? '')],
+    [t('risk'), h('span', {}, riskBadge(risk), ' ', reason(candidate?.reason))],
     [t('coverage'), (candidate?.complete ?? entry.complete) === false ? t('incomplete') : t('complete')],
   ];
   if (candidate?.purpose) rows.push([t('purpose'), candidate.purpose]);
@@ -475,13 +426,13 @@ function openReview(id) {
       }
     }
     const failure = results.find((result) => result.ok === false);
-    banner(failure ? failure.reason : null);
+    banner(failure ? reason(failure.reason) : null);
     $('review-dialog').close();
     await refresh();
   };
   $('review-body').replaceChildren(...[
     h('h2', { id: 'review-title' }, t('reviewTitle', { name: candidate.purpose || candidate.name })),
-    h('p', { class: 'note' }, candidate.question || candidate.reason),
+    h('p', { class: 'note' }, candidate.question || reason(candidate.reason)),
     candidate.consequences?.length ? h('div', {}, h('b', {}, t('consequences')), h('ul', {}, ...candidate.consequences.map((text) => h('li', {}, text)))) : null,
     h('p', { class: 'sub' }, t('reviewIntro', { r: app.state.revision })),
     h('b', {}, t('affected')),
@@ -509,7 +460,7 @@ function openPlan(plan, { restore = false } = {}) {
         dialog.close();
         banner(t('started'));
       } catch (error) {
-        banner(error.message);
+        banner(reason(error.message));
         dialog.close();
       }
       await refresh();
@@ -525,7 +476,7 @@ function openPlan(plan, { restore = false } = {}) {
         h('td', {}, entry.action === 'restore' ? t('restoreOp') : entry.operation === 'cli' ? entry.command : t(entry.operation === 'trash' ? 'trash' : 'remove')),
         h('td', {}, fmt(entry.allocatedBytes)),
         h('td', {}, entry.irreversible ? t('irreversible') : entry.action === 'restore' ? '' : t('restorable')))))),
-    plan.conflicts?.length ? h('div', {}, h('b', {}, t('conflicts')), h('ul', {}, ...plan.conflicts.map((conflict) => h('li', {}, `${conflict.path}: ${conflict.reason}`)))) : null,
+    plan.conflicts?.length ? h('div', {}, h('b', {}, t('conflicts')), h('ul', {}, ...plan.conflicts.map((conflict) => h('li', {}, `${conflict.path}: ${reason(conflict.reason)}`)))) : null,
     irreversible ? h('p', { class: 'warn' }, t('irreversibleWarn', { n: irreversible })) : null,
     plan.entries.some((entry) => entry.operation === 'trash') ? h('p', { class: 'note' }, t('trashNote')) : null,
     h('div', { class: 'row' }, h('button', { type: 'button', autofocus: true, onclick: () => dialog.close() }, t('cancel')), confirmButton)));
@@ -540,7 +491,7 @@ async function requestRestore(operationId, destinationMode) {
   try {
     openPlan(await api('POST', '/api/restores', { operationId, destinationMode }), { restore: true });
   } catch (error) {
-    if (error.code !== 'destination-occupied') return banner(error.message);
+    if (error.code !== 'destination-occupied') return banner(reason(error.message));
     const dialog = $('plan-dialog');
     dialog.replaceChildren(h('div', { class: 'dlg' }, h('h2', { id: 'plan-title' }, t('restoreTitle')), h('p', { class: 'warn' }, t('occupied')),
       h('div', { class: 'row' }, h('button', { type: 'button', onclick: () => dialog.close() }, t('cancel')), h('button', { type: 'button', class: 'primary', onclick: () => { dialog.close(); requestRestore(operationId, 'sibling'); } }, t('restoreBeside')))));
@@ -559,7 +510,7 @@ $('composer').addEventListener('submit', async (event) => {
     $('chat-input').value = '';
     await refresh();
   } catch (error) {
-    banner(error.message);
+    banner(reason(error.message));
   }
 });
 $('chat-input').addEventListener('keydown', (event) => {
@@ -584,30 +535,64 @@ $('cleanup').addEventListener('click', async () => {
   try {
     openPlan(await api('POST', '/api/plans', { scanId: app.state.scanId, revision: app.state.revision, candidateIds: ids }));
   } catch (error) {
-    banner(error.data?.conflicts?.length ? `${error.message} ${error.data.conflicts.map((conflict) => `${conflict.path}: ${conflict.reason}`).join(' · ')}` : error.message);
+    banner(error.data?.conflicts?.length ? `${error.message} ${error.data.conflicts.map((conflict) => `${conflict.path}: ${reason(conflict.reason)}`).join(' · ')}` : error.message);
   }
   await refresh();
 });
 $('rescan').addEventListener('click', async () => {
-  await api('POST', '/api/rescan', { scanId: app.state.scanId }).catch((error) => banner(error.message));
+  await api('POST', '/api/rescan', { scanId: app.state.scanId }).catch((error) => banner(reason(error.message)));
   await refresh();
 });
 $('export').addEventListener('click', async () => {
   try {
     banner(t('exported', { path: (await api('POST', '/api/export', {})).snapshot }));
   } catch (error) {
-    banner(error.message);
+    banner(reason(error.message));
   }
 });
-$('end').addEventListener('click', async () => {
+/**
+ * Save reports and end after the user clicks either finish button.
+ * Sharing this handler keeps the header and post-cleanup flow consistent.
+ * @example
+ * await endSession();
+ */
+async function endSession() {
   try {
     const result = await api('POST', '/api/end', {});
     banner(t('endedBanner', { path: result.reports?.snapshot ?? '' }));
   } catch (error) {
-    banner(error.message);
+    banner(reason(error.message));
+  }
+  await refresh();
+}
+$('end').addEventListener('click', endSession);
+$('finish').addEventListener('click', endSession);
+$('continue').addEventListener('click', () => {
+  $('search').focus();
+  banner(null);
+});
+$('restore-trash').addEventListener('click', () => {
+  const choices = $('outcomes').querySelectorAll('button:not(:disabled)');
+  // A single item can open its manifest directly; multiple items remain explicit choices.
+  if (choices.length === 1) choices[0].click();
+  else choices[0]?.focus();
+});
+$('resume').addEventListener('click', async () => {
+  try {
+    await api('POST', '/api/resume', {});
+    banner(t('reconnect'));
+  } catch (error) {
+    banner(reason(error.message));
   }
   await refresh();
 });
+let lastActivitySent = 0;
+// Only real user gestures extend inactivity; periodic UI refresh does not.
+for (const eventName of ['pointerdown', 'keydown']) document.addEventListener(eventName, (event) => {
+  if (!event.isTrusted || !live() || Date.now() - lastActivitySent < 15_000) return;
+  lastActivitySent = Date.now();
+  api('POST', '/api/activity', {}).catch(() => {});
+}, { passive: true });
 for (const button of document.querySelectorAll('.seg button')) {
   button.addEventListener('click', () => {
     app.mode = button.dataset.mode;
@@ -623,7 +608,7 @@ $('search').addEventListener('input', (event) => {
 $('more').addEventListener('click', async () => {
   const query = new URLSearchParams({ cursor: String(app.tree.nextCursor) });
   if (app.parentId) query.set('parentId', app.parentId);
-  const page = await api('GET', `/api/tree?${query}`).catch((error) => banner(error.message));
+  const page = await api('GET', `/api/tree?${query}`).catch((error) => banner(reason(error.message)));
   if (!page) return;
   app.tree = { ...app.tree, nextCursor: page.nextCursor };
   $('list').append(...page.entries.map(listRow));

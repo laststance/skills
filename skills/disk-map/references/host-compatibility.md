@@ -8,7 +8,8 @@ Common requirements on every host:
 - The runtime is a detached `node` process bound to `127.0.0.1`. The host must allow a background process to outlive one command and allow loopback networking. If the host kills child processes when a command ends, the next `next` call exits 4 (`runtime-unreachable`); tell the user the host cannot keep the session alive.
 - Writing the reply/assessment JSON files and reading `~/Library/Application Support/disk-map/` must be allowed.
 - Cleanup moves into `~/.Trash`. Some macOS privacy settings (Full Disk Access for the terminal/host app) are needed for this; without them the move fails closed and is reported as `failed`. Do not change privacy settings for the user.
-- Each `next` call waits up to 25 seconds. Hosts with a per-command timeout below 30 seconds need a shorter `--timeout`.
+- `next` defaults to 25 seconds and accepts up to 300; keep the wait below the host's per-command limit. An optional `watch` process maintains connectivity between turns and exits when the session pauses or ends.
+- `next` exit 6 is a normal inactivity pause: stop polling, report the saved snapshot, and wait for the user's resume request. Run `resume` then `next`; never create a replacement model process. An explicit finish request in the host chat goes directly to `stop`.
 
 ## Hosts
 

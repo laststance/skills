@@ -102,7 +102,15 @@ let scanEvent;
 await step('agent assesses candidates through the CLI mailbox', async () => {
   scanEvent = nextEvent('scan-complete');
   const nextCandidate = scanEvent.payload.candidates.find((candidate) => candidate.path.endsWith('/shop/.next'));
-  const demo = scanEvent.payload.largest.find((item) => item.path.endsWith('/Movies/old-demo'));
+  const large = [...scanEvent.payload.largest];
+  let cursor = scanEvent.payload.largestNextCursor;
+  // The compact event deliberately contains only the first page.
+  while (cursor !== null) {
+    const page = cli('candidates', '--revision', '0', '--kind', 'largest', '--cursor', String(cursor)).json;
+    large.push(...page.items);
+    cursor = page.nextCursor;
+  }
+  const demo = large.find((item) => item.path.endsWith('/Movies/old-demo'));
   check(nextCandidate && demo, 'scan-complete lacks the .next candidate or the recording folder');
   const evidence = [{ kind: 'local', reference: 'git check-ignore -q reports .next ignored; no process uses the project', checkedAt: now() }, { kind: 'documentation', reference: 'https://nextjs.org/docs/app/api-reference/cli/next', checkedAt: now() }];
   const assessed = cli('assess', '--file', await bodyFile({ scanId: scanEvent.payload.scanId, revision: 0, messageId: scanEvent.messageId, assessments: [
@@ -277,7 +285,7 @@ await step('E5 a silent agent shows as disconnected within 5 s of lease expiry a
 });
 
 await step('ending the session disables live actions and tells the agent', async () => {
-  await page.getByRole('button', { name: 'End session' }).click();
+  await page.locator('#end').click();
   await page.locator('#status', { hasText: 'Session ended' }).waitFor();
   check(await page.locator('#chat-input').isDisabled(), 'composer still enabled');
   let event = cli('next', '--timeout', '3');

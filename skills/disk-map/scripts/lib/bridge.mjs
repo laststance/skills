@@ -173,7 +173,7 @@ export function validate(body, shape, required = Object.keys(shape)) {
   return body;
 }
 
-const ASSESSMENT_KEYS = new Set(['candidateId', 'risk', 'purpose', 'reason', 'consequences', 'evidence', 'recipe', 'question', 'reclaimableBytes']);
+const ASSESSMENT_KEYS = new Set(['candidateId', 'risk', 'purpose', 'reason', 'consequences', 'evidence', 'recipe', 'question', 'reclaimableBytes', 'protectionScope']);
 
 /**
  * Validate one agent assessment. Rejects unknown fields (for example `argv`,
@@ -189,6 +189,7 @@ export function validateAssessment(item) {
   };
   if (!RULES.uuid(item.candidateId)) fail('candidateId');
   if (!['safe', 'review', 'protected', 'blocked'].includes(item.risk)) fail('risk');
+  if (item.protectionScope !== undefined && (item.risk !== 'protected' || !['container', 'subtree'].includes(item.protectionScope))) fail('protectionScope');
   if (!isString(item.purpose, 500)) fail('purpose');
   if (!isString(item.reason, 2000)) fail('reason');
   if (!Array.isArray(item.consequences) || item.consequences.length > 10 || !item.consequences.every((text) => isString(text, 500))) fail('consequences');
@@ -232,7 +233,7 @@ const SECURITY_HEADERS = {
   'Cross-Origin-Resource-Policy': 'same-origin',
 };
 const CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
-const ASSETS = { '/': ['viewer.html', 'text/html; charset=utf-8'], '/viewer.css': ['viewer.css', 'text/css; charset=utf-8'], '/viewer.mjs': ['viewer.mjs', 'text/javascript; charset=utf-8'], '/treemap.mjs': ['treemap.mjs', 'text/javascript; charset=utf-8'] };
+const ASSETS = { '/': ['viewer.html', 'text/html; charset=utf-8'], '/viewer.css': ['viewer.css', 'text/css; charset=utf-8'], '/viewer.mjs': ['viewer.mjs', 'text/javascript; charset=utf-8'], '/treemap.mjs': ['treemap.mjs', 'text/javascript; charset=utf-8'], '/i18n.mjs': ['i18n.mjs', 'text/javascript; charset=utf-8'] };
 
 const send = (res, status, body) => {
   res.writeHead(status, { ...SECURITY_HEADERS, 'Content-Type': 'application/json; charset=utf-8' });
@@ -281,6 +282,11 @@ export async function startBridge(session, { assetsDir }) {
   const routes = async (req, res, url) => {
     const { pathname } = url;
     const method = req.method;
+    // Browsers request a favicon implicitly; avoid a misleading console error.
+    if (method === 'GET' && pathname === '/favicon.ico') {
+      res.writeHead(204, SECURITY_HEADERS);
+      return res.end();
+    }
     if (method === 'GET' && ASSETS[pathname]) {
       const [file, type] = ASSETS[pathname];
       const body = await fsp.readFile(path.join(assetsDir, file));
@@ -314,8 +320,15 @@ export async function startBridge(session, { assetsDir }) {
       if (method !== 'POST') throw new HttpError(404, 'not-found', 'Not found.');
       const confirm = /^\/api\/plans\/([0-9a-f-]{36})\/confirm$/.exec(pathname);
       const body = await readJson(req, SMALL_BODY);
+      session.touchViewer();
       if (confirm) return send(res, 202, await session.confirmPlan(confirm[1], validate(body, { manifestHash: 'token', nonce: 'token' }), viewer));
       switch (pathname) {
+        case '/api/activity':
+          validate(body, {});
+          return send(res, 200, session.touchViewer());
+        case '/api/resume':
+          validate(body, {});
+          return send(res, 200, session.resume());
         case '/api/chat':
           return send(res, 201, await session.postChat(validate(body, { scanId: 'uuid', candidateIds: 'uuids', text: 'text' })));
         case '/api/selection':
@@ -348,12 +361,21 @@ export async function startBridge(session, { assetsDir }) {
         return send(res, 200, await session.nextEvent(timeout * 1000));
       }
       if (method === 'GET' && pathname === '/agent/status') return send(res, 200, session.agentSummary());
+      if (method === 'GET' && pathname === '/agent/candidates') {
+        if (!url.searchParams.has('revision')) throw new HttpError(400, 'invalid-field', 'revision is required.');
+        return send(res, 200, session.candidatePage({ revision: Number(url.searchParams.get('revision')), kind: url.searchParams.get('kind') ?? 'candidates', cursor: Number(url.searchParams.get('cursor') ?? 0), limit: Number(url.searchParams.get('limit') ?? 20) }));
+      }
       if (method !== 'POST') throw new HttpError(404, 'not-found', 'Not found.');
       if (pathname === '/agent/assessments') {
         return send(res, 200, await session.assess(await readJson(req, ASSESS_BODY)));
       }
       const body = await readJson(req, SMALL_BODY);
       switch (pathname) {
+        case '/agent/probe':
+          return send(res, 200, await session.probeCandidate(validate(body, { candidateId: 'uuid', revision: 'int' })));
+        case '/agent/resume':
+          validate(body, {});
+          return send(res, 200, session.resume());
         case '/agent/heartbeat':
           validate(body, {});
           return send(res, 200, session.heartbeat());

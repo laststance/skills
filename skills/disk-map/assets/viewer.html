@@ -17,6 +17,7 @@
         <span id="root" class="status mono"></span>
       </div>
       <div class="top-actions">
+        <button id="resume" type="button" data-i18n="resume" hidden>Resume session</button>
         <span id="agent" class="agent" role="status" aria-live="polite"></span>
         <button id="rescan" type="button" data-i18n="rescan">Rescan</button>
         <button id="export" type="button" data-i18n="export">Export report</button>
@@ -69,6 +70,8 @@
         </section>
         <section id="results" class="panel results" aria-labelledby="results-title" hidden>
           <h2 id="results-title" data-i18n="results">Results</h2>
+          <p id="completion-summary" role="status" aria-live="polite"></p>
+          <div id="completion-actions" class="row" hidden><button id="finish" type="button" class="primary" data-i18n="end">Save report and end</button><button id="continue" type="button" data-i18n="continue">Keep exploring</button><button id="restore-trash" type="button" data-i18n="restoreTrash">Restore from Trash</button></div>
           <div id="metrics" class="metrics"></div>
           <div id="outcomes"></div>
         </section>

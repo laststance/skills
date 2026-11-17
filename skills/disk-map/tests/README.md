@@ -9,11 +9,15 @@ node --test skills/disk-map/tests/*.test.mjs
 # Browser journeys E1–E8 with video (needs a playwright-core module and its Chromium)
 DISK_MAP_PLAYWRIGHT=/abs/path/playwright-core/index.mjs node skills/disk-map/tests/browser/journeys.mjs /abs/out-dir
 
+# Japanese completion / restore / pause / resume / end, recorded using Playwright CLI
+node skills/disk-map/tests/browser/improvements.mjs /abs/out-dir
+# Optional executable override: DISK_MAP_PLAYWRIGHT_CLI=/abs/path/playwright-cli
+
 # Runtime bounds (I12): 100,050 entries / 5,000 folders
 DISK_MAP_PLAYWRIGHT=/abs/path/playwright-core/index.mjs node skills/disk-map/tests/perf.mjs
 ```
 
-Each test carries a card comment: `protects | fails_when | no_claim`.
+Legacy tests carry a card comment: `protects | fails_when | no_claim`. The seven-improvement regressions are in `improvements.test.mjs`: completion delivery/ack, pause/resume/consent, VM protection, sanitized probes, protection scope/Keep, pagination, accounting and Japanese reports. CLI lifecycle tests exercise the new commands. All use explicit Arrange/Act/Assert checks.
 
 | ID | File | Test |
 |---|---|---|

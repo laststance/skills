@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { I18N } from '../assets/i18n.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const skillDir = path.resolve(here, '..');
@@ -24,7 +25,7 @@ test('every file the skill and viewer reference ships inside the skill folder', 
   // Arrange
   const skill = await read(FILES.skill);
   const html = await read(FILES.html);
-  const linked = [...skill.matchAll(/\]\((references\/[^)]+)\)/g)].map((match) => match[1]);
+  const linked = [...skill.matchAll(/\]\((references\/[^)]+)\)/g)].map((match) => match[1].split('#')[0]);
   const served = [...html.matchAll(/(?:href|src)="\/([^"]+)"/g)].map((match) => `assets/${match[1]}`);
   // Act
   const missing = [];
@@ -66,13 +67,10 @@ test('the viewer markup has no inline script or style and the viewer never assig
 test('every viewer text key exists in both the English and the Japanese dictionary', async () => {
   // Arrange
   const html = await read(FILES.html);
-  const script = await read(FILES.viewer);
-  const [en, ja] = script.split(/^\s{2}ja: \{$/m);
-  const keysOf = (block) => new Set([...block.matchAll(/(?:^|[\s,{])([A-Za-z_]+):\s['"]/g)].map((match) => match[1]));
   const htmlKeys = [...html.matchAll(/data-i18n(?:-placeholder)?="([^"]+)"/g)].map((match) => match[1]);
   // Act
-  const enKeys = keysOf(en.slice(en.indexOf('en: {')));
-  const jaKeys = keysOf(ja.slice(0, ja.indexOf('\n  },')));
+  const enKeys = new Set(Object.keys(I18N.en));
+  const jaKeys = new Set(Object.keys(I18N.ja));
   // Assert
   assert.deepEqual([...enKeys].filter((key) => !jaKeys.has(key)), []);
   assert.deepEqual([...jaKeys].filter((key) => !enKeys.has(key)), []);
@@ -110,9 +108,9 @@ test('every test named in the test matrix exists in a test file', async () => {
 // protects: the browser and perf entry points stay runnable | fails_when: a syntax error hides in a script node --test does not load | no_claim: their runtime results
 test('the browser journey and performance scripts parse', () => {
   // Arrange
-  const scripts = [FILES.journeys, FILES.perf];
+  const scripts = [FILES.journeys, FILES.perf, path.join(here, 'browser', 'improvements.mjs')];
   // Act
   const statuses = scripts.map((file) => spawnSync(process.execPath, ['--check', file]).status);
   // Assert
-  assert.deepEqual(statuses, [0, 0]);
+  assert.deepEqual(statuses, [0, 0, 0]);
 });

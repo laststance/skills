@@ -2,6 +2,7 @@
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { formatBytes, squarify } from '../../assets/treemap.mjs';
+import { translate, localizeReason } from '../../assets/i18n.mjs';
 import { SCHEMA_VERSION, ensurePrivateDir, sumBytes, writePrivateJson } from './util.mjs';
 
 /**
@@ -49,8 +50,6 @@ export function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 }
 
-const RISK_TEXT = { safe: 'Safe', review: 'Review', protected: 'Protected', blocked: 'Blocked', unassessed: 'Unassessed' };
-
 /**
  * Render a read-only, script-free HTML snapshot.
  *
@@ -59,6 +58,10 @@ const RISK_TEXT = { safe: 'Safe', review: 'Review', protected: 'Protected', bloc
  * cannot revive consent or send requests. It never receives credentials.
  */
 export function renderSnapshot(snapshot) {
+  const locale = snapshot.locale ?? 'en';
+  const t = (key, vars) => translate(locale, key, vars);
+  const bytes = (value) => formatBytes(value, locale);
+  const reason = (value) => localizeReason(value, locale);
   const width = 960;
   const height = 420;
   const tiles = snapshot.tiles.filter((tile) => Number(tile.allocatedBytes) > 0).slice(0, 300);
@@ -68,12 +71,12 @@ export function renderSnapshot(snapshot) {
     return `<div class="tile c-${escapeHtml(tile.category)} r-${escapeHtml(tile.risk ?? 'none')}" style="left:${rect.x.toFixed(1)}px;top:${rect.y.toFixed(1)}px;width:${rect.w.toFixed(1)}px;height:${rect.h.toFixed(1)}px" title="${escapeHtml(tile.path)}"><span>${escapeHtml(tile.name)}</span><b>${escapeHtml(formatBytes(tile.allocatedBytes))}</b></div>`;
   }).join('');
   const row = (cells) => `<tr>${cells.map((cell) => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`;
-  const metrics = snapshot.metrics ? Object.entries(snapshot.metrics).map(([key, value]) => row([key, value === null ? 'unknown' : `${formatBytes(value)} (${value} bytes)`])).join('') : '';
+  const metrics = snapshot.metrics ? Object.entries(snapshot.metrics).map(([key, value]) => row([t(key === 'planId' ? key : `m_${key}`), key === 'planId' ? value : value === null ? t('unknown') : `${bytes(value)} (${value} bytes)`])).join('') : '';
   return `<!doctype html>
 <html lang="${escapeHtml(snapshot.locale ?? 'en')}"><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'none'; base-uri 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Disk map snapshot · ${escapeHtml(snapshot.generatedAt)}</title>
+<title>${escapeHtml(t('snapshotTitle'))} · ${escapeHtml(snapshot.generatedAt)}</title>
 <style>
 body{font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:24px;color:#1d1d1f;background:#f5f5f2}
 .banner{background:#fff4d6;border:1px solid #e9c46a;border-radius:10px;padding:10px 14px;margin-bottom:16px}
@@ -85,21 +88,21 @@ body{font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margi
 table{border-collapse:collapse;width:100%;background:#fff;margin:12px 0}td,th{border:1px solid #e5e5e0;padding:6px 8px;text-align:left;vertical-align:top;word-break:break-all}
 button{opacity:.55}
 </style></head><body>
-<h1>Disk map snapshot</h1>
-<p class="banner" role="note">Read-only snapshot from ${escapeHtml(snapshot.generatedAt)}. Chat, selection and Clean Up are disabled here; start a new disk-map session for live actions.</p>
-<p>Scan root: <code>${escapeHtml(snapshot.root)}</code> · revision ${escapeHtml(snapshot.revision)} · coverage: ${escapeHtml(snapshot.coverage)}</p>
+<h1>${escapeHtml(t('snapshotTitle'))}</h1>
+<p class="banner" role="note">${escapeHtml(t('snapshotNote', { time: snapshot.generatedAt }))}</p>
+<p>${escapeHtml(t('path'))}: <code>${escapeHtml(snapshot.root)}</code> · ${escapeHtml(t('revision'))} ${escapeHtml(snapshot.revision)} · ${escapeHtml(t('coverage'))}: ${escapeHtml(t(snapshot.coverage === 'complete' ? 'complete' : 'partialCoverage'))}</p>
 <div class="cards">${snapshot.cards.map((card) => `<div class="card">${escapeHtml(card.label)}<b>${escapeHtml(card.value)}</b>${escapeHtml(card.note ?? '')}</div>`).join('')}</div>
-<div class="map" aria-label="Disk map">${tileHtml}</div>
-<p><button type="button" disabled>Chat (disabled in snapshot)</button> <button type="button" disabled>Clean Up (disabled in snapshot)</button></p>
-<h2>Candidates</h2>
-<table><thead><tr><th>Path</th><th>Risk</th><th>Allocated</th><th>Recipe</th><th>Reason</th><th>Decision</th></tr></thead><tbody>
-${snapshot.candidates.map((candidate) => row([candidate.path, RISK_TEXT[candidate.risk] ?? candidate.risk, formatBytes(candidate.allocatedBytes), candidate.recipe ?? '—', candidate.reason, candidate.decision ?? '—'])).join('')}
+<div class="map" aria-label="${escapeHtml(t('title'))}">${tileHtml}</div>
+<p><button type="button" disabled>${escapeHtml(t('chat'))}</button> <button type="button" disabled>${escapeHtml(t('cleanUp'))}</button></p>
+<h2>${escapeHtml(t('candidates'))}</h2>
+<table><thead><tr>${['path', 'risk', 'allocated', 'recipe', 'reason', 'decision'].map((key) => `<th>${escapeHtml(t(key))}</th>`).join('')}</tr></thead><tbody>
+${snapshot.candidates.map((candidate) => row([candidate.path, t(`risk_${candidate.risk}`), bytes(candidate.allocatedBytes), candidate.recipe ?? '—', reason(candidate.reason), candidate.decision ? t(candidate.decision) : '—'])).join('')}
 </tbody></table>
-<h2>Operations</h2>
-<table><thead><tr><th>Path</th><th>Operation</th><th>Status</th><th>Evidence</th><th>Reason</th><th>Trash / recovery</th></tr></thead><tbody>
-${snapshot.outcomes.map((outcome) => row([outcome.path, outcome.operation, outcome.status, outcome.evidenceKind, outcome.reason, outcome.trashPath ?? outcome.recoveryPath ?? '—'])).join('')}
+<h2>${escapeHtml(t('operations'))}</h2>
+<table><thead><tr>${['path', 'operation', 'state', 'evidence', 'reason', 'recovery'].map((key) => `<th>${escapeHtml(t(key))}</th>`).join('')}</tr></thead><tbody>
+${snapshot.outcomes.map((outcome) => row([outcome.path, t(outcome.operation === 'restore' ? 'restoreOp' : outcome.operation), t(`status_${outcome.status}`), t(`evidence_${outcome.evidenceKind}`), reason(outcome.reason), outcome.trashPath ?? outcome.recoveryPath ?? '—'])).join('')}
 </tbody></table>
-<h2>Space</h2><table><tbody>${metrics}</tbody></table>
+<h2>${escapeHtml(t('space'))}</h2><table><tbody>${metrics}</tbody></table>
 </body></html>
 `;
 }

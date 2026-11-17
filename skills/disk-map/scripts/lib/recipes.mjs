@@ -203,19 +203,36 @@ export function matchRecipe(recipe, candidate, ctx) {
   }
 }
 
-/** List running process argv lines with a fixed `ps` call (fails closed). */
+/**
+ * Return allowlisted usage labels, never process arguments or executable paths.
+ * {@link checkRecipe} and the agent probe use this before offering cleanup.
+ * Even a process that changes its title to include a secret is reduced locally
+ * to known application/recipe names; raw output never crosses this boundary.
+ *
+ * @returns Known owners/recipes, or null when the process probe failed.
+ * @example
+ * await listProcesses(ctx); // { owners: ['Cursor'], recipes: ['npm-cache'] }
+ */
 export async function listProcesses(ctx) {
+  // Inspect argv privately to distinguish active npm installs from idle MCP daemons.
   const result = await (ctx.exec ?? runFixed)(ctx.psPath ?? '/bin/ps', ['-axo', 'args='], { timeoutMs: 15_000 });
   if (result.code !== 0) return null;
-  return result.stdout.split('\n').map((line) => line.trim()).filter(Boolean);
+  const owners = new Set();
+  const recipes = new Set();
+  // Only allowlisted labels leave the process inspection boundary.
+  for (const line of result.stdout.split('\n')) {
+    for (const leaf of APP_CACHE_LEAVES) if (line.includes(leaf.owner)) owners.add(leaf.app);
+    for (const [recipe, pattern] of Object.entries(BUSY)) if (pattern.test(line.trim())) recipes.add(recipe);
+  }
+  return { owners: [...owners].sort(), recipes: [...recipes].sort() };
 }
 
 /**
  * Open handles (files and working directories) the user's processes hold
  * under `target`, via one fixed `lsof` call. Null when unknown.
  *
- * @returns `{ pid, command, path }[]` — `command` is the process name so
- *   review reasons can say *who* holds the handle.
+ * @returns `{ pid, command, path }[]` — `command` is a known process label
+ *   or "process", so mutable process titles cannot leak into review reasons.
  */
 export async function openPathsUnder(target, ctx) {
   const result = await (ctx.exec ?? runFixed)(ctx.lsofPath ?? '/usr/sbin/lsof', ['-nP', '-u', String(ctx.uid), '-Fpcn'], { timeoutMs: 30_000 });
@@ -226,7 +243,11 @@ export async function openPathsUnder(target, ctx) {
   let command = null;
   for (const line of result.stdout.split('\n')) {
     if (line.startsWith('p')) { pid = line.slice(1); command = null; }
-    else if (line.startsWith('c')) { command = line.slice(1); }
+    else if (line.startsWith('c')) {
+      // Process names are mutable too; only known labels may enter reports.
+      const known = ['node', 'npm', 'npx', 'pnpm', 'uv', 'git', 'Cursor', 'Code', 'Codex', 'Claude', 'Slack', 'Notion', 'Figma', 'Raycast', 'Xcode', 'xcodebuild'];
+      command = known.find((name) => name.toLowerCase() === line.slice(1).trim().toLowerCase()) ?? 'process';
+    }
     else if (line.startsWith('n/') && isSameOrInside(line.slice(1), target)) handles.push({ pid, command, path: line.slice(1) });
   }
   return handles;
@@ -259,28 +280,26 @@ export async function checkRecipe(recipe, candidate, ctx) {
   if (CLI_TOOLS[recipe] && !ctx.cli?.[CLI_TOOLS[recipe]]?.exe) return { ok: false, reason: ctx.cli?.[CLI_TOOLS[recipe]]?.blocked ?? 'Tool unavailable.' };
   const processes = await listProcesses(ctx);
   if (!processes) return { ok: false, reason: 'Could not list running processes; usage is unknown.' };
-  const ownerPattern = recipe === 'app-cache' ? appCacheLeaf(candidate.path, ctx.home)?.owner : null;
-  const busyPattern = BUSY[recipe];
-  const busy = processes.find((line) => (ownerPattern && line.includes(ownerPattern)) || (busyPattern && busyPattern.test(line)));
-  if (busy) return { ok: false, busy: true, reason: `The owning application or tool is running (${busy.slice(0, 120)}). Quit it first; disk-map never stops apps.` };
-  if (operationOf(recipe) !== 'cli') {
-    const scope = recipe === 'build-output' ? path.dirname(candidate.path) : candidate.path;
-    const open = await openPathsUnder(scope, ctx);
-    if (!open) return { ok: false, reason: 'Could not check open files; usage is unknown.' };
-    if (open.length) {
-      // Name the top offenders (one per process) so the user knows what to quit.
-      const seen = new Set();
-      const offenders = [];
-      for (const handle of open) {
-        const key = `${handle.pid}:${handle.command}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        const held = handle.path === scope ? 'the folder itself' : path.basename(handle.path);
-        offenders.push(`${handle.command ?? 'a process'} (pid ${handle.pid ?? '?'}) holds ${held}`);
-        if (offenders.length === 3) break;
-      }
-      return { ok: false, busy: true, reason: `${open.length} open file(s) or working folder(s) inside: ${offenders.join('; ')}.` };
+  const owner = recipe === 'app-cache' ? appCacheLeaf(candidate.path, ctx.home)?.app : null;
+  const busy = processes.owners.includes(owner) || processes.recipes.includes(recipe);
+  if (busy) return { ok: false, busy: true, reason: 'The owning application or tool is running. Quit it first; disk-map never stops apps.' };
+  // Open-file checks also cover CLI tools whose executable name is only Node.
+  const scope = recipe === 'build-output' ? path.dirname(candidate.path) : candidate.path;
+  const open = await openPathsUnder(scope, ctx);
+  if (!open) return { ok: false, reason: 'Could not check open files; usage is unknown.' };
+  if (open.length) {
+    // Name the top offenders (one per process) so the user knows what to quit.
+    const seen = new Set();
+    const offenders = [];
+    for (const handle of open) {
+      const key = `${handle.pid}:${handle.command}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const held = handle.path === scope ? 'the folder itself' : path.basename(handle.path);
+      offenders.push(`${handle.command ?? 'a process'} (pid ${handle.pid ?? '?'}) holds ${held}`);
+      if (offenders.length === 3) break;
     }
+    return { ok: false, busy: true, reason: `${open.length} open file(s) or working folder(s) inside: ${offenders.join('; ')}.` };
   }
   return { ok: true };
 }

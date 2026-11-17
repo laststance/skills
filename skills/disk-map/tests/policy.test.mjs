@@ -110,7 +110,7 @@ test('a stale versioned pnpm store beside the live one is detected as a trash ca
 });
 
 // protects: candidate lists stay readable | fails_when: a swarm of sub-megabyte items crowds out meaningful candidates or a rolled-up item never returns | no_claim: exact roll-up shape beyond tested fields
-test('sub-megabyte unassessed candidates roll up into one row until assessed', async () => {
+test('sub-megabyte candidates remain individually pageable while the viewer groups them until assessed', async () => {
   // Arrange
   const fx = await makeFixture();
   await writeBytes(path.join(fx.home, 'a', '.turbo', 'x'), 4_000);
@@ -123,11 +123,8 @@ test('sub-megabyte unassessed candidates roll up into one row until assessed', a
   await session.assess({ scanId: session.scanId, revision: session.revision, assessments: [reviewAssessment(microIds[0])] });
   const after = session.getState(-1);
   // Assert
-  const briefRollups = brief.candidates.filter((entry) => entry.rolledUp);
-  assert.equal(briefRollups.length, 1);
-  assert.equal(briefRollups[0].count, 3);
-  assert.deepEqual([...briefRollups[0].candidateIds].sort(), microIds);
-  assert.equal(brief.candidates.some((entry) => entry.candidateId === microIds[0]), false);
+  assert.deepEqual(brief.candidates.map((entry) => entry.candidateId).sort(), microIds);
+  assert.equal(brief.candidatesNextCursor, null);
   const stateRollup = state.candidates.find((entry) => entry.rolledUp);
   assert.equal(stateRollup.count, 3);
   assert.equal(state.candidates.some((entry) => entry.id === microIds[0]), false);
@@ -166,7 +163,7 @@ test('a build folder whose project has an open working directory is downgraded t
   await session.assess({ scanId: session.scanId, revision: session.revision, assessments: [safeAssessment(id)] });
   // Assert
   assert.equal(session.candidates.get(id).risk, 'review');
-  assert.match(session.candidates.get(id).reason, /busy-app \(pid 1\) holds src/);
+  assert.match(session.candidates.get(id).reason, /process \(pid 1\) holds src/);
   await fx.cleanup();
 });
 
@@ -193,7 +190,8 @@ test('a resident npm exec daemon does not block npm-cache but an install does', 
   assert.equal(sessions.daemon.candidates.get(idFor(sessions.daemon, cache)).risk, 'safe');
   const blocked = sessions.installer.candidates.get(idFor(sessions.installer, cache));
   assert.equal(blocked.risk, 'review');
-  assert.match(blocked.reason, /npm install -g left-pad/);
+  assert.equal(blocked.reason, 'Needs review: The owning application or tool is running. Quit it first; disk-map never stops apps..');
+  assert.equal(blocked.reason.includes('left-pad'), false);
   await fx.cleanup();
 });
 

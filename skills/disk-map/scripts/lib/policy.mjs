@@ -1,7 +1,7 @@
 // Protection rules, risk evaluation and selection reconciliation.
 // Agent assessments are proposals; these rules decide what may be selected.
 import path from 'node:path';
-import { FLAG, protectedNameReason } from './scanner.mjs';
+import { FLAG, isVmName, protectedNameReason } from './scanner.mjs';
 import { matchRecipe } from './recipes.mjs';
 import { isInside, isSameOrInside } from './util.mjs';
 
@@ -24,7 +24,6 @@ const PROTECTED_TREES = [
   ['.claude/settings.json', 'agent settings'], ['.claude.json', 'agent settings'], ['.codex/auth.json', 'agent credentials'],
   ['.codex/config.toml', 'agent settings'],
 ];
-const VM_RE = /(^Docker\.raw$|\.(vmdk|qcow2|vdi|pvm|utm|vmwarevm|vhdx)$)/i;
 const REPO_DISPOSABLE = new Set(['.next', '.turbo', 'node_modules']);
 // Recipes cleaned through the package manager's own CLI — plus `trash`, which
 // detection only assigns to stale versioned stores. Their payloads are
@@ -54,7 +53,7 @@ export function protectionReason(candidate, ctx) {
   // A protected assessment or Keep choice also protects containing folders.
   for (const preserved of ctx.preservedPaths?.() ?? []) {
     if (preserved.keep && target === preserved.path) continue;
-    if (isSameOrInside(target, preserved.path) || isInside(preserved.path, target)) {
+    if (target === preserved.path || isInside(preserved.path, target) || (preserved.scope !== 'container' && isInside(target, preserved.path))) {
       return 'Protected: this path overlaps data the agent or user chose to preserve.';
     }
   }
@@ -75,6 +74,7 @@ export function protectionReason(candidate, ctx) {
   }
   if (candidate.kind === 'symlink') return 'Symbolic links are never followed or cleaned.';
   const flags = candidate.flags ?? 0;
+  if (flags & FLAG.HAS_VM_DESC) return 'Docker/VM disk: lifecycle operations are not supported in this release.';
   if (flags & FLAG.PROTECTED_MARK) return 'Protected: credentials or browser site data.';
   if (flags & FLAG.REPO_ROOT) return 'Protected: repository or worktree root.';
   if (flags & FLAG.HAS_PROTECTED_DESC && !MANAGED_STORE_RECIPES.has(candidate.recipe) && !candidate.residue) {
@@ -130,6 +130,7 @@ export function effectiveRisk(candidate, ctx) {
  * Review items need a Trash decision bound to the current revision.
  */
 export function eligibleAction(candidate) {
+  if (candidate.decision?.choice === 'keep' && candidate.decision.revision === candidate.revision) return null;
   if (candidate.risk === 'safe' && candidate.recipe && candidate.recipe !== 'trash') return 'clean';
   if (candidate.risk === 'review' && candidate.decision?.choice === 'trash' && candidate.decision.revision === candidate.revision) return 'trash';
   return null;
@@ -156,6 +157,11 @@ export function findOverlap(target, items) {
  */
 export function reconcileSelection(candidate, previousRisk, selectedOthers) {
   const before = candidate.selected;
+  // A later safe assessment cannot undo an explicit Keep decision.
+  if (candidate.decision?.choice === 'keep' && candidate.decision.revision === candidate.revision) {
+    candidate.selected = false;
+    return before !== candidate.selected;
+  }
   if (candidate.risk !== 'safe' && eligibleAction(candidate) !== 'trash') candidate.selected = false;
   if (candidate.risk === 'safe' && previousRisk !== 'safe' && !candidate.userUnchecked && !findOverlap(candidate.path, selectedOthers)) {
     candidate.selected = true;
@@ -169,7 +175,7 @@ export function categoryFor(target, home) {
   const name = path.basename(target);
   if (rel !== null && /^\.(codex|claude|cursor|gemini|openclaw)(\/|$)/.test(rel)) return 'agent-history';
   if (/^(\.next|\.turbo|node_modules|DerivedData|dist|build|target)$/.test(name) || /\/DerivedData\//.test(target)) return 'build-output';
-  if (/(^|\/)(docker|Docker|com\.docker\.docker|\.colima|\.orbstack|Parallels|UTM)(\/|$)/.test(target) || VM_RE.test(name)) return 'docker-vm';
+  if (target.split(path.sep).some(isVmName) || /(^|\/)(docker|Docker|com\.docker\.docker|Parallels|UTM)(\/|$)/.test(target)) return 'docker-vm';
   if (/(huggingface|\.ollama|lmstudio|\.lmstudio|MLX|models?)(\/|$)/i.test(target)) return 'ai-models';
   if (rel !== null && /^(\.npm|\.pnpm-store|\.cache|\.cargo|\.gradle|\.m2|go|Library\/pnpm|Library\/Caches)(\/|$)/.test(rel)) return 'dev-cache';
   if (rel === null || /^(Library|Applications)(\/|$)/.test(rel)) return 'system-apps';
