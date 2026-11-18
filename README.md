@@ -4,7 +4,7 @@
 [![Claude Code](https://img.shields.io/badge/Claude_Code-compatible-D97757?style=flat-square&logo=claude&logoColor=white)](https://code.claude.com/docs/en/skills)
 [![Cursor](https://img.shields.io/badge/Cursor-compatible-000000?style=flat-square&logo=cursor&logoColor=white)](https://cursor.com/docs/skills)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-compatible-111827?style=flat-square&logo=openai&logoColor=white)](https://developers.openai.com/codex/skills)
-[![Skills](https://img.shields.io/badge/skills-27-2563EB?style=flat-square)](#available-skills)
+[![Skills](https://img.shields.io/badge/skills-28-2563EB?style=flat-square)](#available-skills)
 
 Agent skills for AI coding assistants. Install via [skills.sh](https://skills.sh).
 
@@ -56,6 +56,7 @@ npx skills add laststance/skills --skill cookie
 npx skills add laststance/skills --skill deep-trace
 npx skills add laststance/skills --skill disk-map
 npx skills add laststance/skills --skill dnd
+npx skills add laststance/skills --skill electron-release
 npx skills add laststance/skills --skill explain
 npx skills add laststance/skills --skill explain-diff-html
 npx skills add laststance/skills --skill generating-codebase-wiki
@@ -89,6 +90,7 @@ npx skills add laststance/skills --skill visual-lint
 | [deep-trace](skills/deep-trace/) | Line-by-line execution path tracer for PR diffs, git diffs, or specified code sections. Maps every line to its screen/URL, data flow, and execution context like a debugger's step-through. | [Serena MCP](https://github.com/oraios/serena) (recommended) |
 | [disk-map](skills/disk-map/) | Interactive macOS disk map with agent Chat, sanitized metadata probes, size-ordered candidate pages, and evidence-based cleanup after exact-manifest confirmation. Answers removal questions about protected regions and offers individual Trash review for verified stopped Lume VMs and ignored build directories. Honors Keep decisions and protects shared VM storage. Reports cleanup and Trash restore completion, pauses idle sessions with explicit resume, and exports localized reports with honest space accounting. | [Node.js](https://nodejs.org/) 22+ **(required)**, macOS **(required)** |
 | [dnd](skills/dnd/) | Browser drag-and-drop QA via coordinate-based pointer ops, plus video + drop+10-frame evidence for motion-sensitive bugs (DragOverlay rollback, ghost return). Knowledge-injection skill loaded by browser-using skills (e.g. `ux-gap-detector`) before any browser interaction — ref-based `drag` returns false success on `dnd-kit` and similar libraries. | `playwright-cli` **(required)**, `ffmpeg` (recommended for frame extraction) |
+| [electron-release](skills/electron-release/) | Build and notarize an Apple Silicon Electron app, publish its installer and update ZIP to GitHub Releases, and verify the updater metadata. | [electron-builder](https://www.electron.build/) **(required)**, [GitHub CLI](https://cli.github.com/) **(required)** |
 | [explain](skills/explain/) | Deep, systematic explanation of code, concepts, and system behavior. Always operates at advanced level with introspection markers and validation. | [Serena MCP](https://github.com/oraios/serena) (recommended), [Context7](https://github.com/upstash/context7) (recommended) |
 | [explain-diff-html](skills/explain-diff-html/) | Explains a diff, branch, or PR as one self-contained interactive HTML page — deep background, core intuition with toy-data figures, a grouped code walkthrough, and a five-question multiple-choice quiz that checks the reader actually understood the change. Explores surrounding code for context; diagrams are HTML, never ASCII. | — |
 | [generating-codebase-wiki](skills/generating-codebase-wiki/) | Generate a local DeepWiki-style static HTML site that explains a codebase with numbered chapters, mermaid diagrams that name real symbols, and path:line citations. | — |
@@ -122,6 +124,7 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /deep-trace 42                      # Trace PR #42 line-by-line
 /disk-map                           # Map Mac storage, chat about it, reviewed cleanup
 /dnd                                # Load drag-and-drop coordinate-based verification protocol
+/electron-release                   # Publish a signed Apple Silicon Electron release
 /explain src/auth/middleware.ts      # Deep code explanation
 /explain-diff-html 42               # Interactive HTML PR walkthrough + quiz
 /generating-codebase-wiki <repo>    # DeepWiki-style static HTML wiki of a codebase
