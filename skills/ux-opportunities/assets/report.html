@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>UX review</title>
+<style>
+:root {color-scheme: light; --ink:#1b2826; --muted:#4c6260; --line:#cbd8d4; --accent:#08674f; --paper:#fafbf8; --after:#eaf5ee}
+* {box-sizing:border-box}
+body {margin:0;background:var(--paper);color:var(--ink);font:16px/1.65 system-ui,sans-serif;overflow-wrap:anywhere}
+main {width:min(72rem,100%);margin:auto;padding:clamp(1rem,5vw,4rem)}
+h1,h2,h3,p,figure {margin:0 0 .65rem}
+h1,h2,h3 {line-height:1.25;text-wrap:balance}
+h1 {font-size:clamp(2rem,4vw,3.5rem);letter-spacing:-.04em}
+h2 {font-size:clamp(1.4rem,3vw,2rem)}
+header,article {padding:1.4rem 0;border-bottom:1px solid var(--line)}
+article {padding-block:2rem}
+.meta,figcaption,small {color:var(--muted);font-size:.88rem}
+a {color:var(--accent);text-underline-offset:.15em}
+.compare {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;margin:1.2rem 0}
+figure {display:flex;flex-direction:column;gap:.75rem;padding:clamp(.85rem,2vw,1.45rem);background:white;border:1px solid var(--line);border-radius:.7rem}
+figure.proposal {background:var(--after)}
+.screen {margin:auto 0;padding:1rem;border:1px solid var(--line);border-radius:.5rem;background:white}
+.screen img {display:block;width:100%;height:auto}
+.screen p:last-child {margin-bottom:0}
+.id {font: .82rem/1.7 ui-monospace,monospace;color:var(--muted)}
+@media (max-width:44rem) {.compare {grid-template-columns:1fr}}
+@media print {main {padding:0}figure {break-inside:avoid}}
+</style>
+<main>
+<header>
+  <!-- Localize the language, title, headings and labels. Identify the product and user goal. -->
+  <h1>Product and user goal</h1>
+  <p>What was observed and under which conditions.</p>
+</header>
+<article>
+  <p class="id">{{id:1}}</p>
+  <h2>Highest-priority change</h2>
+  <p>Observed obstacle and why it matters for the user’s goal.</p>
+  <div class="compare">
+    <figure><figcaption>Current</figcaption><div class="screen"><!-- Actual capture or recognizable reconstruction --></div></figure>
+    <figure class="proposal"><figcaption>Proposed</figcaption><div class="screen"><!-- Concrete annotated sketch --></div></figure>
+  </div>
+  <!-- Add steps when different, a source link and transfer conditions, predicted effect and verification. -->
+</article>
+<!-- Repeat for supported proposals, or replace the article with evidence gaps for a zero-proposal review. -->
+</main>
+</html>

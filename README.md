@@ -4,7 +4,7 @@
 [![Claude Code](https://img.shields.io/badge/Claude_Code-compatible-D97757?style=flat-square&logo=claude&logoColor=white)](https://code.claude.com/docs/en/skills)
 [![Cursor](https://img.shields.io/badge/Cursor-compatible-000000?style=flat-square&logo=cursor&logoColor=white)](https://cursor.com/docs/skills)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-compatible-111827?style=flat-square&logo=openai&logoColor=white)](https://developers.openai.com/codex/skills)
-[![Skills](https://img.shields.io/badge/skills-26-2563EB?style=flat-square)](#available-skills)
+[![Skills](https://img.shields.io/badge/skills-27-2563EB?style=flat-square)](#available-skills)
 
 Agent skills for AI coding assistants. Install via [skills.sh](https://skills.sh).
 
@@ -71,6 +71,7 @@ npx skills add laststance/skills --skill source-grounded-research
 npx skills add laststance/skills --skill ts-pattern-refactor
 npx skills add laststance/skills --skill type-expand
 npx skills add laststance/skills --skill ux-gap-detector
+npx skills add laststance/skills --skill ux-opportunities
 npx skills add laststance/skills --skill visual-lint
 ```
 
@@ -103,6 +104,7 @@ npx skills add laststance/skills --skill visual-lint
 | [ts-pattern-refactor](skills/ts-pattern-refactor/) | Detect and refactor conditional code to ts-pattern's `match().with().exhaustive()`. Refactors JSX branching, chained ternaries, and discriminated-union dispatch — but deliberately leaves plain single-condition if-chains alone. Codifies syntactic-form × context judgment criteria. | [ts-pattern](https://github.com/gvergnaud/ts-pattern) **(required)**, [Context7](https://github.com/upstash/context7) (recommended), [Serena MCP](https://github.com/oraios/serena) (recommended) |
 | [type-expand](skills/type-expand/) | Expands TypeScript type aliases into concrete, primitive-resolved shapes — unions, intersections, generics, conditional types, infer-based types, and common utility types as far as statically resolvable. Use when IDE hover only shows alias names. | [tsx](https://github.com/privatenumber/tsx) (recommended), TypeScript project `tsconfig.json` **(required)** |
 | [ux-gap-detector](skills/ux-gap-detector/) | Detects UI/UX quality gaps in authenticated SaaS web apps via `playwright-cli`. Crawls app interior, captures screenshots, scores across 4 dimensions (Typography & Spacing, Interactive States, Content Hierarchy, Loading & Error UX), and generates an actionable Markdown gap report. Optionally creates GitHub Issues. | `playwright-cli` **(required)**, [Serena MCP](https://github.com/oraios/serena) (recommended) |
+| [ux-opportunities](skills/ux-opportunities/) | Find what to add, move or remove in an existing app. Compares user journeys with sourced market examples and previous outcomes, then presents ranked changes in an offline before-and-after HTML report. | [Python 3.9+ with SQLite](https://docs.python.org/3/library/sqlite3.html) **(required)** |
 | [visual-lint](skills/visual-lint/) | ESLint for rendered UI. Screenshots a running app via `playwright-cli` to detect wrapping, clipping, overlap, misalignment, and unreadable badge text. Checks colored badges against their backgrounds and explicit foreground requirements in light/dark themes. Baseline-free and read-only — reports cited findings without editing source or claiming unmeasured contrast ratios. | `playwright-cli` **(required)** |
 
 ## Usage
@@ -137,6 +139,7 @@ After installation, invoke skills as slash commands in your AI coding assistant:
 /ts-pattern-refactor                # Sweep codebase for ts-pattern refactor opportunities
 /type-expand OrderItemSetting       # Expand a TypeScript type alias to its concrete shape
 /ux-gap-detector                    # Detect UX gaps in authenticated SaaS web app
+/ux-opportunities                   # Discover and compare the most useful UX changes for this app
 /visual-lint                        # Check rendered UI defects and badge readability across themes
 ```
 
