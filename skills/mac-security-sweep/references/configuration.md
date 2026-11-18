@@ -11,8 +11,8 @@
 | `queryUnknownGlobals` | boolean、既定true | 由来不明installed-globalの既存例外。falseならその照会を除外。lockには例外を適用しない |
 | `homebrewPrefixes` | 絶対パス配列、追加0件、最大20 | /opt、/usr/local、~/homebrew下の既存Homebrew配置を確認。任意wrapper実行の許可ではない |
 | `applicationRoots` | 絶対パス配列、追加0件、最大20 | homeまたは/Applications配下の追加アプリ配置。既知配置は残す |
-| `browserProfiles` | `{product,root}[]`、追加0件、最大30 | Chrome/Canary/Edge/Brave/Firefox/Safari。home内のcustom metadata root |
-| `editorRoots` | `{editor,root}[]`、追加0件、最大30 | VS Code/Cursor/Insiders/Portable。home内のcustom extension root |
+| `browserProfiles` | `{product,root}[]`、追加0件、最大30 | Chrome/Canary/Edge/Brave/Firefox/Safari/Zen。home内のcustom metadata root |
+| `editorRoots` | `{editor,root}[]`、追加0件、最大30 | VS Code/Cursor/Insiders/Portable/Zed/JetBrains。Zedはinstalled、JetBrainsはpluginsディレクトリをrootにする |
 | `runtimeRoots` | `{family,root}[]`、追加0件、最大30 | nvm/fnm/Volta/asdf/mise/Vite+/Homebrew/uv/pipx/conda/venv/Java/Ruby/rbenv/rvm/chruby、node/python。既知familyだけ |
 | `sbomFiles` | 絶対パス配列、既定空、最大20 | 既存CycloneDX/SPDX。画像digest・由来を確認できた部分だけ利用 |
 

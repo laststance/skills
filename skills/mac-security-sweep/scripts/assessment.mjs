@@ -136,7 +136,9 @@ export function projectIsActive(evidence, contexts = []) {
 export function compareAssessments(previous = [], findings = [], packages = {}, coverage = []) {
   const positive = finding => ['確定', '可能性高', '可能性あり'].includes(finding.status);
   const identities = aggregateAdvisories([...previous, ...findings]).canonicalIds;
-  const key = finding => finding.advisoryId && identities[finding.advisoryId] ? `${identities[finding.advisoryId]}:${finding.package?.ecosystem || ''}:${finding.package?.name || ''}:${finding.version || ''}` : finding.id;
+  const key = finding => finding.assessmentBasis === 'extension-advisory' && finding.advisoryId
+    ? `${identities[finding.advisoryId] || finding.advisoryId}:extension:${finding.product}:${finding.version || ''}`
+    : finding.advisoryId && identities[finding.advisoryId] ? `${identities[finding.advisoryId]}:${finding.package?.ecosystem || ''}:${finding.package?.name || ''}:${finding.version || ''}` : finding.id;
   const current = new Map(findings.map(finding => [key(finding), finding]));
   const prior = new Map(previous.map(finding => [key(finding), finding]));
   const excludedLocations = new Map();

@@ -11,7 +11,7 @@ export { cleanText, extensionSource, projectMcpServer, parseLsof, projectProcess
 
 /** 利用者向け識別子をreader内の有限IDへ写す。設定値そのものは出力しない。 @example normalizeReaderConfig(config) */
 export function normalizeReaderConfig(config) {
-  const aliases = { Chrome: 'chrome', Canary: 'chrome-canary', Edge: 'edge', Brave: 'brave', Firefox: 'firefox', Safari: 'safari', 'VS Code': 'vscode', Cursor: 'cursor', Insiders: 'vscode-insiders', Portable: 'portable', Volta: 'volta', 'Vite+': 'vite-plus', Homebrew: 'homebrew', Java: 'java', Ruby: 'ruby' };
+  const aliases = { Chrome: 'chrome', Canary: 'chrome-canary', Edge: 'edge', Brave: 'brave', Firefox: 'firefox', Safari: 'safari', Zen: 'zen', 'VS Code': 'vscode', Cursor: 'cursor', Insiders: 'vscode-insiders', Portable: 'portable', Zed: 'zed', JetBrains: 'jetbrains', Volta: 'volta', 'Vite+': 'vite-plus', Homebrew: 'homebrew', Java: 'java', Ruby: 'ruby' };
   return { ...config, browserProfiles: (config.browserProfiles || []).map(item => ({ ...item, product: aliases[item.product] || item.product })), editorRoots: (config.editorRoots || []).map(item => ({ ...item, editor: aliases[item.editor] || item.editor })), runtimeRoots: (config.runtimeRoots || []).map(item => ({ ...item, family: aliases[item.family] || item.family })) };
 }
 

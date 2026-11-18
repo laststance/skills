@@ -2,13 +2,80 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SOURCES, NEWS_CATEGORIES } from '../scripts/source-registry.mjs';
 import { SOURCE_PUBLIC_GETS, validateSourceRequest } from '../scripts/source-request-policy.mjs';
-import { parseOfficialIndex, parseDockerAnnouncements, openSslPaths, parseOpenSslCve, parseRedHatList, parseAlpineSnapshot } from '../scripts/source-adapters.mjs';
+import { parseOfficialIndex, parseOpenJdkMatrix, parseDockerAnnouncements, openSslPaths, parseOpenSslCve, parseRedHatList, parseAlpineSnapshot } from '../scripts/source-adapters.mjs';
 import { fetchNews, parseXmlFeed, normalizeAdvisory } from '../scripts/fetch-news.mjs';
 import { newsDateRange, newsWindowStatus } from '../scripts/news-format.mjs';
 import { createRunContext } from '../scripts/runtime.mjs';
+import { matchInventory } from '../scripts/match.mjs';
+import { assessedNews, selectBriefingAdvisories } from '../scripts/briefing.mjs';
 
 const source = id => SOURCES.find(value => value.id === id);
 const NOW = Date.parse('2026-11-03T00:00:00Z');
+const jdkDate = '2026-11-17';
+const jdkBulletin = { publishedAt: '2026-11-17T00:00:00.000Z', url: 'https://openjdk.org/groups/vulnerability/advisories/2026-11-17' };
+const jdkRiskTable = '<table><tr><th>CVE ID</th><th>Component</th><th>CVSSv3.1<br />Vector</th><th>11</th><th>17</th><th>21</th></tr>'
+  + '<tr><td>CVE-2026-114938</td><td>hotspot/<br />compiler</td><td>8.1<br />NHNNUHHH</td><td></td><td>&#8226;</td><td>&#8226;</td></tr></table>';
+const jdkHtml = '<h1>OpenJDK Vulnerability Advisory: 2026/11/17</h1><h2 id="risk-matrix">OpenJDK Risk matrix</h2>' + jdkRiskTable
+  + '<h2 id="jfx-risk-matrix">OpenJFX Risk matrix</h2>' + jdkRiskTable.replace('114938', '999999');
+
+test('OpenJDK primary evidence identifies a high-rated CVE even with the secondary news sources unavailable', async () => {
+  // Arrange
+  const requested = [];
+  const ctx = createRunContext({ budgetMs: 120000, wallNow: () => Date.parse('2026-11-18T00:00:00Z'), fetchImpl: async address => {
+    const url = String(address);
+    requested.push(url);
+    if (url === source('openjdk').url) return new Response('<a href="2026-11-17">November advisory</a><a href="2026-09-01">Older</a><a href="https://untrusted.invalid/extra">Link</a>');
+    if (url === jdkBulletin.url) return new Response(jdkHtml);
+    return new Response('', { status: 404 });
+  } });
+  // Act
+  let result;
+  try { result = await fetchNews({ context: ctx, previous: {} }); } finally { await ctx.close(); }
+  const rows = result.items.filter(item => item.reasonCode === 'OPENJDK_RISK_MATRIX');
+  const match = matchInventory({ runtimes: [{ name: 'java', version: '17.0.21.0.3' }] }, result);
+  // Assert
+  assert.deepEqual(requested.filter(url => url.startsWith('https://openjdk.org/')), ['https://openjdk.org/groups/vulnerability/advisories/', jdkBulletin.url]);
+  assert.equal(requested.some(url => url.includes('untrusted.invalid')), false);
+  assert.deepEqual(rows.map(item => [item.aliases, item.severity, item.affectedJdkMajors, item.needsReview]), [[['CVE-2026-114938'], 8.1, [17, 21], true]]);
+  assert.equal(result.sources.find(entry => entry.sourceId === 'openjdk').windowComplete, true);
+  assert.deepEqual(selectBriefingAdvisories(assessedNews(result, match)).map(entry => [entry.id, entry.signal]), [['CVE-2026-114938', 'rated']]);
+});
+
+test('a changed JDK matrix or exhausted bulletin limit retains the official index and keeps the cursor and local assessment open', async () => {
+  // Arrange
+  const index = ['13', '14', '15', '16', '17'].map(day => `<a href="2026-11-${day}">Vendor notice</a>`).join('');
+  const requested = [];
+  const ctx = createRunContext({ budgetMs: 120000, wallNow: () => Date.parse('2026-11-18T00:00:00Z'), fetchImpl: async address => {
+    const url = String(address);
+    if (url === source('openjdk').url) return new Response(index);
+    if (url.startsWith(source('openjdk').url)) { requested.push(url); return new Response('<h1>New format</h1>'); }
+    return new Response('', { status: 404 });
+  } });
+  // Act
+  let result;
+  try { result = await fetchNews({ context: ctx, previous: {} }); } finally { await ctx.close(); }
+  const receipt = result.sources.find(entry => entry.sourceId === 'openjdk');
+  // Assert
+  assert.equal(requested.length, 4);
+  assert.deepEqual([receipt.status, receipt.windowComplete, receipt.pending, receipt.reasonCode], ['partial', false, 5, 'OPENJDK_DETAILS_INCOMPLETE']);
+  assert.equal(result.items.filter(item => item.sourceId === 'openjdk' && item.reasonCode === 'OFFICIAL_INDEX_REQUIRES_RANGE_REVIEW').length, 5);
+  assert.equal(result.sourceCursors[receipt.name], undefined);
+  assert.equal(result.categoryCoverage.find(entry => entry.category === 'java').status, 'partial');
+});
+
+test('only the indexed vendor date and expected risk table can supply OpenJDK severity', () => {
+  // Arrange
+  const pathname = '/groups/vulnerability/advisories/' + jdkDate;
+  const options = { sourceId: 'openjdk', authorizedPaths: new Set([pathname]) };
+  // Act / Assert
+  assert.equal(validateSourceRequest(jdkBulletin.url, options), true);
+  assert.equal(validateSourceRequest(jdkBulletin.url, { sourceId: 'openjdk' }), false);
+  assert.equal(validateSourceRequest(jdkBulletin.url, { ...options, sourceId: 'hackernews' }), false);
+  assert.equal(validateSourceRequest(jdkBulletin.url + '?local=private', options), false);
+  assert.throws(() => parseOpenJdkMatrix(jdkHtml.replace('2026/11/17', '2026/11/16'), source('openjdk'), jdkBulletin));
+  assert.throws(() => parseOpenJdkMatrix(jdkHtml.replaceAll('&#8226;', '?'), source('openjdk'), jdkBulletin));
+  assert.throws(() => parseOpenJdkMatrix('<!--' + jdkHtml + '-->', source('openjdk'), jdkBulletin));
+});
 
 test('PHP Atom selects the article link and never uses an enclosure download as the news URL', () => {
   // Arrange

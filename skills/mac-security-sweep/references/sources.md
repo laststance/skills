@@ -20,7 +20,7 @@
 | TLS / OpenSSL | [OpenSSL CVE JSON index](https://openssl-library.org/news/secjson/) | CVE JSON 5の公開・更新日時とベンダーの範囲を保持。1回最大16件。古いCVEの変更を含む全履歴の確認は未完了として残す |
 | ImageMagick | [公式repository advisories](https://api.github.com/repos/ImageMagick/ImageMagick/security-advisories) | 6系・7系の影響範囲を別々に保持。PHP imagick、Ruby RMagick、delegateライブラリとは別の製品 |
 | Ruby | [公式RSS](https://www.ruby-lang.org/en/feeds/news.rss)、[security index](https://www.ruby-lang.org/en/security/) | Ruby本体、同梱gem、独立したRubyGems依存を区別する |
-| Java / JDK | [OpenJDK advisories](https://openjdk.org/groups/vulnerability/advisories/)、[Oracle alerts](https://www.oracle.com/security-alerts/) | OpenJDKは明示された日付。Oracle CPUの公開月と、同じ表の行に記載された更新日を分けて保存する。月しか分からない場合は日を補わない。Oracleの複数製品を含むCPUは、Javaを明示しない限り「その他」に残す。JDKのベンダー・系列・buildをMaven依存と混同しない |
+| Java / JDK | [OpenJDK advisories](https://openjdk.org/groups/vulnerability/advisories/)、[Oracle alerts](https://www.oracle.com/security-alerts/) | OpenJDKは今回の公式索引に載る期間内の直近日付別告知を最大4件、各256 KiBまで匿名GETする。日付と表題を照合し、JDK本体のリスク表からCVE・コンポーネント・CVSS 3.1スコア・対象メジャーを取得する。OpenJFX表、各配布元のビルド・CPU条件は別途確認する。未取得や形式変更は索引を残して部分完了とする。Oracle CPUは公表月と同じ行の更新日を区別し、Javaを明示しない総合告知は「その他」に残す |
 | Docker | [公式セキュリティ告知](https://docs.docker.com/security/security-announcements/) | Desktop、Engine、BuildKit、runc等の告知。RSSには各記事の日付がないため、公式ページの項目ごとの`Last updated`を読む。年のない修正日から公開年を推測しない。Linuxの取得成功をDockerの取得成功として扱わない。コンテナ内部は既存のdigest対応SBOMなどで別途確認する |
 | 悪用の優先度 | [CISA KEV](https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json) | `dateAdded`はKEV掲載日。非掲載は「悪用されていない」「脆弱でない」の証明にならない |
 | 公開依存・悪性配布 | [GitHub Global Advisories](https://api.github.com/advisories)、[OSV querybatch](https://api.osv.dev/v1/querybatch) | reviewed / malwareを区別。OSVは棚卸し後に由来確認済みのecosystem・パッケージ名・バージョンだけを送信する |

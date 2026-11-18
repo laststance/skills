@@ -10,6 +10,7 @@ import { SweepError } from '../scripts/diagnostics.mjs';
 import { collectApplications, collectBrowserExtensions, collectEditorExtensions, collectRuntimes, collectMcpAndCloud, collectPersistence, collectProtection, collectContainersAndSsh, projectSbom, parseJsonc } from '../scripts/environment-readers.mjs';
 import { inventory } from '../scripts/inventory.mjs';
 import { allowGlobalPackage } from '../scripts/scan-packages.mjs';
+import { pluginJar } from './fixtures/plugin-jar.mjs';
 
 const SECRET = 'SYNTHETIC_SECRET_CANARY_NEVER_RETAIN';
 const CHROME_ID = 'a'.repeat(32);
@@ -37,6 +38,61 @@ async function environmentFixture(overrides = {}) {
   async function close() { await context.close(); await fs.rm(home, { recursive: true, force: true }); }
   return { home, context, result, write, close, denied, commands, readPaths };
 }
+
+test('Zed and JetBrains plugins are inventoried without running WASM, Java or plugin code', async () => {
+  // Arrange
+  const fixture = await environmentFixture();
+  try {
+    await fixture.write('Library/Application Support/Zed/extensions/installed/example/extension.toml', 'id = "example"\nname = "Example"\nversion = "1.2.3"\nprivate_token = "' + SECRET + '"');
+    await fixture.write('Library/Application Support/Zed/extensions/work/example/tool', SECRET);
+    await fixture.write('Library/Application Support/JetBrains/PhpStorm2026.3/disabled_plugins.txt', 'org.example.php\n');
+    await fixture.write('Library/Application Support/JetBrains/PhpStorm2026.3/plugins/example/lib/main.jar', pluginJar([{ name: 'META-INF/plugin.xml', text: '<idea-plugin><id>org.example.php</id><name>PHP Example</name><version>2.3.4</version><vendor email="' + SECRET + '">Vendor</vendor></idea-plugin>' }]));
+    await fixture.write('Library/Application Support/JetBrains/WebStorm2026.3/plugins/example.jar', pluginJar([{ name: 'META-INF/plugin.xml', text: '<idea-plugin><id>org.example.web</id><version>3.4.5</version></idea-plugin>' }]));
+    // Act
+    await collectEditorExtensions(fixture.context, fixture.result);
+    // Assert
+    assert.deepEqual(fixture.result.extensions.map(({ editor, id, version, active }) => ({ editor, id, version, active })).sort((a, b) => a.id.localeCompare(b.id)), [
+      { editor: 'zed', id: 'example', version: '1.2.3', active: null },
+      { editor: 'jetbrains', id: 'org.example.php', version: '2.3.4', active: false },
+      { editor: 'jetbrains', id: 'org.example.web', version: '3.4.5', active: null },
+    ]);
+    assert.equal(fixture.commands.length, 0);
+    assert.equal(fixture.readPaths.some(file => file.includes('/extensions/work/')), false);
+    assert.equal(JSON.stringify(fixture.result).includes(SECRET), false);
+  } finally { await fixture.close(); }
+});
+
+test('Zen profiles keep their own extension identities and never read browser authentication files', async () => {
+  // Arrange
+  const fixture = await environmentFixture();
+  try {
+    await fixture.write('Library/Application Support/zen/profiles.ini', '[Profile0]\nName=Synthetic\nIsRelative=1\nPath=Profiles/example\n');
+    await fixture.write('Library/Application Support/zen/Profiles/example/extensions.json', { addons: [{ id: 'example@extension.test', version: '1.2.3', active: true, token: SECRET }] });
+    await fixture.write('Library/Application Support/zen/Profiles/example/logins.json', { secret: SECRET });
+    // Act
+    await collectBrowserExtensions(fixture.context, fixture.result);
+    // Assert
+    assert.deepEqual(fixture.result.browserExtensions.map(({ browser, id, version, active }) => ({ browser, id, version, active })), [{ browser: 'zen', id: 'example@extension.test', version: '1.2.3', active: true }]);
+    assert.equal(fixture.readPaths.some(file => file.endsWith('/logins.json')), false);
+    assert.equal(JSON.stringify(fixture.result).includes(SECRET), false);
+  } finally { await fixture.close(); }
+});
+
+test('denied Zed roots and malformed JetBrains archives stay visible as incomplete extension coverage', async () => {
+  // Arrange
+  const fixture = await environmentFixture();
+  try {
+    fixture.denied.add(path.join(fixture.home, 'Library/Application Support/Zed'));
+    await fixture.write('Library/Application Support/JetBrains/PhpStorm2026.3/plugins/broken.jar', Buffer.from('invalid archive ' + SECRET));
+    // Act
+    await collectEditorExtensions(fixture.context, fixture.result);
+    // Assert
+    assert.equal(fixture.result.extensions.length, 0);
+    assert.equal(fixture.result.coverage.find(item => item.area === 'zed-extensions').status, 'partial');
+    assert.equal(fixture.result.coverage.find(item => item.area === 'jetbrains-extensions').status, 'partial');
+    assert.equal(JSON.stringify(fixture.result).includes(SECRET), false);
+  } finally { await fixture.close(); }
+});
 
 test('Chromium四製品はmanifestと有効状態だけを射影し認証設定を残さない', async () => {
   // Arrange
@@ -102,11 +158,32 @@ test('ブラウザの不在・不正metadata・権限拒否はそれぞれ保持
     // Assert
     assert.deepEqual(['chrome', 'chrome-canary', 'edge', 'brave', 'firefox', 'safari'].map(name => fixture.result.coverage.find(item => item.area === `${name}-extensions`).status), ['partial', 'partial', 'partial', 'partial', 'partial', 'partial']);
     fixture.result.coverage.length = 0;
-    for (const root of ['Google/Chrome', 'Google/Chrome Canary', 'Microsoft Edge', 'BraveSoftware/Brave-Browser', 'Firefox']) fixture.denied.add(path.join(fixture.home, 'Library/Application Support', root));
+    for (const root of ['Google/Chrome', 'Google/Chrome Canary', 'Microsoft Edge', 'BraveSoftware/Brave-Browser', 'Firefox', 'zen']) fixture.denied.add(path.join(fixture.home, 'Library/Application Support', root));
     fixture.denied.add(app);
     await collectBrowserExtensions(fixture.context, fixture.result);
     assert.equal(fixture.result.coverage.every(item => item.status === 'partial'), true);
     assert.equal(JSON.stringify(fixture.result).includes(SECRET), false);
+  } finally { await fixture.close(); }
+});
+
+test('editor registration and source metadata stay bound to the selected architecture directory', async () => {
+  // Arrange
+  const fixture = await environmentFixture();
+  try {
+    const base = '.vscode/extensions', arm = 'example.plugin-1.2.3-darwin-arm64', intel = 'example.plugin-1.2.3-darwin-x64';
+    await fixture.write(`${base}/${arm}/package.json`, { publisher: 'example', name: 'plugin', version: '1.2.3' });
+    await fixture.write(`${base}/${intel}/package.json`, { publisher: 'example', name: 'plugin', version: '1.2.3', __metadata: { source: 'vsix', installedTimestamp: 1000 } });
+    await fixture.write(`${base}/extensions.json`, [{ identifier: { id: 'example.plugin' }, version: '1.2.3', relativeLocation: arm,
+      location: { scheme: 'file', path: path.join(fixture.home, base, arm) }, metadata: { source: 'gallery', installedTimestamp: 2000 } }]);
+    // Act
+    await collectEditorExtensions(fixture.context, fixture.result);
+    const observed = fixture.result.extensions.sort((a, b) => a.path.localeCompare(b.path));
+    // Assert
+    assert.deepEqual(observed.map(({ registered, source, installedAt }) => ({ registered, source, installedAt })), [
+      { registered: true, source: 'gallery', installedAt: '1970-01-01T00:00:02.000Z' },
+      { registered: false, source: 'vsix', installedAt: '1970-01-01T00:00:01.000Z' },
+    ]);
+    assert.equal(observed.every(item => item.active === null), true);
   } finally { await fixture.close(); }
 });
 
@@ -139,11 +216,11 @@ test('エディタ拡張のmanifest不正と拒否は不在へ置き換わらな
     // Act
     await collectEditorExtensions(fixture.context, fixture.result);
     // Assert
-    assert.deepEqual(fixture.result.coverage.map(item => item.status), ['partial', 'partial', 'partial']);
+    assert.deepEqual(['vscode-extensions', 'cursor-extensions', 'vscode-insiders-extensions'].map(area => fixture.result.coverage.find(item => item.area === area).status), ['partial', 'partial', 'partial']);
     fixture.result.coverage.length = 0;
     for (const root of ['.vscode', '.cursor', '.vscode-insiders']) fixture.denied.add(path.join(fixture.home, root));
     await collectEditorExtensions(fixture.context, fixture.result);
-    assert.equal(fixture.result.coverage.every(item => item.causes.includes('denied')), true);
+    assert.equal(['vscode-extensions', 'cursor-extensions', 'vscode-insiders-extensions'].every(area => fixture.result.coverage.find(item => item.area === area).causes.includes('denied')), true);
     assert.equal(JSON.stringify(fixture.result).includes(SECRET), false);
   } finally { await fixture.close(); }
 });
@@ -221,6 +298,30 @@ test('uv・pipx・conda・project venvとJava/Rubyは静的版とpackageだけ�
     assert.equal(fixture.result.globalPackages.filter(item => item.ecosystem === 'RubyGems').length, 5);
     assert.equal(fixture.commands.length, 0);
     assert.equal(JSON.stringify(fixture.result).includes(SECRET), false);
+  } finally { await fixture.close(); }
+});
+
+test('a bundled Intel JVM and a standalone ARM JDK retain separate vendor, build and CPU evidence on the same Mac', async () => {
+  // Arrange
+  const fixture = await environmentFixture();
+  try {
+    const bundle = 'fake-system/Applications/Idea.app/Contents';
+    await fixture.write(bundle + '/Info.plist', { CFBundleIdentifier: 'com.jetbrains.intellij', CFBundleName: 'IntelliJ IDEA', CFBundleVersion: '2026.3' });
+    await fixture.write(bundle + '/jbr/Contents/Home/release', 'IMPLEMENTOR="JetBrains s.r.o."\nOS_ARCH="x86_64"\nJAVA_VERSION="21.0.13"\nJAVA_RUNTIME_VERSION="21.0.13+9-b635.79"\n');
+    await fixture.write('Library/Java/JavaVirtualMachines/a.jdk/Contents/Home/release', 'IMPLEMENTOR="Azul Systems, Inc."\r\nOS_ARCH="aarch64"\r\nJAVA_VERSION="17.0.21.0.3"\r\nJAVA_RUNTIME_VERSION="17.0.21.0.3+1-LTS"\r\n');
+    await fixture.write('Library/Java/JavaVirtualMachines/b.jdk/Contents/Home/release', `IMPLEMENTOR="${SECRET}"\nOS_ARCH="aarch64"\nOS_ARCH="amd64"\nJAVA_VERSION="21.0.3"\nJAVA_RUNTIME_VERSION="21-${SECRET}"\n`);
+    // Act
+    await collectApplications(fixture.context, fixture.result);
+    await collectRuntimes(fixture.context, fixture.result);
+    const java = fixture.result.runtimes.filter(item => item.name === 'java');
+    // Assert
+    assert.deepEqual(java.map(item => [item.manager, item.vendor, item.version, item.build, item.architecture]), [
+      ['bundled-jbr', 'JetBrains s.r.o.', '21.0.13', '21.0.13+9-b635.79', 'x86_64'],
+      ['jdk', 'Azul Systems, Inc.', '17.0.21.0.3', '17.0.21.0.3+1-LTS', 'arm64'], ['jdk', null, '21.0.3', null, null],
+    ]);
+    assert.equal(fixture.result.applications[0].components.find(item => item.name === 'java').architecture, 'x86_64');
+    assert.equal(fixture.commands.some(command => /java|jbr/i.test(command.operation)), false);
+    assert.equal(JSON.stringify(java).includes(SECRET), false);
   } finally { await fixture.close(); }
 });
 

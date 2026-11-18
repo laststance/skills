@@ -18,7 +18,7 @@ import { boundedJson, LIMITS } from './safe-io.mjs';
 import { SweepError, safeDiagnostic, causeClass } from './diagnostics.mjs';
 import { fetchHomebrewAdvisories } from './homebrew-advisories.mjs';
 import { normalizeSeverity, validAdvisoryId } from './assessment.mjs';
-import { parseOfficialIndex, parseDockerAnnouncements, openSslPaths, parseOpenSslCve, parseRedHatList, parseAlpineSnapshot } from './source-adapters.mjs';
+import { parseOfficialIndex, parseOpenJdkMatrix, parseDockerAnnouncements, openSslPaths, parseOpenSslCve, parseRedHatList, parseAlpineSnapshot } from './source-adapters.mjs';
 import { discoverIocs } from './ioc-discovery.mjs';
 
 const DAY = 86_400_000;
@@ -170,6 +170,10 @@ async function fetchSource(source, window, context, continuation, cachedItems = 
       else if (['openjdk', 'oracle', 'ruby-security', 'mozilla-index'].includes(source.kind)) entries = parseOfficialIndex(response.text, source);
       else entries = parseXmlFeed(response.text, source);
       record.contentFetched = source.kind !== 'openssl';
+      // 公式索引だけの中間保存で、未確認のCVE本文の成功カーソルを進めない。
+      if (source.kind === 'openjdk' && entries.some(entry => newsWindowStatus(entry, window) !== 'outside')) {
+        record.contentFetched = false; record.status = 'partial'; record.reasonCode = 'SOURCE_DETAILS_PENDING';
+      }
       if (['xml', 'jsonfeed'].includes(source.kind)) record.limit = 'Feed retention and update dates are provider-dependent; older omissions remain unknown.';
     }
   } catch (error) {
@@ -192,6 +196,43 @@ async function fetchSource(source, window, context, continuation, cachedItems = 
     securityReleases: source.kind === 'apple' ? entries.slice(0, 120) : [], knownExploitedIds: source.kind === 'kev' ? entries.map(entry => entry.id) : [] };
   await onProgress(result);
   return result;
+}
+
+/**
+ * {@link fetchNews} が固定情報源を一巡した後、今回の公式索引が認めた期間内の個別告知を最大4件取得する。
+ * 失敗・上限超過時には索引を保持し、該当CVEが0件だったと報告しない。
+ * @example await collectOpenJdkMatrices(source, progress, context)
+ */
+async function collectOpenJdkMatrices(source, progress, context) {
+  const bulletins = progress.items.filter(item => item.sourceId === source.id && item.reasonCode === 'OFFICIAL_INDEX_REQUIRES_RANGE_REVIEW')
+    .sort((left, right) => right.publishedAt.localeCompare(left.publishedAt));
+  const reviewed = new Set(), advisories = [];
+  for (const bulletin of bulletins.slice(0, 4)) {
+    try {
+      const address = new URL(bulletin.url);
+      const response = await fetchPublic(address.href, context, { sourceId: source.id, schema: source.schema,
+        authorizedPaths: new Set([address.pathname]), maxBytes: 256 * 1024 });
+      progress.record.pages++; progress.record.bytes += response.bytes;
+      const rows = parseOpenJdkMatrix(response.text, source, bulletin);
+      advisories.push(...rows.map(row => ({ ...row, fetchedAt: new Date(context.wallNow()).toISOString() })));
+      reviewed.add(bulletin.id);
+    } catch (error) {
+      progress.record.diagnostic = safeDiagnostic(error, 'SOURCE', 'news');
+      if (context.signal.aborted) break;
+    }
+  }
+  // 同じ取得結果をローカル照合と全件証拠に渡す。構造が変わった索引は手動確認に残す。
+  for (const key of ['items', 'cachedItems']) {
+    progress[key] = [...progress[key].map(item => reviewed.has(item.id) ? { ...item, reasonCode: 'OPENJDK_RISK_MATRIX_READ' } : item), ...advisories];
+  }
+  const record = progress.record;
+  record.pending = bulletins.length - reviewed.size;
+  record.itemCount = progress.items.length;
+  record.contentFetched = reviewed.size > 0;
+  record.lastSuccessfulAt = record.contentFetched ? new Date(context.wallNow()).toISOString() : null;
+  record.status = record.pending || record.historicalCoverage === 'partial' ? 'partial' : 'ok';
+  record.windowComplete = record.status === 'ok';
+  record.reasonCode = record.pending ? 'OPENJDK_DETAILS_INCOMPLETE' : 'OPENJDK_RISK_MATRIX_READ';
 }
 
 /** Count confirmed, overlapping and unknown dates without treating a calendar month as a publication day.
@@ -513,6 +554,11 @@ export async function fetchNews(options = {}) {
         current.cachedItems = [...new Map([...result.cachedItems, ...current.cachedItems].map(value => [value.id, value])).values()];
         await saveProgress(current);
       }
+    }
+    const jdkSource = SOURCES.find(value => value.kind === 'openjdk'), jdk = progress.get(jdkSource.name);
+    if (jdk?.record.reasonCode === 'SOURCE_DETAILS_PENDING' && jdk.record.freshness === 'fresh') {
+      await collectOpenJdkMatrices(jdkSource, jdk, context);
+      await saveProgress(jdk);
     }
     const sslSource = SOURCES.find(value => value.kind === 'openssl'), ssl = progress.get(sslSource.name);
     if (ssl?.pendingDetails.length) {

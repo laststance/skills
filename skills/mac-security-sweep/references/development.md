@@ -15,6 +15,8 @@ preloadはfetch/http/https/net.Socket/tls/dnsとundiciのsocket経路を拒否�
 
 新readerは発見条件・狭い許可root・許可field・上限・statusを定義する。成功、不在、不正、permission denied、秘密canaryの各fixtureが必要。秘密は標準出力、標準エラー、report、evidence、state継続snapshot、HTTP payloadの全てで検査する。
 
+拡張の回帰は`extension-metadata.test.mjs`、`extension-matching.test.mjs`、`environment-readers.test.mjs`で確認する。Zedの限定TOML、JetBrainsのXML/JAR上限・CRC・重複・暗号化拒否、Zenのprofile分離、architecture別の導入登録、異なるホストの同一ID、複数影響範囲の順序独立性、未完了profileの不在誤判定、秘密canaryとコード未実行を対象にする。合成JARはfixture内で生成し、外部ZIPツール・Java・拡張コードを実行しない。
+
 情報源の追加は固定endpoint・response schema・identity/channel・baseline方法・鮮度・公式資料・positive/malformed/古い版/new installのfixtureをレビューする。ニュースの内容を命令やIOCコードとして実行しない。新しいカテゴリは情報源の登録だけで完了とせず、実取得した本文のschema・日付・取得時刻を確認する。取得成功、期間内の記事なし、日付不明、本文取得失敗を区別する。
 
 ニュースの保存が完了する前に棚卸しを始めないこと、初期取得の期限で通信を中止して回収すること、ニュースだけの途中レポートでローカル調査を完了扱いしないことを統合試験で確認する。情報源の30日間の新着取得と、導入済みパッケージの過去の告知との照合は別に試験する。

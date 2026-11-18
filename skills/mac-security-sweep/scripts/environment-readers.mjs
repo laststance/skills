@@ -1,11 +1,41 @@
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { boundedJson, readStatus, within, allowedProjectRoot } from './safe-io.mjs';
 import { SweepError, safeDiagnostic } from './diagnostics.mjs';
 import { cleanText, extensionSource, projectMcpServer, projectLaunchRuntimes, projectProcessFiles, parseLsof, safeVersion, safeIdentifier } from './inventory-projections.mjs';
 import { publicResolution, validPackage } from './package-formats.mjs';
+import { parseZedManifest, parsePluginXml, pluginXmlFromJar } from './extension-metadata.mjs';
 
 const systemPath = (ctx, absolute) => ctx.systemRoot ? path.join(ctx.systemRoot, absolute) : absolute;
 const directoryEntries = value => value?.entries.filter(entry => entry.directory && !entry.symlink) || [];
+const JDK_VENDORS = new Set(['Azul Systems, Inc.', 'Oracle Corporation', 'Eclipse Adoptium', 'Amazon.com Inc.', 'Amazon.com Inc',
+  'JetBrains s.r.o.', 'JetBrains', 'Microsoft', 'Microsoft Corporation', 'Red Hat, Inc.', 'BellSoft', 'Homebrew', 'SAP SE', 'IBM Corporation']);
+const JDK_ARCHITECTURES = new Map([['aarch64', 'arm64'], ['arm64', 'arm64'], ['amd64', 'x86_64'], ['x86_64', 'x86_64'],
+  ['x86', 'x86'], ['i386', 'x86'], ['riscv64', 'riscv64'], ['ppc64le', 'ppc64le'], ['s390x', 's390x']]);
+
+/**
+ * {@link collectRuntimes} と {@link collectApplications} が、各JDK自身のreleaseから照合用の属性だけを読む。
+ * 未知・重複値は未確認とし、ホストCPUや別JDKの配布元を補わない。
+ * @example await readJdkRelease(reader, jdkHome, root)
+ */
+async function readJdkRelease(reader, jdkHome, root) {
+  const text = await reader.read(path.join(jdkHome, 'release'), root, 'text', { maxBytes: 128000 });
+  if (text === null) return null;
+  const fields = new Map();
+  // 同じキーが複数回あれば値が一致しても採用しない。他のキーや自由記述は射影しない。
+  for (const line of text.split(/\r?\n/)) {
+    const match = /^(JAVA_VERSION|JAVA_RUNTIME_VERSION|IMPLEMENTOR|OS_ARCH)=(.*)$/.exec(line);
+    if (match) fields.set(match[1], fields.has(match[1]) ? null : /^"([^"]{1,120})"$/.exec(match[2])?.[1]);
+  }
+  const rawVersion = fields.get('JAVA_VERSION');
+  const version = typeof rawVersion === 'string' && /^\d+(?:[._u]\d+)*(?:-(?:ea|internal))?(?:\+\d+)?$/.test(rawVersion) ? rawVersion : null;
+  if (!version) reader.malformed();
+  const build = fields.get('JAVA_RUNTIME_VERSION');
+  return { name: 'java', version, build: typeof build === 'string' && /^\d+(?:[._]\d+)*(?:-ea)?(?:\+\d+)?(?:-(?:LTS|b\d+(?:\.\d+)*))?$/.test(build) ? build : null,
+    vendor: JDK_VENDORS.has(fields.get('IMPLEMENTOR')) ? fields.get('IMPLEMENTOR') : null,
+    architecture: JDK_ARCHITECTURES.get(fields.get('OS_ARCH')) || null, path: jdkHome,
+    componentStatus: version ? 'complete' : 'detected-version-unknown', evidenceKind: 'installed-metadata' };
+}
 const publicNpm = resolved => {
   if (typeof resolved !== 'string') return null;
   return publicResolution(resolved, 'npm');
@@ -121,6 +151,14 @@ export async function collectApplications(ctx, result) {
         const info = await reader.plist(path.join(app, 'Contents/Info.plist'), root);
         if (!info || !safeIdentifier(info.CFBundleIdentifier)) { reader.malformed(); continue; }
         const application = { name: cleanText(info.CFBundleDisplayName || info.CFBundleName || path.basename(app, '.app')), version: safeVersion(info.CFBundleShortVersionString || info.CFBundleVersion), build: safeVersion(info.CFBundleVersion), bundleId: safeIdentifier(info.CFBundleIdentifier), path: app, evidenceKind: 'installed-metadata', components: [], signature: { status: 'unknown' }, notarization: { status: 'unknown', validity: 'unknown' }, channel: 'unknown' };
+        // JetBrains系エディタはシステムJDKとは別のランタイムを同梱する。
+        if (application.bundleId.startsWith('com.jetbrains.') || application.bundleId === 'com.google.android.studio') {
+          const bundled = await readJdkRelease(reader, path.join(app, 'Contents/jbr/Contents/Home'), root);
+          if (bundled) {
+            application.components.push({ name: 'java', version: bundled.version, architecture: bundled.architecture, vendor: bundled.vendor, build: bundled.build, evidenceKind: bundled.evidenceKind });
+            result.runtimes.push({ ...bundled, manager: 'bundled-jbr', application: application.bundleId });
+          }
+        }
         const electron = await reader.plist(path.join(app, 'Contents/Frameworks/Electron Framework.framework/Versions/A/Resources/Info.plist'), root)
           || await reader.plist(path.join(app, 'Contents/Frameworks/Electron Framework.framework/Resources/Info.plist'), root);
         if (electron) application.components.push({ name: 'electron', version: safeVersion(electron.CFBundleShortVersionString || electron.CFBundleVersion), evidenceKind: 'installed-metadata' });
@@ -184,9 +222,13 @@ export async function collectBrowserExtensions(ctx, result) {
     }
     reader.finish(result.browserExtensions.length - start, { root });
   }
-  const firefoxRoots = [path.join(ctx.home, 'Library/Application Support/Firefox'), ...(ctx.config.browserProfiles || []).filter(item => item.product === 'firefox').map(item => item.root)];
-  for (const root of firefoxRoots) {
-    const reader = metadataReader(ctx, result, 'firefox-extensions'), start = result.browserExtensions.length;
+  const firefoxRoots = [
+    { product: 'firefox', root: path.join(ctx.home, 'Library/Application Support/Firefox') },
+    { product: 'zen', root: path.join(ctx.home, 'Library/Application Support/zen') },
+    ...(ctx.config.browserProfiles || []).filter(item => ['firefox', 'zen'].includes(item.product)),
+  ];
+  for (const { product: browser, root } of firefoxRoots) {
+    const reader = metadataReader(ctx, result, `${browser}-extensions`), start = result.browserExtensions.length;
     const ini = await reader.read(path.join(root, 'profiles.ini'), root, 'text', { maxBytes: 128000 });
     if (ini !== null) {
       if (ini.split('\n').some(line => line.length > 65536)) reader.malformed();
@@ -205,7 +247,7 @@ export async function collectBrowserExtensions(ctx, result) {
           if (!Array.isArray(data.addons)) { reader.malformed(); continue; }
           for (const extension of reader.limit(data.addons, 2000)) {
             if (!safeIdentifier(extension.id) || !safeVersion(extension.version)) { reader.malformed(); continue; }
-            result.browserExtensions.push({ browser: 'firefox', profile: cleanText(profile.Name), id: extension.id, name: cleanText(extension.defaultLocale?.name), version: extension.version, active: extension.userDisabled === true || extension.appDisabled === true || extension.softDisabled === true ? false : typeof extension.active === 'boolean' ? extension.active : null, path: target, evidenceKind: 'installed-metadata' });
+            result.browserExtensions.push({ browser, profile: cleanText(profile.Name), id: extension.id, name: cleanText(extension.defaultLocale?.name), version: extension.version, active: extension.userDisabled === true || extension.appDisabled === true || extension.softDisabled === true ? false : typeof extension.active === 'boolean' ? extension.active : null, path: target, source: 'unknown', marketplace: 'not-verified-from-registry', evidenceKind: 'installed-metadata' });
           }
         }
         if (!profiles.length) reader.malformed();
@@ -227,32 +269,153 @@ export async function collectBrowserExtensions(ctx, result) {
     }
   }
   safari.finish(result.browserExtensions.length - start, { reason: 'Safari appex metadataを確認。有効状態は安全な既存metadataで確認できないためunknownです。' });
+  // Detected products without a reviewed profile reader remain explicit coverage gaps.
+  for (const app of result.applications.filter(item => /^(?:Arc|Vivaldi|Opera(?: GX)?|Orion|LibreWolf|Waterfox|Tor Browser)$/i.test(item.name || ''))) result.coverage.push({ area: 'other-browser-extensions', status: 'unsupported', product: app.name, reasonCode: 'browser-reader-unsupported' });
 }
 
 /** 各エディタの拡張metadataを読む。CLIやextension codeは起動しない。 @example await collectEditorExtensions(ctx, result); */
 export async function collectEditorExtensions(ctx, result) {
   const roots = [['vscode', '.vscode/extensions'], ['cursor', '.cursor/extensions'], ['vscode-insiders', '.vscode-insiders/extensions']].map(([editor, relative]) => ({ editor, root: path.join(ctx.home, relative) }));
-  roots.push(...(ctx.config.editorRoots || []));
+  roots.push(...(ctx.config.editorRoots || []).filter(item => !['zed', 'jetbrains'].includes(item.editor)));
   // Portableの公式data/extensionsを、既に確認したアプリに限って追加する。
-  for (const app of result.applications) if (/Visual Studio Code|Cursor/i.test(app.name || '')) roots.push({ editor: /Cursor/i.test(app.name) ? 'cursor-portable' : 'vscode-portable', root: path.join(path.dirname(app.path), 'code-portable-data/extensions') });
+  for (const app of result.applications) if (/Visual Studio Code|Cursor/i.test(app.name || '') || app.bundleId === 'com.microsoft.VSCode') roots.push({ editor: /Cursor/i.test(app.name) ? 'cursor-portable' : 'vscode-portable', root: path.join(path.dirname(app.path), 'code-portable-data/extensions') });
   for (const { editor, root } of roots) {
     const reader = metadataReader(ctx, result, `${editor}-extensions`), start = result.extensions.length;
     const registry = await reader.read(path.join(root, 'extensions.json'), root);
     if (registry !== null && !Array.isArray(registry)) reader.malformed();
-    const listing = await reader.list(root);
+    const listing = await reader.list(root), observed = [];
     for (const entry of directoryEntries(listing).filter(item => !item.name.startsWith('.'))) {
       const extensionPath = path.join(root, entry.name), data = await reader.read(path.join(extensionPath, 'package.json'), root);
       const id = `${data?.publisher || ''}.${data?.name || ''}`.toLowerCase();
       if (!data || !/^[\w-]+\.[\w.-]+$/.test(id) || !safeVersion(data.version)) { reader.malformed(); continue; }
-      const registration = Array.isArray(registry) ? registry.find(item => item.identifier?.id?.toLowerCase() === id && item.version === data.version) : null;
+      observed.push({ extensionPath, data, id });
+    }
+    // Bind registration metadata to the actual directory, not every architecture copy of the same version.
+    for (const { extensionPath, data, id } of observed) {
+      const copies = observed.filter(item => item.id === id && item.data.version === data.version).length;
+      const candidates = Array.isArray(registry) ? registry.filter(item => item.identifier?.id?.toLowerCase() === id && item.version === data.version) : [];
+      const bound = candidates.map(item => ({ item, location: editorRegistrationLocation(item, root) }));
+      const registration = bound.find(item => item.location === extensionPath)?.item
+        || (copies === 1 && candidates.length === 1 && !Object.hasOwn(candidates[0], 'location') && !Object.hasOwn(candidates[0], 'relativeLocation') ? candidates[0] : null);
+      const ambiguous = !registration && bound.some(item => item.location === null);
+      if (ambiguous) reader.issue(new SweepError('FORMAT', { cause: 'unsupported', operation: 'inventory' }));
       const metadata = registration?.metadata || data.__metadata || {};
       const timestamp = Number(metadata.installedTimestamp);
       // extensions.jsonは導入登録であり、profile/workspaceのenablementを証明しない。
-      result.extensions.push({ editor, id, version: data.version, source: extensionSource(metadata.source), marketplace: 'not-verified-from-registry', installedAt: Number.isFinite(timestamp) && timestamp > 0 && timestamp < 8.64e15 ? new Date(timestamp).toISOString() : null, installedAtBasis: 'registry-installedTimestamp-or-unknown', path: extensionPath, active: null, registered: Array.isArray(registry) ? Boolean(registration) : null, enablementEvidence: 'profile-enablement-unconfirmed', presentOnDisk: true, evidenceKind: 'installed-metadata' });
+      result.extensions.push({ editor, id, name: cleanText(data.displayName || data.name), version: data.version, source: extensionSource(metadata.source), marketplace: 'not-verified-from-registry', installedAt: Number.isFinite(timestamp) && timestamp > 0 && timestamp < 8.64e15 ? new Date(timestamp).toISOString() : null, installedAtBasis: 'registry-installedTimestamp-or-unknown', path: extensionPath, active: null, registered: Array.isArray(registry) ? registration ? true : ambiguous ? null : false : null, enablementEvidence: 'profile-enablement-unconfirmed', presentOnDisk: true, evidenceKind: 'installed-metadata' });
     }
     reader.finish(result.extensions.length - start, { root });
   }
-  for (const app of result.applications.filter(item => /Zed|Sublime|IntelliJ|PyCharm|WebStorm|Emacs/i.test(item.name || ''))) result.coverage.push({ area: 'other-editor-extensions', status: 'unsupported', product: app.name, reason: 'エディタを検出しましたが、この製品の拡張metadata readerは未対応です。' });
+  await collectZedExtensions(ctx, result);
+  await collectJetBrainsExtensions(ctx, result);
+  // Keep detected editors without a reviewed reader visible instead of treating them as extension-free.
+  for (const app of result.applications.filter(item => /Sublime|Emacs|Windsurf|Antigravity|Nova|BBEdit|^Xcode$/i.test(item.name || ''))) result.coverage.push({ area: 'other-editor-extensions', status: 'unsupported', product: app.name, reason: 'エディタを検出しましたが、この製品の拡張metadata readerは未対応です。' });
+}
+
+/**
+ * Bind VS Code-family registration metadata to one local directory without following its URI.
+ * {@link collectEditorExtensions} calls this before using source or installation timestamps.
+ *
+ * @param registration - An in-memory extensions.json entry.
+ * @param root - The already allowed extensions directory.
+ * @returns One in-root absolute path, or null for absent, conflicting or unsupported locations.
+ * @example
+ * editorRegistrationLocation({ relativeLocation: 'example.plugin-1.2.3' }, root);
+ */
+function editorRegistrationLocation(registration, root) {
+  const locations = [];
+  // Explicit but invalid locations cannot fall back to a different copy's ID and version.
+  if (Object.hasOwn(registration, 'relativeLocation')) {
+    const relative = registration.relativeLocation;
+    if (typeof relative !== 'string' || !relative || relative.length > 4096 || path.isAbsolute(relative) || /[\x00-\x1f\x7f]/.test(relative)) return null;
+    locations.push(path.resolve(root, relative));
+  }
+  if (Object.hasOwn(registration, 'location')) {
+    const value = registration.location;
+    try {
+      const absolute = typeof value === 'string' ? value.startsWith('file:') ? fileURLToPath(value) : value
+        : value && value.scheme === 'file' && !value.authority ? value.path : null;
+      if (typeof absolute !== 'string' || absolute.length > 4096 || !path.isAbsolute(absolute) || /[\x00-\x1f\x7f]/.test(absolute)) return null;
+      locations.push(path.resolve(absolute));
+    } catch { return null; }
+  }
+  return locations.length && locations.every(location => within(root, location) && location !== root && location === locations[0]) ? locations[0] : null;
+}
+
+/**
+ * Inventory installed Zed manifests without loading WASM or downloaded language servers.
+ * {@link collectEditorExtensions} calls this during the normal inventory stage.
+ *
+ * @param ctx - Shared bounded filesystem and deadline context.
+ * @param result - Projected inventory receiving extension records and coverage.
+ * @returns Resolves after the supported default and configured roots have been checked.
+ * @example
+ * await collectZedExtensions(ctx, result);
+ */
+async function collectZedExtensions(ctx, result) {
+  const roots = [...new Set([path.join(ctx.home, 'Library/Application Support/Zed/extensions/installed'),
+    ...(ctx.config.editorRoots || []).filter(item => item.editor === 'zed').map(item => item.root)])];
+  for (const root of roots) {
+    const reader = metadataReader(ctx, result, 'zed-extensions'), start = result.extensions.length;
+    // The work directory contains executable downloads and is intentionally outside this reader.
+    for (const entry of directoryEntries(await reader.list(root))) {
+      const extensionPath = path.join(root, entry.name);
+      const text = await reader.read(path.join(extensionPath, 'extension.toml'), root, 'text', { maxBytes: 128 * 1024 });
+      const metadata = parseZedManifest(text);
+      if (!metadata) { reader.malformed(); continue; }
+      result.extensions.push({ editor: 'zed', ...metadata, path: extensionPath, source: 'unknown', marketplace: 'not-verified-from-registry',
+        active: null, presentOnDisk: true, evidenceKind: 'installed-metadata', enablementEvidence: 'profile-enablement-unconfirmed' });
+    }
+    reader.finish(result.extensions.length - start, { root });
+  }
+}
+
+/**
+ * Inventory JetBrains user plugins from narrow descriptor locations, including JAR metadata.
+ * {@link collectEditorExtensions} calls this for all known product/version directories.
+ *
+ * @param ctx - Shared verified I/O context; no Java, plugin or IDE process is started.
+ * @param result - Inventory receiving plugin identity and per-profile coverage.
+ * @returns Resolves after bounded profile and plugin enumeration.
+ * @example
+ * await collectJetBrainsExtensions(ctx, result);
+ */
+async function collectJetBrainsExtensions(ctx, result) {
+  const root = path.join(ctx.home, 'Library/Application Support/JetBrains');
+  const discovery = metadataReader(ctx, result, 'jetbrains-profiles');
+  const profiles = directoryEntries(await discovery.list(root)).filter(entry => /^(?:IntelliJIdea|IdeaIC|PhpStorm|WebStorm|PyCharm(?:CE|Core)?|CLion|GoLand|Rider|RustRover|DataGrip|RubyMine|Aqua|DataSpell)\d{4}\.\d+(?:\.[\w.-]+)?$/.test(entry.name));
+  const roots = profiles.map(entry => ({ root: path.join(root, entry.name, 'plugins'), profile: entry.name, configRoot: path.join(root, entry.name) }));
+  roots.push(...(ctx.config.editorRoots || []).filter(item => item.editor === 'jetbrains').map(item => ({ root: item.root, profile: null, configRoot: null })));
+  discovery.finish(profiles.length);
+  for (const target of roots) {
+    const reader = metadataReader(ctx, result, 'jetbrains-extensions'), start = result.extensions.length;
+    const disabledText = target.configRoot ? await reader.read(path.join(target.configRoot, 'disabled_plugins.txt'), target.configRoot, 'text', { maxBytes: 128 * 1024 }) : null;
+    const disabled = new Set((disabledText || '').split(/\r?\n/).filter(id => safeIdentifier(id)));
+    const entries = (await reader.list(target.root))?.entries || [];
+    // A plugin is either a directory with a lib JAR or a single JAR; symlinks are never followed.
+    for (const entry of reader.limit(entries.filter(item => !item.symlink && (item.directory || item.file && item.name.endsWith('.jar'))), 1000)) {
+      const pluginPath = path.join(target.root, entry.name);
+      let descriptor = entry.directory ? await reader.read(path.join(pluginPath, 'META-INF/plugin.xml'), target.root, 'text', { maxBytes: 128 * 1024 }) : null;
+      if (descriptor === null) {
+        const jars = entry.file ? [pluginPath] : ((await reader.list(path.join(pluginPath, 'lib'), target.root))?.entries || [])
+          .filter(item => item.file && !item.symlink && item.name.endsWith('.jar')).map(item => path.join(pluginPath, 'lib', item.name));
+        // Bound archive work and retain incomplete coverage when a descriptor cannot be found.
+        for (const jar of reader.limit(jars, 16)) {
+          const bytes = await reader.read(jar, target.root, 'bytes', { maxBytes: 25 * 1024 ** 2 });
+          if (!bytes) continue;
+          try { descriptor = pluginXmlFromJar(bytes); }
+          catch (error) { reader.issue(error, 'FORMAT'); continue; }
+          if (descriptor !== null) break;
+        }
+      }
+      const metadata = parsePluginXml(descriptor);
+      if (!metadata) { reader.malformed(); continue; }
+      result.extensions.push({ editor: 'jetbrains', profile: target.profile, ...metadata, path: pluginPath, source: 'unknown', marketplace: 'not-verified-from-registry',
+        active: disabled.has(metadata.id) ? false : null, presentOnDisk: true, evidenceKind: 'installed-metadata',
+        enablementEvidence: disabled.has(metadata.id) ? 'profile-disabled-list' : 'profile-enablement-unconfirmed' });
+    }
+    reader.finish(result.extensions.length - start, { root: target.root, profile: target.profile });
+  }
 }
 
 /** npmの既存manifestをコード実行なしで読む。runtime readerから呼ぶ。 @example await collectNodePackages(ctx, result, reader, root); */
@@ -389,9 +552,8 @@ export async function collectRuntimes(ctx, result) {
   for (const root of javaRoots) {
     const reader = metadataReader(ctx, result, 'runtime:java'), start = result.runtimes.length;
     for (const entry of directoryEntries(await reader.list(root))) {
-      const release = path.join(root, entry.name, 'Contents/Home/release'), text = await reader.read(release, root, 'text', { maxBytes: 128000 });
-      const version = text?.match(/^JAVA_VERSION="([\w.+_-]+)"$/m)?.[1];
-      if (text !== null) { if (!safeVersion(version)) reader.malformed(); result.runtimes.push({ name: 'java', version: safeVersion(version), manager: 'jdk', path: path.dirname(release), evidenceKind: 'installed-metadata', componentStatus: version ? 'complete' : 'detected-version-unknown' }); }
+      const jdk = await readJdkRelease(reader, path.join(root, entry.name, 'Contents/Home'), root);
+      if (jdk) result.runtimes.push({ ...jdk, manager: 'jdk' });
     }
     reader.finish(result.runtimes.length - start);
   }

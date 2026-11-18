@@ -3,6 +3,9 @@ import { aggregateAdvisories, assessmentStatus, coverageKind, normalizeSeverity,
 import { resolveLanguage, localizeDiagnostic } from './locale.mjs';
 import { newsDateRange, newsWindowStatus } from './news-format.mjs';
 import * as registry from './source-registry.mjs';
+import { SOURCE_REFERENCE_HOSTS } from './source-request-policy.mjs';
+import { isEditorApplication } from './extension-metadata.mjs';
+import { assessedNews, newsIdentifiers, selectBriefingAdvisories } from './briefing.mjs';
 
 const TEXT = Object.freeze({
   ja: {
@@ -86,7 +89,7 @@ const STATUS = Object.freeze({
   matched: ['一致', 'Matched'], 'no-match': ['不一致', 'No match'], unsupported: ['未対応', 'Unsupported'],
   HIGH: ['高', 'High'], CRITICAL: ['緊急', 'Critical'], MEDIUM: ['中', 'Medium'], LOW: ['低', 'Low'], UNKNOWN: ['未評価', 'Unrated'],
 });
-const EXTRA_REFERENCE_HOSTS = new Set(['osv.dev', 'nvd.nist.gov', 'www.cve.org', 'github.com', 'support.apple.com', 'developer.apple.com',
+const REPORT_REFERENCE_HOSTS = new Set([...SOURCE_REFERENCE_HOSTS, 'osv.dev', 'nvd.nist.gov', 'www.cve.org', 'github.com', 'support.apple.com', 'developer.apple.com',
   'chromereleases.googleblog.com', 'nodejs.org', 'www.mozilla.org', 'www.openssl.org', 'openssl-library.org', 'www.php.net', 'www.ruby-lang.org',
   'openjdk.org', 'www.oracle.com', 'www.docker.com', 'docs.docker.com', 'security-tracker.debian.org', 'www.debian.org', 'ubuntu.com',
   'access.redhat.com', 'secdb.alpinelinux.org', 'alpinelinux.org', 'www.kernel.org', 'www.cisa.gov', 'blogs.jpcert.or.jp', 'www.microsoft.com',
@@ -118,12 +121,13 @@ export function safeSourceUrl(value) {
   if (typeof value !== 'string' || value.length > 2048 || /[\u0000-\u0020\u007f<>\\]/.test(value)) return null;
   try {
     const url = new URL(value);
-    const hosts = new Set([...EXTRA_REFERENCE_HOSTS, ...(registry.SOURCE_REFERENCE_HOSTS || []), ...(registry.SOURCES || []).map(source => new URL(source.url).hostname)]);
-    if (url.protocol !== 'https:' || url.username || url.password || url.port || !hosts.has(url.hostname)) return null;
-    // CISA's fixed public CVE filter is an identifier; arbitrary query values remain forbidden.
+    if (url.protocol !== 'https:' || url.username || url.password || url.port || !REPORT_REFERENCE_HOSTS.has(url.hostname)) return null;
+    // These two official pages accept exactly one public CVE identifier.
     const cisaFilter = url.hostname === 'www.cisa.gov' && url.pathname === '/known-exploited-vulnerabilities-catalog'
       && [...url.searchParams.keys()].length === 1 && /^CVE-\d{4}-\d{4,}$/.test(url.searchParams.get('field_cve') || '');
-    if (url.search && !cisaFilter) return null;
+    const cveRecord = url.hostname === 'www.cve.org' && url.pathname === '/CVERecord' && !url.hash
+      && [...url.searchParams.keys()].length === 1 && /^CVE-\d{4}-\d{4,10}$/.test(url.searchParams.get('id') || '');
+    if (url.search && !cisaFilter && !cveRecord) return null;
     return url.href.replace(/[()[\]*_!]/g, character => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
   } catch { return null; }
 }
@@ -138,6 +142,15 @@ export function jstDate(date) {
 
 /** Translate finite machine labels while retaining unknown identifiers literally. @example label('partial', 'en') */
 function label(value, language) { return STATUS[value]?.[language === 'ja' ? 0 : 1] || escapeReportText(value || TEXT[language].unknown); }
+
+/** {@link renderReport} とエディタ欄にJDKごとの観測を表示する。旧世代の欠落は未確認として残す。 @example runtimeVersionText(jdk, 'ja') */
+function runtimeVersionText(runtime, language) {
+  const unknown = TEXT[language].unknown;
+  if (runtime.name !== 'java') return runtime.version || unknown;
+  return [runtime.build || runtime.version || unknown,
+    `${language === 'ja' ? '配布元' : 'Vendor'}: ${runtime.vendor || unknown}`,
+    `CPU: ${runtime.architecture || unknown}`].join(' / ');
+}
 
 /** Find an advisory detail through its canonical identifier or aliases. @example detailFor(finding, details) */
 function detailFor(finding, details) {
@@ -187,6 +200,10 @@ function findingReason(finding, language) {
     'package-osv-affected': 'OSV lists the exact queried package version as affected. Check its recorded origin and use before assessing reachability.',
     'package-advisory-affected': 'The package version matches the structured advisory range.',
     'package-range-unsupported': 'The advisory range cannot be compared with this version scheme.',
+    'extension-advisory-affected': 'The extension ID, host and affected version match. Disabled or retained copies remain relevant; execution and theft are unconfirmed.',
+    'extension-source-unconfirmed': 'The extension ID matches, but the advisory-specific distribution source has not been verified.',
+    'extension-version-outside-range': 'This recorded extension version is outside the individual advisory range. Other advisories and past execution remain unassessed.',
+    'extension-range-unconfirmed': 'The extension ID matches, but its affected version cannot be assessed.',
     'advisory-conflict': 'Official records disagree about applicability. The result remains unassessed.',
     'rule-unverified': 'The advisory rule has not been verified within its required review period.',
     'rule-version-affected': 'The observed product version matches the verified advisory range.',
@@ -227,17 +244,12 @@ function findingTable(findings, details, language) {
   })].join('\n');
 }
 
-/** Merge classifier fields with retrieved item metadata without losing broad news at a news-only checkpoint. @example assessedNews(news, match) */
-function assessedNews(news, match) {
-  const classified = new Map((match.newsAssessment || []).map(item => [item.id, item]));
-  const items = (news.items || []).map(item => ({ ...item, ...(classified.get(item.id) || {}) }));
-  const ids = new Set(items.map(item => item.id));
-  return [...items, ...(match.newsAssessment || []).filter(item => !ids.has(item.id))];
-}
-
-/** Rank and alias-deduplicate priority news; raw timestamps break equal-priority ties deterministically. @example importantNews(items, findings, [], Date.now()) */
-function importantNews(items, findings, details, now) {
+/** Rank the five headlines while reserving space for locally relevant disclosures awaiting verification. @example importantNews(items, findings, [], Date.now(), []) */
+function importantNews(items, findings, details, now, required) {
   const aliases = aggregateAdvisories([...items, ...findings], details).canonicalIds;
+  const reported = new Set(required.filter(entry => entry.lead).map(entry => entry.item));
+  const pendingLocal = new Set(required.filter(entry => entry.local && entry.lead).map(entry => entry.item));
+  const corroborated = new Set(required.filter(entry => entry.local && entry.lead && entry.item.sourceId !== entry.lead.sourceId).map(entry => entry.item));
   const positive = new Set(findings.filter(finding => ['確定', '可能性高'].includes(finding.status)).map(finding => aliases[finding.advisoryId || finding.id] || finding.advisoryId || finding.id));
   const scored = items.map(item => {
     const detail = detailFor(item, details);
@@ -248,10 +260,14 @@ function importantNews(items, findings, details, now) {
     const active = item.knownExploited === true || detail?.knownExploited === true;
     const dateRange = newsDateRange(item);
     const timestamp = Date.parse(dateRange?.start || item.updatedAt || item.modified || item.publishedAt || '');
-    return { ...item, knownExploited: active, _id: aliases[item.id] || item.id || item.url, _local: local, _severity: severity,
+    const publicIds = newsIdentifiers(item).ids;
+    // 号外と転載は同一IDでまとめる。複数CVEの総覧は、単独CVEの別名として扱わない。
+    const headlineId = publicIds.length ? publicIds.sort().join(' / ') : aliases[item.id] || item.id || item.url;
+    return { ...item, knownExploited: active, _id: headlineId, _local: local, _severity: severity,
+      _reported: reported.has(item), _pendingLocal: pendingLocal.has(item), _corroborated: corroborated.has(item),
       _rank: [local && (active || item.advisoryType === 'malware') ? 1 : 0, active ? 1 : 0, severity.rank, local ? 1 : 0,
         dateRange && timestamp >= now - 86400000 && Date.parse(dateRange.endExclusive) <= now + 1 ? 1 : 0, Number.isFinite(timestamp) ? timestamp : 0] };
-  }).filter(item => item && (item._local || item.knownExploited || item._severity.rank >= 3));
+  }).filter(item => item && (item._local || item._reported || item.knownExploited || item._severity.rank >= 3));
   scored.sort((left, right) => {
     for (let index = 0; index < left._rank.length; index++) if (left._rank[index] !== right._rank[index]) return right._rank[index] - left._rank[index];
     return String(left._id).localeCompare(String(right._id));
@@ -261,11 +277,13 @@ function importantNews(items, findings, details, now) {
   const highlights = unique.slice(0, 5);
   const local = unique.find(item => item._local && (item.knownExploited || item._severity.rank >= 3));
   const global = unique.find(item => !item._local && (item.knownExploited || item._severity.rank >= 4));
-  // どちらかの大量の記事で、重要なローカル情報または世界の悪用情報を押し出さない。
-  for (const candidate of [local, global].filter(Boolean)) {
+  const pending = unique.find(item => item._corroborated) || unique.find(item => item._pendingLocal) || unique.find(item => item._reported);
+  // 大量の定格済み告知やKEVがあっても、深刻度未付与の公表を1枠に残す。全件は別欄で照合する。
+  const reserved = new Set([local, global, pending].filter(Boolean));
+  for (const candidate of reserved) {
     if (highlights.some(item => item._id === candidate._id)) continue;
     if (highlights.length === 5) {
-      const index = highlights.findLastIndex(item => item !== local && item !== global);
+      const index = highlights.findLastIndex(item => !reserved.has(item));
       highlights.splice(index, 1);
     }
     highlights.push(candidate);
@@ -278,6 +296,7 @@ function relevanceText(item, language) {
   if (language === 'ja' && item.reason) return escapeReportText(item.reason, 250);
   const reasons = {
     'news-ambiguous-editor': 'An extension record exists, but its editor distribution is unverified.',
+    'news-extension-host-unconfirmed': 'The same extension ID is installed in another host, but its relationship to the advisory distribution is unverified.',
     'news-editor-context': 'The editor is present. The affected extension and any removed extension history need separate checks.',
     'news-structured-match': 'A structured advisory target matches the recorded package identity. Check the version and origin in the local assessment.',
     'news-target-not-observed': 'The target was not found in the completed extraction scope. Unscanned locations remain outside this conclusion.',
@@ -368,6 +387,8 @@ const COVERAGE_REASONS = Object.fromEntries([
   ['cloud-existence-only', 'クラウド設定は存在のみ。本文・認証値・利用アカウントは取得しません。', 'Only cloud configuration existence was checked. Contents, credentials and account identities were not collected.'],
   ['application-metadata-only', 'Info.plist・既存の同梱版metadata・署名表示だけを確認。チケットの存在は公証の有効性を証明しません。', 'Only Info.plist, existing bundled-version metadata and signature displays were inspected. The presence of a notarization ticket does not prove that notarization is valid.'],
   ['editor-reader-unsupported', 'エディタを検出しましたが、この製品の拡張metadata readerは未対応です。', 'The editor was detected, but extension metadata inspection is unsupported for this product.'],
+  ['browser-reader-unsupported', 'ブラウザを検出しましたが、この製品の拡張metadata readerは未対応です。', 'The browser was detected, but extension metadata inspection is unsupported for this product.'],
+  ['extension-advisories-limited', '取得済みの検証済み告知と拡張ID・対象ホストを照合。未一致・未取得を安全とせず、導入一覧は外部送信しません。', 'Extension IDs and hosts were compared only with retrieved, reviewed advisories. Missing matches or advisories do not establish safety. The installed-extension inventory was not sent externally.'],
   ['safari-enablement-unknown', 'Safari appex metadataを確認。有効状態は安全な既存metadataで確認できないためunknownです。', 'Safari appex metadata was inspected. Extension enablement remains unknown because safe existing metadata does not establish it.'],
   ['background-enablement-unknown', '背景項目の識別子と静的LoginItemsだけを確認。有効状態・権限制限の領域はunknownです。', 'Only background-item identifiers and static LoginItems were inspected. Enablement and permission-restricted areas remain unknown.'],
   ['cron-hooks-metadata-only', 'cronは行数、shell hookは存在metadataのみ。本文は保存しません。', 'Only cron line counts and shell-hook existence metadata were collected. Their contents were not retained.'],
@@ -457,6 +478,82 @@ function evidenceHref(directory) {
 }
 
 /**
+ * Make installed editor and browser extensions visible even when no advisory matches their IDs.
+ * {@link renderReport} calls this separately from dependency findings and IOC conclusions.
+ *
+ * @param inventory - Projected extension identity and enablement metadata.
+ * @param findings - Local assessments bound to a host, ID, version and observation path.
+ * @param news - Classified articles; text mentions remain review candidates.
+ * @param language - Canonical Japanese or English report language.
+ * @param evidence - Internally generated link to complete local evidence.
+ * @returns Bounded Markdown lines with explicit unassessed states and reader coverage.
+ * @example
+ * extensionInventoryTables(inventory, findings, news, 'ja', '[Evidence](evidence.json)');
+ */
+function extensionInventoryTables(inventory, findings, news, language, evidence) {
+  const ja = language === 'ja', t = TEXT[language];
+  const groups = [[ja ? 'エディタ拡張・プラグイン' : 'Editor extensions and plugins', inventory.extensions || []],
+    [ja ? 'ブラウザ拡張' : 'Browser extensions', inventory.browserExtensions || []]];
+  const lines = [`### ${ja ? 'エディタ・ブラウザ拡張の確認結果' : 'Editor and browser extension observations'}`, '',
+    ja ? '導入記録・有効状態・残存版を区別しています。告知とのID一致がない拡張も未確認として表示します。拡張コードは実行せず、導入一覧を外部送信しません。'
+      : 'Installation records, enablement and retained versions are distinct observations. Extensions without a matching advisory ID remain unassessed. Extension code was not executed and the installed inventory was not sent externally.', ''];
+  const editors = (inventory.applications || []).filter(isEditorApplication);
+  if (editors.length) {
+    lines.push(`#### ${ja ? 'エディタ本体' : 'Editor applications'}`, '',
+      ja ? '| エディタ / bundle ID | 導入版 | 同梱ランタイム | 告知照合 |' : '| Editor / bundle ID | Installed version | Bundled runtimes | Advisory assessment |', '|---|---|---|---|');
+    // An installed editor is visible even when its plugin directory is empty or unsupported.
+    for (const editor of editors.slice(0, 100)) {
+      const judgments = findings.filter(finding => (finding.installationEvidence || []).some(entry => entry.path === editor.path));
+      const assessment = judgments.length ? judgments.slice(0, 5).map(finding => `${label(finding.status, language)}: ${escapeReportText(finding.advisoryId || finding.id)}`).join('; ')
+        : (ja ? '導入を確認・個別CVEの影響は未確認' : 'Installation observed; individual CVE applicability unassessed');
+      const runtimes = (editor.components || []).map(component => `${component.name} ${runtimeVersionText(component, language)}`).join('; ');
+      lines.push(`| ${escapeReportText(editor.name)} / ${escapeReportText(editor.bundleId)} | ${escapeReportText(editor.version || t.unknown)} | ${escapeReportText(runtimes || t.unknown)} | ${assessment} |`);
+    }
+    lines.push('', `${ja ? '全件と根拠' : 'All records and evidence'}: ${evidence}.`, '');
+  }
+  for (const [heading, extensions] of groups) {
+    lines.push(`#### ${heading}`, '');
+    if (!extensions.length) {
+      lines.push(ja ? 'この実行では導入記録を取得していません。未導入・安全の証明ではありません。'
+        : 'No installation records were collected in this run. This does not establish absence or safety.', '');
+      continue;
+    }
+    const rows = extensions.map(extension => {
+      const host = extension.editor || extension.browser;
+      const product = `${host}${extension.profile ? ` / ${extension.profile}` : ''}: ${extension.id}`;
+      const judgments = findings.filter(finding => finding.assessmentBasis === 'extension-advisory'
+        && finding.product === product && finding.version === extension.version && (finding.localEvidence || []).includes(extension.path)
+        || (finding.extensionEvidence || []).some(item => item.id === extension.id && item.version === extension.version && item.path === extension.path && item.editor === extension.editor));
+      const candidates = news.filter(item => (item.matchedProducts || []).includes(extension.id));
+      const priority = judgments.some(item => ['確定', '可能性高'].includes(item.status)) ? 0 : judgments.length || candidates.length ? 1 : 2;
+      return { extension, host, judgments, candidates, priority };
+    }).sort((a, b) => a.priority - b.priority || String(a.host).localeCompare(String(b.host)) || String(a.extension.id).localeCompare(String(b.extension.id)));
+    lines.push(ja ? `導入記録 ${extensions.length} 件（表示 ${Math.min(rows.length, 200)} 件）。` : `${extensions.length} installation records; showing ${Math.min(rows.length, 200)}.`, '',
+      ja ? '| ホスト / プロファイル | 拡張ID / 名前 | バージョン | 有効状態・登録 | 配布元 | 告知照合 | ローカルの根拠 |'
+        : '| Host / profile | Extension ID / name | Version | Enablement / registration | Distribution | Advisory assessment | Local evidence |',
+      '|---|---|---|---|---|---|---|');
+    // Keep reports bounded while retaining all projected records in the linked evidence.
+    for (const { extension, host, judgments, candidates } of rows.slice(0, 200)) {
+      const active = extension.active === true ? (ja ? '有効' : 'Enabled') : extension.active === false ? (ja ? '無効・非選択版' : 'Disabled or non-selected version') : t.unknown;
+      const registered = extension.registered === false ? (ja ? '未登録の残存版' : 'Retained, not registered') : extension.registered === true ? (ja ? '導入登録あり' : 'Registered installation') : '';
+      const distribution = extension.source && extension.source !== 'unknown' ? `${escapeReportText(extension.source)} (${ja ? '配布元の検証は別途必要' : 'origin requires verification'})` : t.unknown;
+      const judgment = judgments.length ? judgments.slice(0, 5).map(item => `${label(item.status, language)}: ${escapeReportText(item.advisoryId || item.id)} ${sourceLink(item.sources?.[0], t.source)}`).join('; ')
+        : candidates.length ? `${ja ? '確認候補・影響版未確認' : 'Review candidate; affected version unassessed'}: ${candidates.slice(0, 3).map(item => sourceLink(item.url, t.source) || escapeReportText(item.id)).join('; ')}`
+          : (ja ? '未確認（取得済み告知にID一致なし）' : 'Unassessed; no ID match in retrieved advisories');
+      lines.push(`| ${escapeReportText([host, extension.profile].filter(Boolean).join(' / '))} | ${escapeReportText(extension.id || t.unknown)}${extension.name ? ` / ${escapeReportText(extension.name)}` : ''} | ${escapeReportText(extension.version || t.unknown)} | ${[active, registered].filter(Boolean).join('; ')} | ${distribution} | ${judgment} | ${escapeReportText(extension.path || t.unknown)} |`);
+    }
+    lines.push('', `${ja ? '全件と読取範囲' : 'All records and collection scope'}: ${evidence}.`, '');
+  }
+  const coverage = (inventory.coverage || []).filter(entry => /extensions|jetbrains-profiles/.test(entry.area || ''));
+  if (coverage.length) {
+    lines.push(`#### ${ja ? '拡張の収集範囲' : 'Extension collection coverage'}`, '',
+      ja ? '| 対象 | 取得 | 件数 | 確認内容 |' : '| Target | Collection | Count | Recorded scope |', '|---|---|---|---|',
+      ...coverage.slice(0, 80).map(entry => `| ${escapeReportText([entry.area, entry.product, entry.profile].filter(Boolean).join(' / '))} | ${label(entry.status, language)} | ${entry.count ?? ''} | ${coverageReason(entry, language)} |`), '');
+  }
+  return lines;
+}
+
+/**
  * Render news, local assessments and incomplete coverage in the requested native language.
  * The runner calls this for each immutable checkpoint; host translations retain this canonical report.
  *
@@ -503,8 +600,27 @@ export function renderReport(data) {
   ];
   if (locale.translationStatus === 'pending') lines.push(t.partialTranslation, '');
   if (stage) lines.push(localState, '');
-  const highlights = importantNews(items, findings, details.details || [], now);
+  const required = selectBriefingAdvisories(items, details.details || [], news.knownExploitedIds || []);
+  const highlights = importantNews(items, findings, details.details || [], now, required);
   lines.push(`## ${t.important}`, '', ...(highlights.length ? highlights.flatMap(item => [newsLine(item, language, true), '']) : [t.noHighlights, '']));
+  if (required.length) {
+    lines.push(ja ? '### チャットに記載する重要告知' : '### Priority advisories for the chat report', '',
+      ja ? '各告知について、一次資料の対象条件とこのMacの観測を照合してください。確認中の案件も本文に残します。'
+        : 'For each advisory, compare primary-source conditions with the observed installation. Include pending assessments in the chat report.', '');
+    for (const { id, item, signal, local, lead } of required) {
+      const source = sourceLink(item.url, t.source);
+      const record = id && sourceLink(id.startsWith('CVE-') ? `https://www.cve.org/CVERecord?id=${id}` : `https://github.com/advisories/${id}`, ja ? '公開告知の照合先' : 'Public advisory record');
+      const basis = signal === 'exploited' ? (ja ? '悪用確認情報あり' : 'Known exploitation reported')
+        : signal === 'rated' ? (ja ? '公開深刻度が高以上' : 'Rated high or critical')
+        : signal === 'index' ? (ja ? '公式の告知一覧・個別の対象条件は未確認' : 'Official bulletin index; affected conditions pending review')
+        : (ja ? '重大との報道・一次確認待ち' : 'Reported high impact; primary verification pending');
+      const scope = local ? (ja ? '関連する導入記録あり' : 'Related installation recorded') : (ja ? '端末との関連は未確認' : 'Local relevance unassessed');
+      const jdk = item.affectedJdkMajors?.length ? ' / OpenJDK ' + item.affectedJdkMajors.map(major => escapeReportText(major)).join(', ') + ' / CVSS ' + escapeReportText(item.severity) : '';
+      const article = lead?.url && lead.url !== item.url ? sourceLink(lead.url, ja ? '関連報道' : 'Related report') : '';
+      lines.push(`- ${id ? id + ' — ' : ''}${escapeReportText(item.title || item.id, 260)} ${ja ? '（' : '('}${basis} / ${scope}${jdk}${ja ? '）' : ')'} ${[source, record, article].filter(Boolean).join(' ')}`);
+    }
+    lines.push('');
+  }
   const globalException = (packages.coverage || []).find(entry => entry.area === 'global-package-origins')?.count || 0;
   lines.push(`## ${t.local}`, '', t.evidenceLimit, '',
     ja ? `- macOS: ${escapeReportText(inventory.host?.macOS?.productVersion || inventory.host?.osVersion || t.unknown)}。アプリ ${inventory.applications?.length || 0} 件、ロックファイル ${inventory.lockfiles?.length || 0} 件、抽出したパッケージ ${packages.packages?.length || 0} 件。`
@@ -514,7 +630,8 @@ export function renderReport(data) {
     `### ${t.affected}`, '', findingTable([...confirmed, ...affected].slice(0, 40), details.details || [], language), '',
     `### ${t.unaffected}`, '', findingTable(safe.slice(0, 40), details.details || [], language), '', t.negativeLimit, '',
     `### ${t.uncertain}`, '', findingTable(unknown.slice(0, 40), details.details || [], language), '',
-    `${t.findingsCount}: ${findings.length}. ${evidence}. ${t.dependencyLimit}`, '', `### ${t.iocs}`, '');
+    `${t.findingsCount}: ${findings.length}. ${evidence}. ${t.dependencyLimit}`, '',
+    ...extensionInventoryTables(inventory, findings, match.newsAssessment || [], language, evidence), `### ${t.iocs}`, '');
   if (!(iocs.checks || []).length) lines.push(t.noIoc, '');
   else lines.push(`| ${ja ? '種類' : 'Type'} | ${ja ? '対象' : 'Target'} | ${ja ? '一致' : 'Match'} | ${t.detail} |`, '|---|---|---|---|', ...(iocs.checks || []).map(check => {
     const result = check.matched === true ? 'matched' : check.matched === false ? 'no-match' : 'unconfirmed';
@@ -584,7 +701,7 @@ export function renderReport(data) {
     ...(inventory.runtimes || []).map(runtime => {
       const judgments = findings.flatMap(finding => (finding.runtimeEvidence || []).filter(entry => entry.path === runtime.path).map(entry => `${escapeReportText(finding.id)}: ${label(entry.status, language)}`));
       const usage = runtime.usageEvidence?.length ? (ja ? '稼働中の実体を観測' : 'Running instance observed') : runtime.isCurrent === true ? (ja ? 'この棚卸しで実行した現在のNode' : 'Node used for this inventory') : runtime.isCurrent === false ? (ja ? '別用途・保管版（使用状況は未確認）' : 'Other or stored version; use unassessed') : t.unknown;
-      return `| ${escapeReportText(runtime.name)} | ${escapeReportText(runtime.version)} | ${usage} | ${judgments.join(' / ') || t.unknown} | ${escapeReportText(runtime.path)} |`;
+      return `| ${escapeReportText(runtime.name)} | ${escapeReportText(runtimeVersionText(runtime, language))} | ${usage} | ${judgments.join(' / ') || t.unknown} | ${escapeReportText(runtime.path)} |`;
     }), '', `### ${t.commands}`, '', `| ${ja ? 'コマンド' : 'Command'} | ${t.status} | ${ja ? '時間ms' : 'Elapsed ms'} |`, '|---|---|---|',
     ...commands.map(command => `| ${escapeReportText(command.command, 1400)} | ${label(command.status, language)} | ${Number.isFinite(command.elapsedMs) ? command.elapsedMs : ''} |`), '');
   return lines.join('\n');

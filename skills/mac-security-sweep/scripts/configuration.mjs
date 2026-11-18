@@ -7,8 +7,8 @@ import { SOURCES, MOZILLA_SOURCES } from './source-registry.mjs';
 export const STATE_SCHEMA = 2;
 export const CONFIG_KEYS = Object.freeze(['scanRoots', 'queryUnknownGlobals', 'homebrewPrefixes', 'applicationRoots', 'browserProfiles', 'editorRoots', 'runtimeRoots', 'sbomFiles']);
 export const PROGRESS_KEYS = Object.freeze(['sourceCursors', 'sourceContinuations', 'newsFallbackSince', 'packageContinuation', 'advisoryContinuation', 'assessmentSnapshot', 'discoveryContinuation', 'productBaselines', 'adaptiveNews', 'transport', 'lastRunAt', 'lastSuccessfulAt', 'lastRunStatus', 'lastReport', 'locale']);
-const BROWSERS = new Set(['Chrome', 'Canary', 'Edge', 'Brave', 'Firefox', 'Safari']);
-const EDITORS = new Set(['VS Code', 'Cursor', 'Insiders', 'Portable']);
+const BROWSERS = new Set(['Chrome', 'Canary', 'Edge', 'Brave', 'Firefox', 'Safari', 'Zen']);
+const EDITORS = new Set(['VS Code', 'Cursor', 'Insiders', 'Portable', 'Zed', 'JetBrains']);
 const RUNTIMES = new Set(['nvm', 'fnm', 'Volta', 'volta', 'asdf', 'mise', 'Vite+', 'vite-plus', 'Homebrew', 'homebrew', 'node', 'uv', 'pipx', 'conda', 'venv', 'python', 'Java', 'java', 'Ruby', 'ruby', 'rbenv', 'rvm', 'chruby', 'asdf-ruby', 'mise-ruby']);
 // Recognize retired cursor keys only to read old committed generations; collectors never fetch them.
 const SOURCE_NAMES = new Set([...SOURCES, ...MOZILLA_SOURCES].map(source => source.name).concat('Cursor security notice'));

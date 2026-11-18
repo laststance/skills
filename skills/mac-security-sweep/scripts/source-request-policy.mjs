@@ -42,6 +42,7 @@ export function validateSourceRequest(address, options = {}) {
   }
   // Index-controlled article and attachment paths never authorize an arbitrary host.
   if (url.search || !(options.authorizedPaths instanceof Set) || !options.authorizedPaths.has(url.pathname)) return false;
+  if (url.hostname === 'openjdk.org') return options.sourceId === 'openjdk' && /^\/groups\/vulnerability\/advisories\/\d{4}-\d{2}-\d{2}$/.test(url.pathname);
   const rules = {
     'openssl-library.org': /^\/news\/secjson\/cve-\d{4}-\d{4,10}\.json$/i,
     'www.cisa.gov': /^(?:\/news-events\/(?:cybersecurity-advisories|analysis-reports)\/[a-z0-9-]+|\/sites\/default\/files\/\d{4}-\d{2}\/[A-Za-z0-9_%+., -]{1,220}\.json)$/i,

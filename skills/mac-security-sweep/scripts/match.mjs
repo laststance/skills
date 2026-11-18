@@ -7,6 +7,7 @@ import { createRunContext } from './runtime.mjs';
 import { SweepError, safeDiagnostic } from './diagnostics.mjs';
 
 const STATUSES = ['確定', '可能性高', '可能性あり', '影響なし'];
+const EXTENSION_ECOSYSTEMS = new Set(['VSCode', 'JetBrains', 'Zed', 'Chrome Web Store', 'Firefox Add-ons', 'Safari', 'BrowserExtension']);
 
 /**
  * 明示的な安定版の大小だけを比較する。
@@ -57,6 +58,9 @@ export function satisfiesRange(version, range) {
  */
 function extensionCoverageComplete(inventory, editor) {
   const family = editorIdentity(editor);
+  const profileDiscovery = (inventory.coverage || []).filter(entry => entry.area === 'jetbrains-profiles');
+  // Unread or symlinked product profiles invalidate absence conclusions from the readable profiles.
+  if (family === 'jetbrains' && (!profileDiscovery.length || profileDiscovery.some(entry => !['complete', 'absent'].includes(entry.status)))) return false;
   const areaEditor = entry => entry.editor || /^extensions:(.+)$/.exec(entry.area)?.[1] || /^(.+)-extensions$/.exec(entry.area)?.[1];
   const relevant = (inventory.coverage || []).filter(entry => entry.area === 'extensions' || entry.area === 'editor-extensions' && !entry.editor
     || editorIdentity(areaEditor(entry)) === family || ['portable', 'Portable'].includes(areaEditor(entry)));
@@ -67,8 +71,106 @@ function extensionCoverageComplete(inventory, editor) {
 
 /** 既知の通常版とPortableだけを同じ製品へ写す。拡張判定と記事分類が呼ぶ。 @example editorIdentity('cursor-portable') */
 function editorIdentity(value) {
-  const identities = { cursor: 'cursor', Cursor: 'cursor', 'cursor-portable': 'cursor', vscode: 'vscode', 'VS Code': 'vscode', 'vscode-portable': 'vscode', 'vscode-insiders': 'vscode-insiders', Insiders: 'vscode-insiders' };
+  const identities = { cursor: 'cursor', Cursor: 'cursor', 'cursor-portable': 'cursor', vscode: 'vscode', 'VS Code': 'vscode', 'vscode-portable': 'vscode', 'vscode-insiders': 'vscode-insiders', Insiders: 'vscode-insiders', zed: 'zed', Zed: 'zed', jetbrains: 'jetbrains', JetBrains: 'jetbrains' };
   return Object.hasOwn(identities, value) ? identities[value] : null;
+}
+
+/**
+ * Bind a structured extension advisory to the exact installed ID and host family.
+ * {@link classifyNews} and {@link matchExtensionAdvisories} call this before version comparison.
+ *
+ * @param inventory - Projected editor and browser extension metadata.
+ * @param target - A structured affected record, never a display-name guess.
+ * @returns Matching installed records; unknown host identities never establish a match.
+ * @example
+ * extensionCandidates(inventory, { ecosystem: 'VSCode', name: 'publisher.extension', editor: 'cursor' });
+ */
+function extensionCandidates(inventory, target) {
+  if (!EXTENSION_ECOSYSTEMS.has(target.ecosystem) || typeof target.name !== 'string') return [];
+  const editors = { VSCode: ['vscode', 'vscode-insiders', 'cursor'], JetBrains: ['jetbrains'], Zed: ['zed'] };
+  if (editors[target.ecosystem]) {
+    // Identical publisher IDs in a different editor marketplace do not establish incident applicability.
+    return (inventory.extensions || []).filter(extension => typeof extension.id === 'string'
+      && (target.ecosystem === 'VSCode' ? extension.id.toLowerCase() === target.name.toLowerCase() : extension.id === target.name)
+      && editors[target.ecosystem].includes(editorIdentity(extension.editor))
+      && (!target.editor || editorIdentity(target.editor) !== null && editorIdentity(extension.editor) === editorIdentity(target.editor)));
+  }
+  const aliases = { Chrome: 'chrome', Canary: 'chrome-canary', Edge: 'edge', Brave: 'brave', Firefox: 'firefox', Safari: 'safari', Zen: 'zen' };
+  const browser = aliases[target.browser] || target.browser;
+  const defaults = { 'Chrome Web Store': ['chrome', 'chrome-canary'], 'Firefox Add-ons': ['firefox', 'zen'], Safari: ['safari'] };
+  const hosts = browser ? [browser] : defaults[target.ecosystem] || [];
+  // Browser IDs are opaque and case-sensitive; names and Chromium compatibility are insufficient.
+  return (inventory.browserExtensions || []).filter(extension => extension.id === target.name && hosts.includes(extension.browser));
+}
+
+/**
+ * Keep missing-extension conclusions within the fully inspected host families.
+ * {@link classifyNews} calls this when an advisory ID was not observed locally.
+ *
+ * @param inventory - Inventory coverage receipts for all default and configured roots.
+ * @param target - Structured affected extension identity and host.
+ * @returns True only when every relevant reader completed or established absence.
+ * @example
+ * extensionTargetCoverageComplete(inventory, { ecosystem: 'Zed', name: 'example' });
+ */
+function extensionTargetCoverageComplete(inventory, target) {
+  if (['VSCode', 'Zed', 'JetBrains'].includes(target.ecosystem)) {
+    const hosts = target.editor ? [target.editor] : { VSCode: ['vscode', 'vscode-insiders', 'cursor'], Zed: ['zed'], JetBrains: ['jetbrains'] }[target.ecosystem];
+    return hosts.every(host => extensionCoverageComplete(inventory, host));
+  }
+  const aliases = { Chrome: 'chrome', Canary: 'chrome-canary', Edge: 'edge', Brave: 'brave', Firefox: 'firefox', Safari: 'safari', Zen: 'zen' };
+  const hosts = target.browser ? [aliases[target.browser] || target.browser]
+    : { 'Chrome Web Store': ['chrome', 'chrome-canary'], 'Firefox Add-ons': ['firefox', 'zen'], Safari: ['safari'] }[target.ecosystem] || [];
+  // A successful package extraction says nothing about browser profile coverage.
+  return hosts.length > 0 && hosts.every(host => {
+    const receipts = (inventory.coverage || []).filter(row => row.area === `${host}-extensions`);
+    return receipts.length > 0 && receipts.every(row => ['complete', 'absent'].includes(row.status));
+  });
+}
+
+/**
+ * Assess installed extensions against reviewed, structured advisories already fetched by the sweep.
+ * {@link matchInventory} calls this without sending extension inventories to external services.
+ *
+ * @param inventory - Installed editor/browser records, including disabled and retained versions.
+ * @param news - Current and historical public advisory records.
+ * @returns Per-target findings and explicit limits of extension advisory coverage.
+ * @example
+ * const assessed = matchExtensionAdvisories(inventory, news);
+ */
+function matchExtensionAdvisories(inventory, news) {
+  const findings = [], seen = new Set();
+  const records = [...(inventory.extensions || []), ...(inventory.browserExtensions || [])];
+  // Free-text articles stay review candidates; only reviewed records supply affected versions.
+  for (const item of [...(news.historicalAdvisories || []), ...(news.items || [])]) {
+    if (item.withdrawnAt || item.needsReview !== false) continue;
+    for (const target of (item.affected || []).filter(value => EXTENSION_ECOSYSTEMS.has(value.ecosystem))) {
+      for (const extension of extensionCandidates(inventory, target)) {
+        const host = extension.editor || extension.browser;
+        const product = `${host}${extension.profile ? ` / ${extension.profile}` : ''}: ${extension.id}`;
+        const key = JSON.stringify([item.id, product, extension.version, extension.path, target.range, target.versions, target.source]);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const inRange = Array.isArray(target.versions) ? target.versions.includes(extension.version)
+          : satisfiesRange(extension.version, target.range);
+        const sourceUnconfirmed = typeof target.source === 'string' && (extension.sourceVerified !== true || extension.source !== target.source);
+        const incident = advisoryKind(item) === 'malware';
+        findings.push({ id: `extension:${item.id}:${product}:${extension.version}`, advisoryId: item.id, aliases: item.aliases || [],
+          product, version: extension.version, title: `${product} ${extension.version} — ${item.id}`,
+          status: inRange === true && !sourceUnconfirmed ? '可能性高' : inRange === false && !incident ? '影響なし' : '可能性あり',
+          reasonCode: sourceUnconfirmed ? 'extension-source-unconfirmed' : inRange === true ? 'extension-advisory-affected' : inRange === false ? 'extension-version-outside-range' : 'extension-range-unconfirmed',
+          reason: sourceUnconfirmed ? '拡張IDと版は一致するが告知の配布元を検証できない。実行・窃取は未確認。'
+            : inRange === true ? '拡張ID・対象ホスト・影響版が一致。無効版や残存版も保持し、実行・窃取は別途確認。'
+              : inRange === false ? 'この導入記録の版は個別告知の影響範囲外。過去の実行や他の告知は未確認。' : '拡張IDは一致するが影響版を比較できない。',
+          sources: [item.url].filter(Boolean), localEvidence: [extension.path].filter(Boolean), evidence: [extension.path].filter(Boolean),
+          scope: '端末', assessmentBasis: 'extension-advisory', historyScope: 'fetched-extension-advisories', fixed: target.fixed || null,
+          severity: normalizeSeverity(item.severity, item.source), knownExploited: item.knownExploited === true, advisoryType: advisoryKind(item), incident,
+          impact: { kind: 'installed-extension-metadata', compromise: 'unconfirmed', installationConfirmed: extension.presentOnDisk !== false, executionConfirmed: false } });
+      }
+    }
+  }
+  return { findings, coverage: records.length ? [{ area: 'extension-advisories', status: 'partial', count: records.length,
+    reasonCode: 'extension-advisories-limited', reason: '取得済みの検証済み告知と拡張ID・対象ホストを照合。未一致・未取得を安全とせず、導入一覧は外部送信しません。' }] : [] };
 }
 
 /**
@@ -175,6 +277,7 @@ export function matchRule(inventory, rule, iocEvidence = {}) {
   }
   const all = (inventory.extensions || []).filter(ext => ext.id?.toLowerCase() === rule.extensionId?.toLowerCase());
   const candidates = all.filter(ext => editorIdentity(rule.editor) !== null && editorIdentity(ext.editor) === editorIdentity(rule.editor));
+  result.extensionEvidence = candidates.map(({ editor, id, version, path }) => ({ editor, id, version, path }));
   for (const ext of all) {
     result.evidence.push(`${ext.editor}: ${ext.id} ${ext.version || '版不明'}; source=${ext.source || '不明'}; active=${ext.active ?? '不明'}; installedAt=${ext.installedAt || '未確認'} (${ext.installedAtBasis || '日時の根拠不明'}); ${ext.path || 'パス不明'}`);
   }
@@ -220,7 +323,7 @@ export function matchRule(inventory, rule, iocEvidence = {}) {
  */
 function classifyNews(item, inventory, packages, packageCoverage = []) {
   const ecosystemNames = { pip: 'PyPI', rust: 'crates.io', go: 'Go', composer: 'Packagist', rubygems: 'RubyGems', maven: 'Maven', npm: 'npm', nuget: 'NuGet', erlang: 'Hex', actions: 'GitHub Actions' };
-  const ecosystems = new Set(['npm', 'PyPI', 'crates.io', 'Go', 'Packagist', 'RubyGems', 'Maven', 'NuGet', 'Hex', 'GitHub Actions', 'Pub', 'SwiftURL', 'VSCode']);
+  const ecosystems = new Set(['npm', 'PyPI', 'crates.io', 'Go', 'Packagist', 'RubyGems', 'Maven', 'NuGet', 'Hex', 'GitHub Actions', 'Pub', 'SwiftURL', ...EXTENSION_ECOSYSTEMS]);
   const base = { id: item.id, title: item.title, url: item.url, source: item.source, sourceId: item.sourceId,
     category: item.category, categories: item.categories || [], coverageTopics: item.coverageTopics || [], aliases: item.aliases || [],
     publishedAt: item.publishedAt, updatedAt: item.updatedAt, publishedMonth: item.publishedMonth, updatedMonth: item.updatedMonth, fetchedAt: item.fetchedAt,
@@ -247,12 +350,19 @@ function classifyNews(item, inventory, packages, packageCoverage = []) {
   if (affected.length) {
     const installed = [...packages, ...(inventory.globalPackages || []), ...(inventory.sbomPackages || [])];
     const matched = [];
-    let editorOnly = false, unknownEditor = false;
+    let editorOnly = false, unknownEditor = false, unknownExtensionHost = false;
     for (const target of affected) {
       const ecosystem = ecosystemNames[target.ecosystem] || target.ecosystem;
-      if (ecosystem === 'VSCode') {
-        const extensions = (inventory.extensions || []).filter(extension => extension.id?.toLowerCase() === target.name.toLowerCase()
-          && (!target.editor || editorIdentity(target.editor) !== null && editorIdentity(extension.editor) === editorIdentity(target.editor)));
+      if (EXTENSION_ECOSYSTEMS.has(ecosystem) && ecosystem !== 'VSCode') {
+        const extensions = extensionCandidates(inventory, { ...target, ecosystem });
+        if (extensions.length) matched.push(target.name);
+        else {
+          const records = ['Zed', 'JetBrains'].includes(ecosystem) ? inventory.extensions || [] : inventory.browserExtensions || [];
+          // A matching opaque ID in another host remains a candidate when its distribution is unknown.
+          if (records.some(extension => extension.id === target.name)) { matched.push(target.name); unknownExtensionHost = true; }
+        }
+      } else if (ecosystem === 'VSCode') {
+        const extensions = extensionCandidates(inventory, target);
         const ambiguous = (inventory.extensions || []).some(extension => extension.id?.toLowerCase() === target.name.toLowerCase() && ['portable', 'Portable'].includes(extension.editor));
         const editorPresent = (inventory.extensions || []).some(extension => !target.editor || editorIdentity(target.editor) !== null && editorIdentity(extension.editor) === editorIdentity(target.editor))
           || (inventory.applications || []).some(app => editorIdentity(target.editor) === 'cursor' ? app.name === 'Cursor' : editorIdentity(target.editor) === 'vscode' ? app.name === 'Visual Studio Code' : !target.editor && ['Cursor', 'Visual Studio Code'].includes(app.name));
@@ -263,12 +373,13 @@ function classifyNews(item, inventory, packages, packageCoverage = []) {
         }
       } else if (installed.some(pkg => pkg.name === target.name && (ecosystemNames[pkg.ecosystem] || pkg.ecosystem) === ecosystem)) matched.push(target.name);
     }
-    const complete = affected.every(target => target.ecosystem === 'VSCode' ? extensionCoverageComplete(inventory, target.editor)
+    const complete = affected.every(target => EXTENSION_ECOSYSTEMS.has(target.ecosystem) ? extensionTargetCoverageComplete(inventory, target)
       : packageCoverage.some(row => row.area === 'package-extraction') && assessmentStatus(packageCoverage) !== 'partial');
-    return { ...base, relevance: unknownEditor || !matched.length && !complete ? '確認候補' : matched.length ? '関係あり' : '関係なし', matchedProducts: [...new Set(matched)],
-      reasonCode: unknownEditor ? 'news-ambiguous-editor' : matched.length ? editorOnly ? 'news-editor-context' : 'news-structured-match' : complete ? 'news-target-not-observed' : 'news-inventory-incomplete',
+    return { ...base, relevance: unknownEditor || unknownExtensionHost || !matched.length && !complete ? '確認候補' : matched.length ? '関係あり' : '関係なし', matchedProducts: [...new Set(matched)],
+      reasonCode: unknownExtensionHost ? 'news-extension-host-unconfirmed' : unknownEditor ? 'news-ambiguous-editor' : matched.length ? editorOnly ? 'news-editor-context' : 'news-structured-match' : complete ? 'news-target-not-observed' : 'news-inventory-incomplete',
       reason: !matched.length ? complete ? '今回確認したパッケージ範囲では対象名を検出していません。端末全体の不在を意味しません。' : '対象パッケージを検出していませんが、探索・照合範囲が不完全で関連性は未確認です。'
-        : unknownEditor ? '同じ拡張IDのPortable記録があるがエディタの配布系統は未確認'
+        : unknownExtensionHost ? '同じ拡張IDが別ホストに存在するが、告知の配布経路との対応は未確認。'
+          : unknownEditor ? '同じ拡張IDのPortable記録があるがエディタの配布系統は未確認'
           : editorOnly ? '対象エディタが存在。現在の拡張導入や影響版の存在は未確認です。'
           : '告知の対象名とエコシステムが観測記録に一致。影響版・配布元は個別判定を参照。',
       needsReview: matched.length > 0 || !complete };
@@ -284,8 +395,9 @@ function classifyNews(item, inventory, packages, packageCoverage = []) {
     ...(inventory.applications || []).flatMap(app => [app.name === 'Code' ? 'Visual Studio Code' : app.name, app.bundleId]),
     ...(inventory.applications || []).flatMap(app => /^Google Chrome/.test(app.name) ? ['Chrome'] : app.name === 'Code' || app.name === 'Visual Studio Code' ? ['VS Code'] : []),
     ...(inventory.applications || []).flatMap(app => (app.components || []).map(component => runtimeAliases[component.name] || component.name)),
-    ...(inventory.runtimes || []).flatMap(runtime => [runtimeAliases[runtime.name] || runtime.name, runtime.name === 'java' ? 'JDK' : null]), ...brewNames,
+    ...(inventory.runtimes || []).flatMap(runtime => ['java', 'jdk'].includes(runtime.name) ? ['Java', 'JDK', 'OpenJDK'] : [runtimeAliases[runtime.name] || runtime.name]), ...brewNames,
     ...(inventory.extensions || []).flatMap(extension => [extension.id, { cursor: 'Cursor', vscode: 'VS Code' }[editorIdentity(extension.editor)]]),
+    ...(inventory.browserExtensions || []).map(extension => extension.id),
     ...(inventory.host?.osVersion ? ['macOS', 'Apple'] : []),
   ].filter(value => typeof value === 'string' && value.length >= 3 && !/^(?:code|connect|key|three|phone|apps|open|read|when|which|long)$/i.test(value));
   const corpus = [item.title, item.summary, ...(item.products || []).map(product => typeof product === 'string' ? product : product.name)].join(' ').toLowerCase();
@@ -316,6 +428,8 @@ function classifyNews(item, inventory, packages, packageCoverage = []) {
  */
 export function matchInventory(inventory, news, { packages = {}, rules = {}, iocEvidence = {}, advisoryDetails = {}, now = new Date() } = {}) {
   let findings = (Array.isArray(rules) ? rules : rules.rules || []).map(rule => matchRule(inventory, rule, iocEvidence));
+  const extensionAssessment = matchExtensionAdvisories(inventory, news);
+  findings.push(...extensionAssessment.findings);
   // OSV の一致は影響版の存在を示すだけで、実際の攻撃や窃取を証明しない。
   for (const hit of packages.findings || []) {
     const detail = (advisoryDetails.details || []).find(entry => entry.id === hit.id);
@@ -392,7 +506,7 @@ export function matchInventory(inventory, news, { packages = {}, rules = {}, ioc
   }
   const kev = new Set(news.knownExploitedIds || []);
   const newsAssessment = (news.items || []).map(item => classifyNews({ ...item, knownExploited: item.knownExploited === true || [item.id, ...(item.aliases || [])].some(id => kev.has(id)) }, inventory, packageList, packages.coverage || []));
-  const coverage = [...(inventory.coverage || []), ...(packages.coverage || []), ...(iocEvidence.coverage || []), ...(news.productCoverage || [])];
+  const coverage = [...(inventory.coverage || []), ...(packages.coverage || []), ...(iocEvidence.coverage || []), ...(news.productCoverage || []), ...extensionAssessment.coverage];
   if (news.sourceRegistry) coverage.push(news.sourceRegistry);
   // 古い検証済みルールで「影響なし」を継続せず、出典の再確認へ戻す。
   for (const rule of Array.isArray(rules) ? rules : rules.rules || []) {
@@ -428,10 +542,11 @@ function consolidateFindings(groups) {
   return groups.flatMap(group => {
     const targets = new Map();
     for (const finding of group.findings) {
-      const key = finding.advisoryId ? `${group.id}:${finding.package?.ecosystem || ''}:${finding.package?.name || ''}:${finding.version || ''}` : finding.id;
+      const key = finding.assessmentBasis === 'extension-advisory' ? `${group.id}:extension:${finding.product}:${finding.version || ''}`
+        : finding.advisoryId ? `${group.id}:${finding.package?.ecosystem || ''}:${finding.package?.name || ''}:${finding.version || ''}` : finding.id;
       const prior = targets.get(key);
       if (!prior) { targets.set(key, { ...finding, id: key, advisoryId: finding.advisoryId ? group.id : undefined, aliases: group.advisoryIds }); continue; }
-      if (STATUSES.indexOf(finding.status) < STATUSES.indexOf(prior.status)) { prior.status = finding.status; prior.reason = finding.reason; }
+      if (STATUSES.indexOf(finding.status) < STATUSES.indexOf(prior.status)) { prior.status = finding.status; prior.reason = finding.reason; prior.reasonCode = finding.reasonCode; if (finding.assessmentBasis === 'extension-advisory') prior.fixed = finding.fixed; }
       for (const field of ['sources', 'evidence', 'localEvidence']) prior[field] = [...new Set([...(prior[field] || []), ...(finding[field] || [])])];
       prior.occurrences = [...(prior.occurrences || []), ...(finding.occurrences || [])];
       prior.installationEvidence = [...(prior.installationEvidence || []), ...(finding.installationEvidence || [])];

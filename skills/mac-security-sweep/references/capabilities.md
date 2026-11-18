@@ -7,13 +7,15 @@
 | 領域 | 対応する静的観測 | 残る境界 |
 |---|---|---|
 | Chromium | Chrome/Canary/Edge/Braveのmanifest、限定Preference enablement | Cookie・認証DB未読。残存版と有効版を区別 |
-| Firefox | profiles.ini/extensions.json、disabled情報 | 未知profile形式は未確認 |
+| Firefox・Zen | profiles.ini/extensions.json、disabled情報 | 製品を分けて記録。未知profile形式は未確認 |
 | Safari | .appexのInfo.plist | 有効状態を取得できなければunknown |
-| エディタ | VS Code/Cursor/Insiders/Portable/custom rootのID・版・登録状態 | 登録だけでは有効と断定しない。他エディタは検出未対応。拡張コード/CLI未実行 |
+| VS Code系エディタ | VS Code/Cursor/Insiders/Portable/custom rootのID・版・登録状態 | 登録だけでは有効と断定しない。拡張コード/CLI未実行 |
+| Zed | installed/*/extension.tomlの限定literal | WASM/work配下は未実行。有効状態は未確認 |
+| JetBrains IDE | 製品/版ごとのユーザープラグイン記述子、JAR中のMETA-INF/plugin.xml、disabled_plugins.txt | 同梱・独自配置・未対応JARは未確認。Java/プラグインは未実行 |
 | アプリ | Info.plist、bundled Electron/Chromium/Node、署名のローカル表示、既存ticketの存在 | ticket存在は公証検証済みではない。アプリ起動/online assessmentなし |
 | Node管理 | nvm/fnm/Volta/asdf/mise/Vite+/Homebrew、global manifest | header等がなければ版不明。バイナリ名だけで版を推測しない |
 | Python管理 | uv/pipx/conda/project venv、dist-info等 | import/pip実行なし。private/不明由来は別判定 |
-| Java | JDK release metadata | Java実行なし |
+| Java | システム・ユーザー配置JDKとJetBrains系エディタ／Android Studioの標準同梱JBRのreleaseから、版、build、既知配布元、CPUを実体別に取得 | Java実行なし。未知・欠落した属性、特殊配置、VM・別ホストのCPU機能は未確認 |
 | Ruby | rbenv/rvm/asdf/mise/chruby、rbconfigの版literal、静的gemspec | Ruby/gemspecのコード実行なし。API版を実行環境の版に代用しない |
 | MCP/クラウド | global/project/VS Code MCPの名前・実行ファイルbasename、cloud設定の存在 | argv/env/認証内容未保存 |
 | コンテナ | 全既知local Docker/OrbStack socket、画像ID・稼働container ID/image/status | remote/exec/pull/buildなし。名前・env/argv未保存 |

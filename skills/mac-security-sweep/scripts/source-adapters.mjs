@@ -31,8 +31,8 @@ export function parseOfficialIndex(text, source) {
   for (const link of links) {
     let publishedAt, publishedMonth, updatedAt, precision = 'day', title = link.title;
     if (source.kind === 'openjdk') {
-      const date = /\/advisories\/(\d{4}-\d{2}-\d{2})$/.exec(link.url.pathname)?.[1];
-      if (!date) continue;
+      const date = /^\/groups\/vulnerability\/advisories\/(\d{4}-\d{2}-\d{2})$/.exec(link.url.pathname)?.[1];
+      if (!date || link.url.hash || iso(date)?.slice(0, 10) !== date) continue;
       publishedAt = iso(date); title = `OpenJDK security advisory ${date}`;
     } else if (source.kind === 'ruby-security') {
       const date = /^\/en\/news\/(\d{4})\/(\d{2})\/(\d{2})\//.exec(link.url.pathname);
@@ -58,6 +58,52 @@ export function parseOfficialIndex(text, source) {
   // A changed or login page must not look like a successful empty security index.
   if (!result.length || result.length > 5000) throw new SweepError('SOURCE', { cause: 'malformed', operation: 'news' });
   return [...new Map(result.map(value => [value.url, value])).values()];
+}
+
+/**
+ * 取得済みのOpenJDK日付別告知からJDK本体のリスク表だけを読む。ニュース収集が呼ぶ。
+ * 同ページのOpenJFX表、ビルド単位の該当、端末のCPU条件を混同しない。
+ * @throws 日付・表・採点形式が変わり、安全に射影できない場合。
+ * @example parseOpenJdkMatrix(html, source, bulletin)
+ */
+export function parseOpenJdkMatrix(text, source, bulletin) {
+  const malformed = () => new SweepError('SOURCE', { cause: 'malformed', operation: 'news' });
+  if (typeof text !== 'string' || Buffer.byteLength(text) > 256 * 1024) throw malformed();
+  assertMarkupBudget(text);
+  text = text.replace(/<!--[\s\S]*?-->|<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, '');
+  const date = bulletin.publishedAt?.slice(0, 10);
+  const heading = plain(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i.exec(text)?.[1]);
+  if (!date || heading !== 'OpenJDK Vulnerability Advisory: ' + date.replaceAll('-', '/') ||
+    bulletin.url !== 'https://openjdk.org/groups/vulnerability/advisories/' + date) throw malformed();
+  const section = /<h2\b[^>]*\bid=["']risk-matrix["'][^>]*>\s*OpenJDK Risk matrix\s*<\/h2>([\s\S]*?)(?=<h2\b|<\/body>|$)/i.exec(text)?.[1];
+  const table = section && /<table\b[^>]*>([\s\S]*?)<\/table>/i.exec(section)?.[1];
+  if (!table) throw malformed();
+  let majors;
+  const entries = [];
+  for (const [, row] of table.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)) {
+    const headers = [...row.matchAll(/<th\b[^>]*>([\s\S]*?)<\/th>/gi)].map(cell => plain(cell[1]));
+    if (headers.length) {
+      if (headers[0] === 'CVE ID') {
+        majors = headers.slice(3);
+        if (headers[1] !== 'Component' || !/^CVSSv3\.1\s*Vector$/i.test(headers[2]) || !majors.length || majors.length > 32 ||
+          majors.some(major => !/^[1-9]\d{0,2}$/.test(major)) || new Set(majors).size !== majors.length) throw malformed();
+      }
+      continue;
+    }
+    const cells = [...row.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map(cell => plain(cell[1]));
+    const [cve, rawComponent, rating, ...markers] = cells;
+    const component = rawComponent?.replace(/\s*\/\s*/g, '/');
+    const score = /^(10(?:\.0)?|[0-9](?:\.[0-9])?)(?:\s|$)/.exec(rating || '');
+    if (!majors || markers.length !== majors.length || !/^CVE-\d{4}-\d{4,10}$/.test(cve || '') ||
+      !/^[A-Za-z0-9_./+ -]{1,80}$/.test(component || '') || !score || markers.some(mark => mark !== '' && mark !== '•') ||
+      !markers.includes('•') || entries.length >= 256) throw malformed();
+    entries.push(item(source, { id: 'OPENJDK-' + date + '-' + cve, aliases: [cve], title: 'OpenJDK ' + component + ' — ' + cve,
+      url: bulletin.url, publishedAt: bulletin.publishedAt, datePrecision: 'day', products: ['OpenJDK', 'Java'],
+      severity: Number(score[1]), affectedJdkMajors: majors.filter((_, index) => markers[index] === '•').map(Number),
+      reasonCode: 'OPENJDK_RISK_MATRIX', needsReview: true }));
+  }
+  if (!entries.length || new Set(entries.map(entry => entry.id)).size !== entries.length) throw malformed();
+  return entries;
 }
 
 /** Read Docker's dated announcement sections when its RSS omits every article date.
